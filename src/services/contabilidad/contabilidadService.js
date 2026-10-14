@@ -4,7 +4,7 @@
 import * as repo from '../../repositories/contabilidadRepository.js';
 import * as reclamosRepo from '../../repositories/reclamosRepository.js';
 import { parseJsonArray } from '../../repositories/reclamosRepository.js';
-import { numeroReclamo } from '../reclamosService.js';
+import { numeroReclamo } from '../reclamos/comun.js';
 import { nombresDeUsuarios } from '../acceso/keycloakAdmin.js';
 import { parsePagination, buildPaginationMeta } from '../../utils/pagination.js';
 import { notFound } from '../../utils/httpError.js';
