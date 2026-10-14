@@ -1,5 +1,7 @@
 // Adjuntos de un reclamo (PDF de SAP y Excel de soporte): quién puede
 // adjuntar, validación de la nota de débito contra las decisiones y borrado.
+import crypto from 'node:crypto';
+import fs from 'node:fs/promises';
 import path from 'node:path';
 import * as repo from '../../repositories/reclamosRepository.js';
 import { extraerImagenesExcel, borrarArchivos } from './excelImages.js';
@@ -7,8 +9,10 @@ import { tienePermiso } from '../acceso/permisos.js';
 import * as dominio from '../../domain/reclamo.js';
 import { leerNotaPdf } from '../contabilidad/leerNotaPdf.js';
 import { cruzar } from '../contabilidad/validarDocumento.js';
-import { badRequest, forbidden, notFound } from '../../utils/httpError.js';
+import { badRequest, conflict, forbidden, notFound } from '../../utils/httpError.js';
 import { logger } from '../../utils/logger.js';
+import { reclamoArchivoPath } from '../../config/almacenamiento.js';
+import { parseJsonArray } from '../../repositories/reclamosRepository.js';
 import {
   validarToken,
   validarIndice,
@@ -18,6 +22,7 @@ import {
   asegurarModificable,
   nombreUsuario,
   detalle,
+  conDocumentos,
 } from './comun.js';
 import { permisos } from './consultas.js';
 
@@ -48,8 +53,7 @@ const listaProductos = (ls) => ls.slice(0, 10).map(describirProducto).join(' · 
  * compradora aprobó. Si trae uno rechazado o todavía sin decidir, no se
  * adjunta. Un PDF que no es nota de débito (sin tabla de productos) no se valida aquí.
  */
-async function validarPdfContraDecisiones(token, rutaPdf) {
-  const nota = await leerNotaPdf(rutaPdf);
+async function validarPdfContraDecisiones(token, nota) {
   if (!nota.legible) return { notaAprobada: false };
   const { lineas } = cruzar(nota.filas, await repo.listarLineas(token));
   const enReclamo = lineas.filter((l) => l.lineaId !== null);
@@ -80,15 +84,82 @@ async function validarPdfContraDecisiones(token, rutaPdf) {
   return { notaAprobada: enReclamo.length > 0, documentoSap: nota.numeroDocumento || null };
 }
 
+const sha256 = async (ruta) => crypto.createHash('sha256').update(await fs.readFile(ruta)).digest('hex');
+
+/**
+ * El mismo archivo (mismo contenido, aunque cambie el nombre) ya está en el
+ * reclamo: el Excel principal o un adjunto. Devuelve { nombre, adjunto } o null.
+ */
+async function archivoIgual(r, rutaNuevo) {
+  const hash = await sha256(rutaNuevo);
+  const existentes = [
+    ...(r.ArchivoExcel ? [{ filename: r.ArchivoExcel, nombre: r.ArchivoExcelNombre || 'Excel del reclamo', adjunto: null }] : []),
+    ...parseJsonArray(r.AdjuntosExtra).map((a) => ({ filename: a.filename, nombre: a.originalname || a.filename, adjunto: a })),
+  ];
+  for (const e of existentes) {
+    const igual = await sha256(reclamoArchivoPath(e.filename)).then((h) => h === hash, () => false);
+    if (igual) return e;
+  }
+  return null;
+}
+
+/** Un PDF de SAP de otro reclamo no se adjunta aquí (cada documento pertenece a un solo reclamo). */
+async function exigirPdfDeEsteReclamo(r, numeroPdf) {
+  if (!numeroPdf) return;
+  const propios = dominio.documentosDelReclamo(r, parseJsonArray(r.SapDocsExtra), parseJsonArray(r.AdjuntosExtra));
+  const otros = conDocumentos(await repo.buscarPorDocumentosSap([dominio.normalizarDocSap(numeroPdf)])).filter((o) => o.Token.toUpperCase() !== r.Token.toUpperCase());
+  exigir(dominio.motivoPdfDeOtroReclamo(numeroPdf, propios, otros));
+}
+
 export async function agregarAdjunto(token, multerFile, usuario) {
   if (!multerFile) throw badRequest('Selecciona un archivo Excel o PDF.');
   const creados = [multerFile.filename];
   try {
-    await verificarPuedeAdjuntar(token, usuario);
+    const r = await verificarPuedeAdjuntar(token, usuario);
 
     const tipo = await tipoRealDeArchivo(multerFile);
     if (!tipo) throw badRequest('El archivo no es un Excel o PDF válido.');
-    const nota = tipo === 'pdf' ? await validarPdfContraDecisiones(token, multerFile.path) : null;
+    const lectura = tipo === 'pdf' ? await leerNotaPdf(multerFile.path) : null;
+    if (lectura) await exigirPdfDeEsteReclamo(r, lectura.numeroDocumento);
+    const repetido = await archivoIgual(r, multerFile.path);
+    // Un Excel o un PDF ya validado repetido no aporta nada: se rechaza sin leerlo más.
+    if (repetido && (tipo !== 'pdf' || repetido.adjunto?.notaAprobada || !repetido.adjunto)) {
+      throw conflict(`Este archivo ya está en el reclamo («${repetido.nombre}»). No se sube dos veces.`, { code: 'ARCHIVO_REPETIDO' });
+    }
+    const nota = lectura ? await validarPdfContraDecisiones(token, lectura) : null;
+
+    if (repetido) {
+      // El mismo PDF ya estaba (p. ej. subido al crear el reclamo, antes de las
+      // decisiones). Si ahora se valida, se marca el existente en vez de duplicarlo.
+      if (!nota?.notaAprobada) {
+        throw conflict(`Este archivo ya está en el reclamo («${repetido.nombre}»). No se sube dos veces.`, { code: 'ARCHIVO_REPETIDO' });
+      }
+      const agregaTorreControl = tienePermiso(usuario, 'reclamos.adjuntar');
+      const res = await repo.modificarArchivos(token, (a, estado) => {
+        asegurarModificable(estado, 'adjuntos', { agregaTorreControl });
+        if (!a.adjuntos.some((x) => x.filename === repetido.adjunto.filename)) return null;
+        return {
+          imagenes: a.imagenes,
+          adjuntos: a.adjuntos.map((x) =>
+            x.filename === repetido.adjunto.filename ? { ...x, notaAprobada: true, documentoSap: nota.documentoSap, validado_at: new Date().toISOString(), validado_by: nombreUsuario(usuario) } : x
+          ),
+        };
+      });
+      if (!res) throw notFound('Reclamo no encontrado.');
+      await borrarArchivos(creados);
+      creados.length = 0;
+      return detalle(token);
+    }
+
+    if (nota?.notaAprobada && nota.documentoSap) {
+      const clave = dominio.normalizarDocSap(nota.documentoSap);
+      const ya = parseJsonArray(r.AdjuntosExtra).find((a) => a.notaAprobada && a.documentoSap && dominio.normalizarDocSap(a.documentoSap) === clave);
+      if (ya) {
+        throw conflict(`El documento SAP ${nota.documentoSap} ya está subido y validado («${ya.originalname}»). No se sube dos veces.`, {
+          code: 'DOC_SAP_YA_VALIDADO',
+        });
+      }
+    }
 
     const adj = {
       filename: multerFile.filename,

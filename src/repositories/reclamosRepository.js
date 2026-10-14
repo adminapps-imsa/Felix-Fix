@@ -100,11 +100,58 @@ export async function obtenerPorToken(token) {
 const LINEAS_POR_INSERT = 100; // 8 parámetros por fila, bajo el límite de 2100 de SQL Server
 
 /** Inserta el encabezado + todas sus líneas en una sola transacción. */
-export async function crear(data, lineas) {
+/**
+ * Reclamos cuyos documentos SAP (los del formulario o los que traen sus PDF
+ * adjuntos) contienen alguno de los números dados. Es un filtro amplio
+ * (LIKE): el dominio decide si de verdad coinciden. `request` (opcional):
+ * para leer dentro de una transacción.
+ */
+export async function buscarPorDocumentosSap(docs, request) {
+  const claves = [...new Set(docs.map((d) => String(d ?? '').trim()).filter(Boolean))];
+  if (!claves.length) return [];
+  const req = request || (await getPool()).request();
+  const columnas = ['SapDoc1', 'SapDoc2', 'SapDoc3', 'SapDocsExtra', 'AdjuntosExtra'];
+  const condiciones = claves.map((c, i) => {
+    // Comodines de LIKE escapados: el número se busca tal cual dentro del texto.
+    req.input(`doc${i}`, sql.NVarChar(60), `%${c.replace(/[[%_]/g, '[$&]')}%`);
+    return columnas.map((col) => `${col} LIKE @doc${i}`).join(' OR ');
+  });
+  const { recordset } = await req.query(`
+    SELECT ReclamoId, Token, Status, SapDoc1, SapDoc2, SapDoc3, SapDocsExtra, AdjuntosExtra
+    FROM ${S}.Reclamos
+    WHERE ${condiciones.map((c) => `(${c})`).join(' OR ')}
+  `);
+  return recordset;
+}
+
+/**
+ * Crea el reclamo con sus líneas en una transacción. `motivoBloqueo(filas)`
+ * (opcional, regla del dominio) recibe los reclamos que ya tienen alguno de
+ * `docsSap` y devuelve por qué no se puede crear, o null. Esa revisión corre
+ * dentro de la transacción con un candado de aplicación, así dos altas con el
+ * mismo documento a la vez no se cuelan. Devuelve { bloqueado: motivo } si no
+ * se creó.
+ */
+export async function crear(data, lineas, { docsSap = [], motivoBloqueo } = {}) {
   const pool = await getPool();
   const transaction = new sql.Transaction(pool);
   await transaction.begin();
   try {
+    if (motivoBloqueo) {
+      // Solo serializa las altas de reclamos entre sí; no bloquea filas.
+      await new sql.Request(transaction)
+        .input('recurso', sql.NVarChar(255), `FelixFix:${S}:reclamos-documentos-sap`)
+        .query(`
+          DECLARE @r INT;
+          EXEC @r = sp_getapplock @Resource = @recurso, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 15000;
+          IF @r < 0 THROW 50001, 'Otro reclamo se está creando en este momento; intenta de nuevo.', 1;
+        `);
+      const motivo = motivoBloqueo(await buscarPorDocumentosSap(docsSap, new sql.Request(transaction)));
+      if (motivo) {
+        await transaction.rollback();
+        return { bloqueado: motivo };
+      }
+    }
     await new sql.Request(transaction)
       .input('token', sql.UniqueIdentifier, data.token)
       .input('tipo', sql.VarChar(40), data.tipo)
@@ -163,6 +210,7 @@ export async function crear(data, lineas) {
     }
 
     await transaction.commit();
+    return {};
   } catch (err) {
     await transaction.rollback();
     throw err;

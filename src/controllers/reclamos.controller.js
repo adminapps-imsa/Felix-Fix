@@ -41,6 +41,10 @@ export const proveedor = asyncHandler(async (req, res) => {
   res.json(await service.relacionProveedor(req.query.nombre));
 });
 
+export const documentosSap = asyncHandler(async (req, res) => {
+  res.json(await service.documentosSapUsados(req.query.docs));
+});
+
 export const parseExcel = asyncHandler(async (req, res) => {
   res.json(await service.previsualizarExcel(req.file));
 });

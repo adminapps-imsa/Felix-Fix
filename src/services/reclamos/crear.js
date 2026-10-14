@@ -23,7 +23,8 @@ import { crearReclamoSchema } from '../../validators/reclamos.schema.js';
 import { badRequest } from '../../utils/httpError.js';
 import { env } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
-import { tipoReal, tipoRealDeArchivo, nombreUsuario, detalle } from './comun.js';
+import { normalizarDocSap, motivoDocsRepetidos, motivoDocsEnOtrosReclamos, documentosUsados } from '../../domain/reclamo.js';
+import { tipoReal, tipoRealDeArchivo, nombreUsuario, detalle, exigir, conDocumentos } from './comun.js';
 
 export const ORIGEN_PRINCIPAL = 'principal';
 /** Filas que se mandan al formulario en la vista previa (= máx. de líneas editables). */
@@ -131,11 +132,12 @@ export async function previsualizarExcel(multerFile) {
 // PDF de los documentos SAP
 // ------------------------------------------------------------------
 
-/** "0004904487300" y "4904487300" son el mismo documento: solo dígitos, sin ceros a la izquierda. */
-export function normalizarDocSap(valor) {
-  const texto = String(valor ?? '').trim();
-  const digitos = texto.replace(/\D/g, '').replace(/^0+(?=\d)/, '');
-  return digitos || texto.toUpperCase();
+export { normalizarDocSap };
+
+/** Para el aviso en vivo del formulario: en qué reclamos ya está cada documento. */
+export async function documentosSapUsados(docs) {
+  const lista = docs.map((d) => String(d).trim()).filter(Boolean).slice(0, 50);
+  return { usados: documentosUsados(lista, conDocumentos(await repo.buscarPorDocumentosSap(lista.map(normalizarDocSap)))) };
 }
 
 /** Número de documento impreso en el PDF ("Doc Num: …"), o null si no se encuentra. */
@@ -267,6 +269,13 @@ export async function crear(body, multerFile, usuario, pdfs = []) {
   const archivosCreados = [...(multerFile ? [multerFile.filename] : []), ...pdfs.map((f) => f.filename)];
   try {
     const data = validarCampos(body);
+    // Un documento SAP pertenece a un solo reclamo: se revisa antes de leer
+    // archivos (aviso rápido) y otra vez dentro de la transacción del alta.
+    const docsSap = [data.sapDoc1, data.sapDoc2, data.sapDoc3, ...data.sapDocsExtra].filter(Boolean);
+    const repetidos = motivoDocsRepetidos(docsSap);
+    if (repetidos) throw badRequest(repetidos.mensaje, { code: repetidos.code });
+    const enOtros = (filas) => motivoDocsEnOtrosReclamos(docsSap, conDocumentos(filas));
+    exigir(enOtros(await repo.buscarPorDocumentosSap(docsSap.map(normalizarDocSap))));
     // El Excel del reclamo es obligatorio siempre (Tienda y CEDI).
     if (!multerFile) throw badRequest('El Excel del reclamo es obligatorio.');
     data.compradora = await validarCompradora(data.compradora);
@@ -310,10 +319,10 @@ export async function crear(body, multerFile, usuario, pdfs = []) {
     if (data.motivo) data.motivo = await repo.asegurarValorCatalogo('motivo', data.motivo, autor);
 
     // Un PDF por cada documento SAP, con el mismo número impreso.
-    const adjuntosSap = await validarPdfsSap([data.sapDoc1, data.sapDoc2, data.sapDoc3, ...data.sapDocsExtra].filter(Boolean), pdfs, usuario);
+    const adjuntosSap = await validarPdfsSap(docsSap, pdfs, usuario);
 
     const token = crypto.randomUUID();
-    await repo.crear(
+    const alta = await repo.crear(
       {
         ...data,
         adjuntosExtra: adjuntosSap,
@@ -323,8 +332,10 @@ export async function crear(body, multerFile, usuario, pdfs = []) {
         archivoExcelNombre: multerFile ? path.basename(multerFile.originalname || '').slice(0, 255) : null,
         createdBy: nombreUsuario(usuario),
       },
-      lineas
+      lineas,
+      { docsSap: docsSap.map(normalizarDocSap), motivoBloqueo: enOtros }
     );
+    exigir(alta.bloqueado);
     archivosCreados.length = 0; // el Excel y los PDF ya quedaron registrados en la BD
 
     // Best-effort: fotos embebidas del Excel principal.

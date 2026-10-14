@@ -7,6 +7,11 @@ import {
   motivoNoDecidir,
   motivoNoCambiarLineas,
   motivoNoEnviarContabilidad,
+  normalizarDocSap,
+  documentosDelReclamo,
+  motivoDocsRepetidos,
+  motivoDocsEnOtrosReclamos,
+  motivoPdfDeOtroReclamo,
 } from '../../src/domain/reclamo.js';
 
 const pdfValidado = { tipo: 'pdf', notaAprobada: true };
@@ -64,4 +69,50 @@ test('enviar a contabilidad: solo cerrado y, si hay aprobados, con la nota valid
   assert.equal(motivoNoEnviarContabilidad({ Status: 'resuelto', LineasAprobadas: 2 }, [pdfValidado]), null);
   // Todo rechazado: no hay nada aprobado que respaldar con la nota.
   assert.equal(motivoNoEnviarContabilidad({ Status: 'rechazado', LineasAprobadas: 0 }, []), null);
+});
+
+// ------------------------------------------------------------------
+// Documentos SAP duplicados
+// ------------------------------------------------------------------
+const otro = (id, docs, status = 'pendiente') => ({ ReclamoId: id, Token: `T${id}`, Status: status, documentos: new Set(docs.map(normalizarDocSap)) });
+
+test('documento SAP: ceros a la izquierda y espacios no lo hacen distinto', () => {
+  assert.equal(normalizarDocSap(' 0004904151684 '), '4904151684');
+  assert.equal(normalizarDocSap('4904151684'), '4904151684');
+  assert.equal(normalizarDocSap('ab-12'), '12');
+  assert.equal(normalizarDocSap('ABC'), 'ABC');
+});
+
+test('documentos de un reclamo: formulario, extras y los que traen sus PDF', () => {
+  const docs = documentosDelReclamo({ SapDoc1: '0004904151684', SapDoc2: null, SapDoc3: '' }, ['4904151698'], [{ documentoSap: '4904487300' }, { tipo: 'excel' }]);
+  assert.deepEqual([...docs].sort(), ['4904151684', '4904151698', '4904487300']);
+});
+
+test('el mismo documento dos veces en el formulario → no', () => {
+  assert.equal(motivoDocsRepetidos(['4904151684', '4904151698']), null);
+  const m = motivoDocsRepetidos(['4904151684', '0004904151684']);
+  assert.equal(m.code, 'DOC_SAP_REPETIDO');
+  assert.match(m.mensaje, /0004904151684 está escrito más de una vez/);
+});
+
+test('crear con un documento que ya está en otro reclamo → no, diciendo en cuál', () => {
+  const otros = [otro(5, ['4904151684', '4904151698']), otro(12, ['4904151684'], 'resuelto'), otro(8, ['4904487300'])];
+  assert.equal(motivoDocsEnOtrosReclamos(['4904999999'], otros), null);
+  const m = motivoDocsEnOtrosReclamos(['004904151684', '4904999999'], otros);
+  assert.equal(m.code, 'DOC_SAP_DUPLICADO');
+  assert.match(m.mensaje, /004904151684 ya está en REC-000005, REC-000012/);
+  assert.deepEqual(m.usados[0].reclamos.map((r) => r.numero), ['REC-000005', 'REC-000012']);
+  // Varios documentos repetidos: se nombran todos.
+  assert.match(motivoDocsEnOtrosReclamos(['4904151698', '4904487300'], otros).mensaje, /estos documentos SAP: 4904151698 ya está en REC-000005; 4904487300 ya está en REC-000008/);
+});
+
+test('adjuntar un PDF de SAP: de este reclamo o nuevo sí; de otro reclamo no', () => {
+  const propios = new Set(['4904487300']);
+  const otros = [otro(5, ['4904151684'])];
+  assert.equal(motivoPdfDeOtroReclamo('4904487300', propios, otros), null); // es de este reclamo
+  assert.equal(motivoPdfDeOtroReclamo('4911111111', propios, otros), null); // documento nuevo (p. ej. nota de débito)
+  assert.equal(motivoPdfDeOtroReclamo(null, propios, otros), null); // PDF sin número legible
+  const m = motivoPdfDeOtroReclamo('0004904151684', propios, otros);
+  assert.equal(m.code, 'DOC_SAP_DE_OTRO_RECLAMO');
+  assert.match(m.mensaje, /pertenece a REC-000005/);
 });

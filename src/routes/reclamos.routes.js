@@ -4,7 +4,7 @@ import * as controller from '../controllers/reclamos.controller.js';
 import { requireAuth, requirePermiso } from '../middleware/auth.js';
 import { uploadExcelReclamo, uploadExcelPreview, uploadPdfPreview, uploadAdjuntoReclamo } from '../middleware/uploadReclamos.js';
 import { validateBody, validateQuery } from '../validators/validate.js';
-import { decisionReclamoSchema, decisionLineaSchema, decisionLineasSchema, listarQuerySchema, proveedorQuerySchema } from '../validators/reclamos.schema.js';
+import { decisionReclamoSchema, decisionLineaSchema, decisionLineasSchema, listarQuerySchema, proveedorQuerySchema, documentosSapQuerySchema } from '../validators/reclamos.schema.js';
 
 const router = Router();
 
@@ -31,6 +31,8 @@ router.get('/', validateQuery(listarQuerySchema), controller.listar);
 router.get('/permisos', controller.permisos);
 router.get('/catalogos', controller.catalogos);
 router.get('/proveedor', validateQuery(proveedorQuerySchema), controller.proveedor);
+// Aviso en vivo del formulario: si un documento SAP ya está en otro reclamo.
+router.get('/documentos-sap', crear, validateQuery(documentosSapQuerySchema), controller.documentosSap);
 router.post('/parse-excel', crear, excelLimiter, uploadExcelPreview, controller.parseExcel);
 router.post('/parse-pdf', crear, excelLimiter, uploadPdfPreview, controller.parsePdf);
 router.post('/', crear, excelLimiter, uploadExcelReclamo, controller.crear);

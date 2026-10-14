@@ -9,7 +9,7 @@ import { ApiError } from '../../../api/client';
 import * as apiReclamos from '../../../api/reclamos';
 import { cn } from '../../../lib/cn';
 import type { Tienda } from '../../../types/productoDanado';
-import type { CatalogosReclamo, OrigenReclamo, PreviewExcel, Reclamo, RelacionProveedor, TipoReclamo } from '../../../types/reclamo';
+import type { CatalogosReclamo, DocumentoSapUsado, OrigenReclamo, PreviewExcel, Reclamo, RelacionProveedor, TipoReclamo } from '../../../types/reclamo';
 import { TIPOS, TIPO_LABEL, TIPO_LABEL_CORTO, TIPOS_SOLO_NOTIFICACION, categoriaTipo } from '../lib/tipos';
 import { TipoBadge } from './Badges';
 import { ExcelPreviewModal, PdfPreviewModal } from './VisoresLazy';
@@ -130,6 +130,9 @@ export function NuevoReclamoForm({
   const [tipo, setTipo] = useState<TipoReclamo | ''>('');
   const [modoManual, setModoManual] = useState(false);
   const [sapDocs, setSapDocs] = useState<string[]>(['', '', '']);
+  // Documentos que ya están en otro reclamo (clave normalizada → reclamos). Un documento SAP pertenece a un solo reclamo.
+  const [docsUsados, setDocsUsados] = useState<Map<string, DocumentoSapUsado['reclamos']>>(new Map());
+  const [revisandoDocs, setRevisandoDocs] = useState(false);
   const [adjuntos, setAdjuntos] = useState<File[]>([]);
   const [pdfsSap, setPdfsSap] = useState<PdfSap[]>([]);
   const [verAdjunto, setVerAdjunto] = useState<File | null>(null);
@@ -316,6 +319,31 @@ export function NuevoReclamoForm({
   };
   const docsSap = sapDocs.map((d) => d.trim()).filter(Boolean);
   const clavesDocs = new Set(docsSap.map(normalizarDocSap));
+  // El mismo documento escrito dos veces (aunque cambien los ceros a la izquierda).
+  const docsRepetidos = docsSap.filter((d, i) => docsSap.findIndex((x) => normalizarDocSap(x) === normalizarDocSap(d)) !== i);
+  const claveConsulta = [...clavesDocs].sort().join(',');
+  useEffect(() => {
+    if (!claveConsulta) {
+      setDocsUsados(new Map());
+      return;
+    }
+    // Espera a que se deje de escribir; una respuesta vieja no pisa a la nueva.
+    let vigente = true;
+    setRevisandoDocs(true);
+    const t = setTimeout(() => {
+      apiReclamos
+        .documentosSapUsados(claveConsulta.split(','))
+        .then((r) => vigente && setDocsUsados(new Map(r.usados.map((u) => [normalizarDocSap(u.documento), u.reclamos]))))
+        .catch(() => vigente && setDocsUsados(new Map())) // si falla, el servidor lo revisa igual al crear
+        .finally(() => vigente && setRevisandoDocs(false));
+    }, 400);
+    return () => {
+      vigente = false;
+      clearTimeout(t);
+    };
+  }, [claveConsulta]);
+  const usadosDe = (doc: string) => docsUsados.get(normalizarDocSap(doc)) ?? null;
+  const docsEnOtros = [...new Set(docsSap)].filter((d) => usadosDe(d));
   const vistos = new Set<string>();
   const estadoPdfs = pdfsSap.map((p) => {
     if (p.leyendo) return { pdf: p, ok: false, mensaje: 'Leyendo el número de documento…' };
@@ -367,6 +395,8 @@ export function NuevoReclamoForm({
     parsing && 'Se está leyendo el Excel; espera un momento.',
     excel && !parsing && !tipo && 'Selecciona el tipo de reclamo.',
     desajuste && 'El tipo elegido no coincide con lo que indica el Excel.',
+    ...[...new Set(docsRepetidos)].map((d) => `El documento SAP ${d} está escrito más de una vez.`),
+    ...docsEnOtros.map((d) => `El documento SAP ${d} ya está en ${usadosDe(d)!.map((r) => r.numero).join(', ')}: no se puede crear otro reclamo con el mismo documento.`),
     pdfsLeyendo && 'Se están leyendo los PDF de los documentos SAP; espera un momento.',
     ...pdfsConError.map((e) => `PDF «${e.pdf.file.name}»: ${e.mensaje}`),
     ...(pdfsLeyendo ? [] : docsSinPdf.map((d) => `Falta el PDF del documento SAP ${d}.`)),
@@ -719,7 +749,7 @@ export function NuevoReclamoForm({
 
         <SeccionForm
           paso={3}
-          completa={docsLlenos > 0 && docsSinPdf.length === 0 && !pdfsLeyendo && pdfsConError.length === 0}
+          completa={docsLlenos > 0 && docsSinPdf.length === 0 && !pdfsLeyendo && pdfsConError.length === 0 && !docsRepetidos.length && !docsEnOtros.length && !revisandoDocs}
           titulo="Documentos SAP"
           ayuda="Al menos uno: el número del documento en SAP y su PDF, que debe traer ese mismo número."
         >
@@ -755,11 +785,27 @@ export function NuevoReclamoForm({
             <ul className="flex flex-col gap-1.5">
               {[...new Set(docsSap)].map((d) => {
                 const pdf = pdfDeDoc(d);
+                const usados = usadosDe(d);
+                const repetido = docsRepetidos.includes(d);
                 return (
                   <li key={d} className="anim-aparecer flex items-center gap-2 text-sm">
-                    {pdf ? <CheckCircle2 size={15} className="shrink-0 text-success" /> : <AlertTriangle size={15} className="shrink-0 text-warning" />}
+                    {usados || repetido ? (
+                      <AlertTriangle size={15} className="shrink-0 text-danger" />
+                    ) : pdf ? (
+                      <CheckCircle2 size={15} className="shrink-0 text-success" />
+                    ) : (
+                      <AlertTriangle size={15} className="shrink-0 text-warning" />
+                    )}
                     <span className="font-mono">{d}</span>
-                    <span className={cn('min-w-0 truncate', pdf ? 'opacity-65' : 'text-warning')}>{pdf ? pdf.file.name : 'Falta su PDF'}</span>
+                    {usados ? (
+                      <span className="min-w-0 truncate font-semibold text-danger" title={`Ya está en ${usados.map((r) => r.numero).join(', ')}`}>
+                        Ya está en {usados.map((r) => r.numero).join(', ')}
+                      </span>
+                    ) : repetido ? (
+                      <span className="min-w-0 truncate font-semibold text-danger">Escrito más de una vez</span>
+                    ) : (
+                      <span className={cn('min-w-0 truncate', pdf ? 'opacity-65' : 'text-warning')}>{pdf ? pdf.file.name : 'Falta su PDF'}</span>
+                    )}
                   </li>
                 );
               })}

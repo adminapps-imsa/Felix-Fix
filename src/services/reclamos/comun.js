@@ -45,16 +45,25 @@ export const estadoNotaAprobada = (r) => dominio.estadoNotaAprobada(r, parseJson
 
 /** Traduce el motivo de una regla del dominio (o null) a 409. */
 export function exigir(motivo) {
-  if (motivo) throw conflict(motivo.mensaje, motivo.code && { code: motivo.code });
+  if (!motivo) return;
+  const { mensaje, ...extra } = motivo; // code y datos de apoyo (p. ej. `usados`) viajan en la respuesta
+  throw conflict(mensaje, extra);
 }
 
 function todosLosDocsSap(r) {
   return [r.SapDoc1, r.SapDoc2, r.SapDoc3, ...parseJsonArray(r.SapDocsExtra)].filter((d) => d && String(d).trim());
 }
 
-export function numeroReclamo(id) {
-  return `REC-${String(id).padStart(6, '0')}`;
-}
+export const numeroReclamo = dominio.numeroReclamo;
+
+/** Filas de buscarPorDocumentosSap → reclamos con su conjunto de documentos (para las reglas del dominio). */
+export const conDocumentos = (filas) =>
+  filas.map((f) => ({
+    ReclamoId: f.ReclamoId,
+    Token: f.Token,
+    Status: f.Status,
+    documentos: dominio.documentosDelReclamo(f, parseJsonArray(f.SapDocsExtra), parseJsonArray(f.AdjuntosExtra)),
+  }));
 
 export function aDto(r) {
   const { ArchivoExcel, ...resto } = r;

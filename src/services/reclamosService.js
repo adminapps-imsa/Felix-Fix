@@ -16,6 +16,7 @@ export {
   previsualizarExcel,
   normalizarDocSap,
   previsualizarPdfSap,
+  documentosSapUsados,
   catalogosFormulario,
   relacionProveedor,
   crear,

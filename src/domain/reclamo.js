@@ -6,6 +6,90 @@
 
 export const ESTADOS_CERRADOS = new Set(['resuelto', 'rechazado']);
 
+export const numeroReclamo = (id) => `REC-${String(id).padStart(6, '0')}`;
+
+// ------------------------------------------------------------------
+// Documentos SAP: un documento pertenece a un solo reclamo.
+// ------------------------------------------------------------------
+
+/** "0004904487300" y "4904487300" son el mismo documento: solo dígitos, sin ceros a la izquierda. */
+export function normalizarDocSap(valor) {
+  const texto = String(valor ?? '').trim();
+  const digitos = texto.replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+  return digitos || texto.toUpperCase();
+}
+
+/**
+ * Documentos SAP de un reclamo guardado: los del formulario y los que traen
+ * impresos sus PDF adjuntos. `sapDocsExtra` y `adjuntos` ya parseados.
+ */
+export function documentosDelReclamo({ SapDoc1, SapDoc2, SapDoc3 }, sapDocsExtra, adjuntos) {
+  const docs = [SapDoc1, SapDoc2, SapDoc3, ...sapDocsExtra, ...adjuntos.map((a) => a?.documentoSap)];
+  return new Set(docs.filter((d) => d && String(d).trim()).map(normalizarDocSap));
+}
+
+/** El mismo documento escrito dos veces en el formulario. */
+export function motivoDocsRepetidos(docs) {
+  const vistos = new Set();
+  const repetidos = new Set();
+  for (const d of docs) {
+    const clave = normalizarDocSap(d);
+    if (vistos.has(clave)) repetidos.add(d);
+    vistos.add(clave);
+  }
+  if (!repetidos.size) return null;
+  return {
+    mensaje: `El documento SAP ${[...repetidos].join(', ')} está escrito más de una vez. Déjalo una sola vez.`,
+    code: 'DOC_SAP_REPETIDO',
+  };
+}
+
+/**
+ * Qué documentos de `docs` ya están en otros reclamos. `otros`: reclamos
+ * guardados como [{ ReclamoId, Token, Status, documentos: Set }] (ver
+ * documentosDelReclamo). Devuelve [{ documento, reclamos: [{ numero, token, status }] }].
+ */
+export function documentosUsados(docs, otros) {
+  const usados = [];
+  for (const documento of [...new Set(docs)]) {
+    const clave = normalizarDocSap(documento);
+    const reclamos = otros
+      .filter((o) => o.documentos.has(clave))
+      .map((o) => ({ numero: numeroReclamo(o.ReclamoId), token: o.Token, status: o.Status }));
+    if (reclamos.length) usados.push({ documento, reclamos });
+  }
+  return usados;
+}
+
+const listaReclamos = (rs) => rs.map((r) => r.numero).join(', ');
+
+/** No se crea un reclamo con un documento SAP que ya tiene otro reclamo. */
+export function motivoDocsEnOtrosReclamos(docs, otros) {
+  const usados = documentosUsados(docs, otros);
+  if (!usados.length) return null;
+  const detalle = usados.map((u) => `${u.documento} ya está en ${listaReclamos(u.reclamos)}`).join('; ');
+  return {
+    mensaje: `Ya existe un reclamo con ${usados.length === 1 ? 'este documento SAP' : 'estos documentos SAP'}: ${detalle}. No se puede crear otro reclamo con el mismo documento.`,
+    code: 'DOC_SAP_DUPLICADO',
+    usados,
+  };
+}
+
+/**
+ * Un PDF de SAP que se adjunta a un reclamo debe ser de un documento de ese
+ * reclamo o de uno nuevo (p. ej. la nota de débito); nunca de un documento que
+ * pertenece a otro reclamo.
+ */
+export function motivoPdfDeOtroReclamo(numeroPdf, documentosPropios, otros) {
+  if (!numeroPdf || documentosPropios.has(normalizarDocSap(numeroPdf))) return null;
+  const [usado] = documentosUsados([numeroPdf], otros);
+  if (!usado) return null;
+  return {
+    mensaje: `Este PDF es del documento SAP ${numeroPdf}, que pertenece a ${listaReclamos(usado.reclamos)}. Súbelo en ese reclamo.`,
+    code: 'DOC_SAP_DE_OTRO_RECLAMO',
+  };
+}
+
 export const estaCerrado = (status) => ESTADOS_CERRADOS.has(status);
 
 const bloqueado = (mensaje) => ({ mensaje, code: 'RECLAMO_BLOQUEADO' });

@@ -119,6 +119,15 @@ export const proveedorQuerySchema = z.object({
   nombre: z.string().trim().min(1).max(200),
 });
 
+/** ?docs=4904151684,4904151698 — hasta 50 documentos separados por coma. */
+export const documentosSapQuerySchema = z.object({
+  docs: z
+    .string()
+    .trim()
+    .max(2600)
+    .transform((v) => v.split(',').map((d) => d.trim()).filter((d) => d && d.length <= 50).slice(0, 50)),
+});
+
 export const listarQuerySchema = z.object({
   status: z.enum(STATUS).optional().or(z.literal('')),
   porEnviar: z.enum(['1']).optional(),

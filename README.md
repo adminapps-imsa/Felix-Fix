@@ -145,6 +145,15 @@ Excel "Tienda" y "CEDI". Backend en `src/routes/reclamos.routes.js` →
   Keycloak pero el portal lo ignora (`ROLES_RETIRADOS` en
   `src/services/acceso/keycloakAdmin.js`): no sale en Configuración ni en
   "Vista por" y no da permisos.
+- **Un documento SAP pertenece a un solo reclamo.** No se crea un reclamo con
+  un documento que ya está en otro (formulario o PDF adjuntos; `0004904…` y
+  `4904…` cuentan como el mismo) ni con el mismo documento dos veces. El
+  formulario avisa en vivo (`GET /api/reclamos/documentos-sap`) y la API lo
+  vuelve a revisar dentro de la transacción del alta (`sp_getapplock`), así
+  dos altas a la vez no se cuelan. En el detalle no se adjunta el mismo
+  archivo dos veces (por contenido) ni un PDF de un documento de otro
+  reclamo; si se vuelve a subir un PDF que ya estaba sin validar y ahora
+  coincide con lo aprobado, se valida el existente en vez de duplicarlo.
 - **Excel siempre obligatorio.** Documento SAP obligatorio salvo
   `RECLAMOS_SAP_DOC_OPCIONAL=true` fuera de producción.
 - **Plantilla CEDI con encabezado**: arriba de la tabla puede traer

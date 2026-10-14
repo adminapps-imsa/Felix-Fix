@@ -3,6 +3,7 @@ import type { PaginationMeta } from '../types/productoDanado';
 import type {
   CatalogosReclamo,
   DecStatus,
+  DocumentoSapUsado,
   KpisReclamos,
   PermisosReclamos,
   PreviewExcel,
@@ -49,6 +50,11 @@ export function previsualizarPdfSap(pdf: File) {
   const form = new FormData();
   form.set('pdf', pdf);
   return api.postForm<{ numeroDocumento: string | null }>(`${BASE}/parse-pdf`, form);
+}
+
+/** En qué reclamos ya está cada documento SAP (un documento pertenece a un solo reclamo). */
+export function documentosSapUsados(docs: string[]) {
+  return api.get<{ usados: DocumentoSapUsado[] }>(`${BASE}/documentos-sap?docs=${encodeURIComponent(docs.join(','))}`);
 }
 
 export const crearReclamo = (form: FormData) => api.postForm<Reclamo>(BASE, form);

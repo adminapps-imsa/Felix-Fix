@@ -162,6 +162,12 @@ export interface CatalogosReclamo {
 }
 
 /** Lo que el catálogo conoce de un proveedor (GET /reclamos/proveedor). */
+/** Un documento SAP que ya está en otro(s) reclamo(s). */
+export interface DocumentoSapUsado {
+  documento: string;
+  reclamos: { numero: string; token: string; status: StatusReclamo }[];
+}
+
 export interface RelacionProveedor {
   proveedor: string;
   mundos: string[];
