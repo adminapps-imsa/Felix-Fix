@@ -1,0 +1,447 @@
+@import 'tailwindcss';
+
+/* Las fuentes (Instrument Sans y Bricolage Grotesque) se cargan vía <link> en index.html: un @import de otro
+   origen aquí debe preceder cualquier otra regla, y Tailwind v4 reordena su
+   propio @import por delante del resto del CSS generado, lo cual es
+   inválido según la spec e impedía que lightningcss emitiera el
+   `backdrop-filter` estándar (solo quedaba el prefijo -webkit-). */
+
+/* Tailwind v4 usa prefers-color-scheme por defecto; el portal controla el
+   modo oscuro explícitamente con la clase `dark` en <html>, así que hace
+   falta declarar la variante manualmente. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  /* Instrument Sans: texto, controles y tablas (compacta y muy legible en tamaños chicos).
+     Bricolage Grotesque, en ancho angosto: títulos, cifras y números de caso, con aire de
+     tablero de despacho. Una sola de cada; el resto lo hacen el peso y el tamaño. */
+  --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Bricolage Grotesque', 'Instrument Sans', ui-sans-serif, system-ui, sans-serif;
+
+  --color-brand-50: #eef2ff;
+  --color-brand-100: #e0e7ff;
+  --color-brand-400: #818cf8;
+  --color-brand-500: #6366f1;
+  --color-brand-600: #4f46e5;
+  --color-brand-700: #4338ca;
+
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+
+  /* Jerarquía de esquinas: superficies 18, recuadros internos 12, controles 10, etiquetas redondas. */
+  --radius-card: 18px;
+
+  /* Curvas de movimiento: las de CSS por defecto son demasiado blandas. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+}
+
+:root {
+  /* Sólido: sobre la franja de color una tarjeta translúcida mostraba la costura del borde. */
+  --glass-bg: #fcfcff;
+  --glass-border: rgba(99, 102, 241, 0.12);
+  /* Dos capas: contacto cercano + ambiente amplio. */
+  /* Superficies apoyadas: sombra leve. La elevación fuerte queda para lo que flota (indicadores sobre la franja, ventanas). */
+  --glass-shadow: 0 1px 2px rgba(30, 27, 58, 0.04), 0 4px 18px -10px rgba(30, 27, 58, 0.1);
+  --shadow-elevada: 0 1px 2px rgba(30, 27, 58, 0.05), 0 12px 32px -10px rgba(30, 27, 58, 0.2);
+  --glass-shadow-hover: 0 2px 4px rgba(30, 27, 58, 0.05), 0 14px 36px -8px rgba(79, 70, 229, 0.18);
+  --page-bg: #f4f5fb;
+  --page-fg: #1e1b3a;
+}
+
+.dark {
+  --glass-bg: #13121f;
+  --glass-border: rgba(129, 140, 248, 0.22);
+  --glass-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 20px -10px rgba(0, 0, 0, 0.5);
+  --shadow-elevada: 0 1px 2px rgba(0, 0, 0, 0.35), 0 14px 34px -10px rgba(0, 0, 0, 0.65);
+  --glass-shadow-hover: 0 2px 4px rgba(0, 0, 0, 0.35), 0 14px 36px -8px rgba(99, 102, 241, 0.28);
+  --page-bg: #0b0b13;
+  --page-fg: #ede9fe;
+  /* Controles nativos (lista del <select>, calendario de fecha) también en oscuro. */
+  color-scheme: dark;
+}
+
+@utility glass-card {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--glass-shadow);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+}
+
+@utility badge-pill {
+  /* Una etiqueta de estado nunca se parte en varias líneas. */
+  @apply inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold;
+}
+
+@utility titulo-pagina {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  line-height: 1.05;
+  font-weight: 700;
+  font-stretch: 82%;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+  @media (width >= 40rem) {
+    font-size: 2.5rem;
+  }
+}
+
+@utility bajada-pagina {
+  margin-top: 0.25rem;
+  max-width: 65ch;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  opacity: 0.72;
+  text-wrap: pretty;
+}
+
+/* El dato principal de cada indicador: más grande que el título de la tarjeta. */
+@utility cifra-kpi {
+  font-family: var(--font-display);
+  font-size: 2.5rem;
+  line-height: 0.95;
+  font-weight: 700;
+  font-stretch: 78%;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Número de un caso (REC-000008, un documento): el dato que la gente dicta y busca. */
+@utility numero-caso {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-stretch: 80%;
+  letter-spacing: 0.005em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Rótulo de un dato o grupo: en minúscula normal; lo distingue el peso y el color, no las mayúsculas. */
+@utility etiqueta {
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+  font-weight: 600;
+  opacity: 0.62;
+}
+
+/* Lo que flota sobre otra superficie (indicadores sobre la franja). Fuera de las
+   capas de Tailwind para ganarle a la sombra de glass-card; al pasar el ratón
+   manda la sombra de hover de cada componente. */
+.glass-card.elevada:not(:hover) {
+  box-shadow: var(--shadow-elevada);
+}
+
+/* Pastilla del icono de un indicador, teñida con el color de su etapa. */
+@utility chip-icono {
+  display: grid;
+  place-items: center;
+  width: 1.875rem;
+  height: 1.875rem;
+  flex-shrink: 0;
+  border-radius: 0.625rem;
+  background: color-mix(in oklab, currentColor 14%, transparent);
+}
+
+html {
+  /* Sin el destello gris/azul al tocar: cada control tiene su propio :active. */
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Controles: toque inmediato (sin la espera del doble toque) y sin seleccionar su texto al mantener presionado. */
+button,
+[role='button'],
+[role='tab'],
+[role='menuitem'],
+select,
+label:has(> input[type='checkbox']) {
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* iOS hace zoom al enfocar un campo de menos de 16 px y no vuelve: en pantallas táctiles, 16 px. */
+@media (pointer: coarse) {
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
+/* Contenedores con scroll propio (modales, tablas): al llegar al final no arrastran la página de atrás. */
+.overflow-auto,
+.overflow-y-auto {
+  overscroll-behavior: contain;
+}
+
+body {
+  /* Atmósfera de marca: un resplandor índigo muy leve detrás de la barra superior. */
+  background:
+    radial-gradient(70rem 22rem at 15% -6rem, color-mix(in oklab, var(--color-brand-500) 9%, transparent), transparent 70%),
+    var(--page-bg);
+  color: var(--page-fg);
+  font-family: var(--font-sans);
+  /* Casillas, radios y barras de progreso nativos con el color de la marca. */
+  accent-color: var(--color-brand-500);
+}
+
+/* ---------- Banda de color del encabezado de cada módulo ---------- */
+.banda-pagina {
+  position: absolute;
+  z-index: -1;
+  /* De borde a borde de la ventana, empezando justo debajo de la barra superior. */
+  left: calc(50% - 50vw);
+  right: calc(50% - 50vw);
+  top: -1.5rem;
+  background:
+    radial-gradient(40rem 18rem at 85% -20%, rgb(255 255 255 / 0.18), transparent 60%),
+    radial-gradient(30rem 16rem at 10% 120%, rgb(167 139 250 / 0.45), transparent 65%),
+    linear-gradient(120deg, #4338ca 0%, #4f46e5 38%, #6d5bf5 70%, #8b5cf6 100%);
+  box-shadow: inset 0 -1px 0 rgb(255 255 255 / 0.08);
+}
+
+/* Trama de puntos muy tenue: textura que quita lo plano sin ruido. */
+.banda-pagina::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgb(255 255 255 / 0.12) 1px, transparent 1px);
+  background-size: 18px 18px;
+  mask-image: linear-gradient(to bottom, black, transparent 85%);
+}
+
+.banda-pagina--corta {
+  /* Termina antes de la fila siguiente (a 1.5rem): las pestañas quedan sobre fondo claro. */
+  bottom: -0.75rem;
+}
+
+/* Los indicadores (la fila siguiente, a 1.5rem) quedan montados sobre el borde. */
+.banda-pagina--solape {
+  bottom: -4.75rem;
+}
+
+/* Detalle: la tarjeta principal (a 1.5rem del enlace de regreso) queda montada sobre el borde. */
+.banda-pagina--detalle {
+  bottom: -6rem;
+}
+
+/* Enlace de regreso sobre la franja. */
+.en-banda .volver-pagina {
+  color: white;
+  opacity: 0.85;
+}
+
+.en-banda .volver-pagina:hover {
+  opacity: 1;
+}
+
+.dark .banda-pagina {
+  background:
+    radial-gradient(40rem 18rem at 85% -20%, rgb(129 140 248 / 0.22), transparent 60%),
+    radial-gradient(30rem 16rem at 10% 120%, rgb(139 92 246 / 0.3), transparent 65%),
+    linear-gradient(120deg, #1e1b4b 0%, #272270 45%, #33236e 100%);
+}
+
+/* Texto y botón principal sobre la franja: blancos. */
+.en-banda .bajada-pagina {
+  color: rgb(255 255 255 / 0.82);
+  opacity: 1;
+}
+
+.en-banda [data-variant='primary'] {
+  background: white;
+  color: var(--color-brand-700);
+  box-shadow: 0 1px 2px rgb(15 10 60 / 0.2), 0 8px 20px -6px rgb(15 10 60 / 0.45);
+}
+
+.en-banda [data-variant='primary']:hover {
+  background: var(--color-brand-50);
+}
+
+/* Entrada de modales: el fondo funde y el diálogo crece apenas (nunca desde scale(0)). */
+.modal-fondo {
+  transition: opacity 200ms var(--ease-out);
+  @starting-style {
+    opacity: 0;
+  }
+}
+
+.modal-dialogo {
+  transition:
+    opacity 200ms var(--ease-out),
+    transform 200ms var(--ease-out);
+  @starting-style {
+    opacity: 0;
+    transform: scale(0.96) translateY(4px);
+  }
+}
+
+/* Menús desplegables: salen desde la esquina de su botón (arriba a la derecha). */
+.anim-menu {
+  transform-origin: top right;
+  transition:
+    opacity 160ms var(--ease-out),
+    transform 160ms var(--ease-out);
+  @starting-style {
+    opacity: 0;
+    transform: scale(0.97) translateY(-4px);
+  }
+}
+
+/* Mensajes y contenido que aparece (errores, éxito, secciones que se abren). */
+.anim-aparecer {
+  transition:
+    opacity 180ms var(--ease-out),
+    transform 180ms var(--ease-out);
+  @starting-style {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+/* Aviso que entra desde abajo (vencimiento de sesión). */
+.anim-subir {
+  transition:
+    opacity 240ms var(--ease-out),
+    transform 240ms var(--ease-out);
+  @starting-style {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+/* Momento raro de logro ("¡Todo al día!"): el icono aparece con un pequeño impulso. */
+.anim-celebrar {
+  transition:
+    opacity 320ms var(--ease-out),
+    transform 320ms cubic-bezier(0.34, 1.4, 0.64, 1);
+  @starting-style {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+
+/* Sección de un formulario que aparece (al elegir el origen o leer el Excel). */
+.anim-seccion {
+  transition:
+    opacity 220ms var(--ease-out),
+    transform 220ms var(--ease-out);
+  @starting-style {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+/* Paso de formulario completo: el visto entra con un pequeño impulso. */
+.anim-check {
+  transition:
+    opacity 160ms var(--ease-out),
+    transform 280ms cubic-bezier(0.34, 1.4, 0.64, 1);
+  @starting-style {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+}
+
+/* Campo que el Excel llenó solo: un destello breve de la marca muestra qué cambió. */
+.campo-auto :is(input, select, textarea) {
+  animation: destello-auto 1600ms var(--ease-out) 1;
+}
+
+@keyframes destello-auto {
+  0%,
+  30% {
+    background-color: color-mix(in oklab, var(--color-brand-500) 12%, transparent);
+    border-color: color-mix(in oklab, var(--color-brand-500) 60%, transparent);
+    box-shadow: 0 0 0 4px color-mix(in oklab, var(--color-brand-500) 18%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .campo-auto :is(input, select, textarea) {
+    animation: none;
+  }
+  .anim-seccion,
+  .anim-check {
+    @starting-style {
+      transform: none;
+    }
+  }
+  .anim-menu,
+  .anim-aparecer,
+  .anim-subir,
+  .anim-celebrar {
+    @starting-style {
+      transform: none;
+    }
+  }
+  .modal-dialogo {
+    @starting-style {
+      transform: none;
+    }
+  }
+  * {
+    --tw-scale-x: 1 !important;
+    --tw-scale-y: 1 !important;
+  }
+}
+
+::selection {
+  background: color-mix(in oklab, var(--color-brand-500) 28%, transparent);
+}
+
+/* Cifras de tablas alineadas en columna (cantidades, montos, fechas). */
+table {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Un solo estilo de encabezado de tabla en todo el portal. */
+thead th {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/*
+ * Tablas de listado (Productos dañados, Reclamos, Contabilidad): nada baja de
+ * línea por sí solo, así todas las filas miden lo mismo. Cada celda tiene una
+ * línea principal y, si hace falta, una secundaria (.sub); el texto largo se
+ * corta con "…" dentro de un .celda-larga.
+ */
+.tabla-lista th,
+.tabla-lista td {
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.tabla-lista .sub {
+  display: block;
+  margin-top: 0.125rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-weight: 400;
+  opacity: 0.6;
+}
+
+.tabla-lista .celda-larga {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+thead {
+  background-image: linear-gradient(color-mix(in oklab, var(--color-brand-500) 5%, transparent), color-mix(in oklab, var(--color-brand-500) 5%, transparent));
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-brand-500);
+  outline-offset: 2px;
+}
+
+* {
+  scrollbar-color: color-mix(in oklab, var(--color-brand-500) 35%, transparent) transparent;
+}

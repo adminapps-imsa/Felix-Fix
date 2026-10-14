@@ -1,0 +1,540 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { detectarTipoArchivo } from '../utils/tipoArchivo.js';
+import * as repo from '../repositories/productosDanadosRepository.js';
+import { parseJsonArray } from '../repositories/productosDanadosRepository.js';
+import { listarCatalogo } from '../repositories/reclamosRepository.js';
+import { reporteAdjuntoPath, evidenciaAbsolutePath } from '../config/almacenamiento.js';
+import { nombresDeUsuarios, datosDeUsuario } from './acceso/keycloakAdmin.js';
+import { plantillaReporteProveedor } from './correo/plantillaReporteProveedor.js';
+import { enviarCorreo, correoConfigurado, validarDestinatarios } from './correo/mailer.js';
+import { avisarEtapa } from './correo/avisosProductosDanados.js';
+import { env } from '../config/env.js';
+import * as historialRepo from '../repositories/historialRepository.js';
+import { saveEvidence, getEvidenceStream } from './evidenceStorage/index.js';
+import { darDeBajaInventario, SapBajaError, SapNoImplementadoError } from './sapBajaService.js';
+import { parsePagination, buildPaginationMeta } from '../utils/pagination.js';
+import { badRequest, conflict, notFound, badGateway, forbidden } from '../utils/httpError.js';
+import { tienePermiso } from './acceso/permisos.js';
+import {
+  esDocGof,
+  motivoNoEditable,
+  motivoNoAgregarAdjunto,
+  motivoNoEliminarAdjunto,
+  motivoNoEnviarContabilidad,
+  motivoNoEliminar,
+  motivoNoEnviarProveedor,
+  bloqueoReenvio,
+} from '../domain/productoDanado.js';
+import { logger } from '../utils/logger.js';
+
+const ALLOWED_MAGIC_TYPES = new Set(['jpg', 'png', 'webp']);
+// Catálogos (ReclamoCatalogos): la división es la misma de Reclamos.
+const CAT_DIVISION = 'division';
+const CAT_MOTIVO = 'motivo_producto';
+
+const autor = (usuario) => usuario.username || usuario.sub;
+
+/** El archivo subido ya quedó referenciado en la BD: errorHandler no lo borra (ver middleware/upload.js). */
+function marcarGuardado(multerFile) {
+  if (multerFile) multerFile.borrarSiFalla = false;
+}
+
+function aDto(r) {
+  return { ...r, CorreosProveedor: parseJsonArray(r.CorreosProveedor), Adjuntos: parseJsonArray(r.Adjuntos) };
+}
+
+export async function catalogos() {
+  const [divisiones, motivos] = await Promise.all([listarCatalogo(CAT_DIVISION), listarCatalogo(CAT_MOTIVO)]);
+  return { divisiones, motivos };
+}
+
+// Las fechas del filtro ('YYYY-MM-DD') son días en hora de Panamá (UTC-5, sin
+// horario de verano) y FechaCreacion está en UTC: el día empieza a las 05:00 UTC.
+const OFFSET_PANAMA_H = 5;
+
+/** Inicio (UTC) del día 'YYYY-MM-DD' de Panamá, más `dias` días. */
+export function inicioDiaPanama(fecha, dias = 0) {
+  const [y, m, d] = fecha.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + dias, OFFSET_PANAMA_H));
+}
+
+function toFiltros(query) {
+  return {
+    tiendaId: query.tienda ? Number(query.tienda) : undefined,
+    motivo: query.motivo || undefined,
+    estado: query.estado || undefined,
+    fechaDesde: query.fechaDesde ? inicioDiaPanama(query.fechaDesde) : undefined,
+    // Exclusivo: inicio del día siguiente (el repo compara con <).
+    fechaHasta: query.fechaHasta ? inicioDiaPanama(query.fechaHasta, 1) : undefined,
+    q: query.q?.trim() || undefined,
+  };
+}
+
+export async function listarReportes(query) {
+  const filtros = toFiltros(query);
+  const pagination = parsePagination(query);
+  const { items, total } = await repo.listar(filtros, pagination);
+  return { data: items.map(aDto), pagination: buildPaginationMeta({ ...pagination, total }) };
+}
+
+export async function obtenerKpis(query) {
+  return repo.obtenerKpis(toFiltros(query));
+}
+
+export async function obtenerDetalle(reporteId) {
+  const reporte = await repo.obtenerPorId(reporteId);
+  if (!reporte) throw notFound('Reporte no encontrado.');
+  const historial = await historialRepo.listarHistorialDeReporte(reporteId);
+  const dto = aDto(reporte);
+  const nombres = await nombresDeUsuarios([...dto.Adjuntos.map((a) => a.uploaded_by), dto.EnviadoProveedorPor]);
+  dto.Adjuntos = dto.Adjuntos.map((a) => ({ ...a, uploaded_by_nombre: nombres.get(a.uploaded_by) || a.uploaded_by }));
+  dto.EnviadoProveedorPorNombre = dto.EnviadoProveedorPor ? nombres.get(dto.EnviadoProveedorPor) || dto.EnviadoProveedorPor : null;
+  return { ...dto, historial };
+}
+
+export async function obtenerEvidencia(reporteId) {
+  const reporte = await repo.obtenerPorId(reporteId);
+  if (!reporte || !reporte.EvidenciaKey) throw notFound('Este reporte no tiene evidencia adjunta.');
+  const stream = await getEvidenceStream(reporte.EvidenciaProveedor, reporte.EvidenciaKey);
+  if (!stream) throw notFound('El archivo de evidencia ya no está disponible.');
+  return stream;
+}
+
+async function validarArchivoEvidencia(multerFile) {
+  const detected = await detectarTipoArchivo(multerFile.path);
+  if (!detected || !ALLOWED_MAGIC_TYPES.has(detected.ext)) {
+    await fs.unlink(multerFile.path).catch(() => {});
+    throw badRequest('El archivo subido no es una imagen JPG/PNG/WEBP válida.');
+  }
+}
+
+export async function crearReporte(data, multerFile, usuario) {
+  let evidencia = { provider: 'local', key: null };
+  if (multerFile) {
+    await validarArchivoEvidencia(multerFile);
+    evidencia = await saveEvidence(multerFile);
+  }
+
+  // Un valor nuevo queda en el catálogo; uno existente (con otras mayúsculas)
+  // se guarda como ya está escrito allí. Se registra en la misma transacción
+  // que el reporte: si la creación falla, el catálogo no cambia.
+  const reporteId = await repo.crear(
+    { ...data, evidenciaProveedor: evidencia.provider, evidenciaKey: evidencia.key },
+    usuario,
+    { catalogos: { division: CAT_DIVISION, motivo: CAT_MOTIVO } }
+  );
+  // Ya referenciada en la BD: errorHandler no debe borrarla si algo falla después.
+  marcarGuardado(multerFile);
+  const detalle = await obtenerDetalle(reporteId);
+  avisarEtapa('nuevo', detalle);
+  return detalle;
+}
+
+// Cambios de estado: el UPDATE condicional y el historial van en una sola
+// transacción (repo); el aviso sale solo después del commit.
+const eventoDe = (usuario, accion, detalle) => ({ accion, usuarioId: usuario.sub, usuarioNombre: usuario.name, detalle });
+
+export async function aprobarReporte(reporteId, usuario) {
+  const ok = await repo.aprobar(reporteId, eventoDe(usuario, 'Aprobado'));
+  if (!ok) throw conflict('El reporte ya no está en estado Pendiente.');
+  const detalle = await obtenerDetalle(reporteId);
+  avisarEtapa('aprobado', detalle);
+  return detalle;
+}
+
+export async function rechazarReporte(reporteId, motivoRechazo, usuario) {
+  const ok = await repo.rechazar(reporteId, motivoRechazo, eventoDe(usuario, 'Rechazado', motivoRechazo));
+  if (!ok) throw conflict('El reporte ya no está en estado Pendiente.');
+  const detalle = await obtenerDetalle(reporteId);
+  avisarEtapa('nf', detalle, { detalle: motivoRechazo });
+  return detalle;
+}
+
+// ------------------------------------------------------------------
+// Después de la respuesta del proveedor
+//   NF: supervisor GOF lo cierra.
+//   Devolución aprobada: Gof sube el documento y lo envía a contabilidad;
+//   contabilidad confirma el pago del proveedor y se cierra.
+// ------------------------------------------------------------------
+
+export async function cerrarNf(reporteId, comentario, usuario) {
+  const ok = await repo.cerrarNf(reporteId, eventoDe(usuario, 'NFCerrado', comentario || null));
+  if (!ok) throw conflict('El reporte ya no está en NF esperando al supervisor GOF.');
+  const detalle = await obtenerDetalle(reporteId);
+  avisarEtapa('nfCerrado', detalle, { detalle: comentario });
+  return detalle;
+}
+
+export async function enviarAContabilidad(reporteId, usuario) {
+  await existeOFallar(reporteId);
+  let docs = [];
+  // Los documentos se revisan con la fila bloqueada, en la misma transacción del cambio.
+  const ok = await repo.enviarAContabilidad(reporteId, eventoDe(usuario, 'EnviadoContabilidad'), (fila) => {
+    const adjuntos = parseJsonArray(fila.Adjuntos);
+    const motivo = motivoNoEnviarContabilidad(adjuntos);
+    if (motivo) throw badRequest(motivo);
+    docs = adjuntos.filter(esDocGof);
+    return { detalle: `Documentos: ${docs.map((d) => d.originalname).join(', ')}`.slice(0, 1000) };
+  });
+  if (!ok) throw conflict('El reporte ya no está con Gof (ya se envió a contabilidad o cambió de estado).');
+  const detalle = await obtenerDetalle(reporteId);
+  avisarEtapa('contabilidad', detalle, { detalle: `Documentos: ${docs.map((d) => d.originalname).join(', ')}` });
+  return detalle;
+}
+
+export async function registrarPago(reporteId, { referencia, comentario }, usuario) {
+  const ok = await repo.registrarPago(
+    reporteId,
+    referencia,
+    eventoDe(usuario, 'PagoRecibido', [`Referencia: ${referencia}`, comentario].filter(Boolean).join(' · ').slice(0, 1000))
+  );
+  if (!ok) throw conflict('El reporte ya no está en contabilidad esperando el pago.');
+  const detalle = await obtenerDetalle(reporteId);
+  avisarEtapa('pagado', detalle, { detalle: `Referencia: ${referencia}` });
+  return detalle;
+}
+
+/**
+ * Aprobado -> EnProceso -> Procesado (o de vuelta a Aprobado si SAP falla).
+ * El UPDATE condicional en el repositorio (WHERE Estado = 'Aprobado') es lo
+ * que evita que dos peticiones concurrentes (doble clic, dos supervisores)
+ * disparen dos bajas en SAP para el mismo reporte.
+ */
+export async function procesarReporte(reporteId, usuario) {
+  const tomadoParaProceso = await repo.marcarEnProceso(reporteId, eventoDe(usuario, 'EnProceso'));
+  if (!tomadoParaProceso) {
+    throw conflict('El reporte no está en estado Aprobado (ya fue procesado, está en proceso, o fue rechazado).');
+  }
+
+  const reporte = await repo.obtenerPorId(reporteId);
+
+  try {
+    const { sapDocumentoId } = await darDeBajaInventario({
+      reporteId,
+      sku: reporte.Sku,
+      cantidad: reporte.Cantidad,
+      motivo: reporte.Motivo,
+      tiendaCodigo: reporte.TiendaCodigo,
+      idempotencyKey: String(reporteId),
+    });
+
+    await repo.marcarProcesado(reporteId, sapDocumentoId, eventoDe(usuario, 'ProcesadoOk', `SAP documento ${sapDocumentoId}`));
+    return obtenerDetalle(reporteId);
+  } catch (err) {
+    // Si darDeBajaInventario() ya había confirmado éxito y el fallo ocurrió
+    // después (ej. al guardar el evento de historial), el reporte ya quedó
+    // "Procesado" en la BD: no hay que revertirlo ni reportar un 502 falso.
+    const estadoActual = await repo.obtenerPorId(reporteId);
+    if (estadoActual?.Estado === 'Procesado') {
+      return obtenerDetalle(reporteId);
+    }
+
+    const esperado = err instanceof SapBajaError || err instanceof SapNoImplementadoError;
+    if (!esperado) logger.error({ err }, 'Fallo inesperado al procesar baja en SAP');
+
+    await repo.revertirAAprobadoTrasFallo(reporteId, eventoDe(usuario, 'ProcesadoError', err.message?.slice(0, 1000)));
+
+    const reporteActualizado = await obtenerDetalle(reporteId);
+    throw badGateway('No se pudo registrar la baja en SAP. El reporte sigue Aprobado y se puede reintentar.', {
+      code: 'SAP_BAJA_FAILED',
+      retryable: true,
+      reporte: reporteActualizado,
+    });
+  }
+}
+
+// ------------------------------------------------------------------
+// Correos del proveedor y adjuntos (para el futuro envío del reporte)
+// ------------------------------------------------------------------
+
+async function existeOFallar(reporteId) {
+  const r = await repo.obtenerPorId(reporteId);
+  if (!r) throw notFound('Reporte no encontrado.');
+  return r;
+}
+
+/*
+ * Correos y adjuntos del proveedor: los edita quien trabaja con el proveedor
+ * (compradora, administrador) en cualquier reporte; quien solo crea reportes
+ * (Tienda, Gof), únicamente en los que creó.
+ */
+const EDITAN_CUALQUIER_REPORTE = ['productos_danados.aprobar', 'productos_danados.enviar', 'productos_danados.procesar'];
+
+export function puedeEditarReporte(usuario, r) {
+  if (EDITAN_CUALQUIER_REPORTE.some((p) => tienePermiso(usuario, p))) return true;
+  return tienePermiso(usuario, 'productos_danados.crear') && Boolean(usuario?.username) && r.EmpleadoReportaUsuario === usuario.username;
+}
+
+async function exigirEdicion(reporteId, usuario) {
+  const r = await existeOFallar(reporteId);
+  if (!puedeEditarReporte(usuario, r)) throw forbidden('Solo puedes cambiar los correos y archivos de los reportes que tú creaste.');
+}
+
+export async function guardarCorreos(reporteId, correos, usuario) {
+  await exigirEdicion(reporteId, usuario);
+  // Estado y cambio bajo UPDLOCK; el historial va en la misma transacción.
+  const res = await repo.actualizarCorreos(reporteId, correos, motivoNoEditable, (antes) => {
+    const agregados = correos.filter((c) => !antes.includes(c));
+    const quitados = antes.filter((c) => !correos.includes(c));
+    if (!agregados.length && !quitados.length) return null;
+    return eventoDe(
+      usuario,
+      'CorreosActualizados',
+      [agregados.length && `Agregó: ${agregados.join(', ')}`, quitados.length && `Quitó: ${quitados.join(', ')}`]
+        .filter(Boolean)
+        .join(' · ')
+        .slice(0, 1000)
+    );
+  });
+  if (!res) throw notFound('Reporte no encontrado.');
+  if (res.bloqueado) throw conflict(res.bloqueado);
+  return obtenerDetalle(reporteId);
+}
+
+/** Magic bytes: el MIME del navegador no es confiable. xlsx = 'xlsx', xls = 'cfb'. */
+async function tipoAdjunto(multerFile) {
+  const d = await detectarTipoArchivo(multerFile.path);
+  if (d?.ext === 'pdf') return 'pdf';
+  if (d?.ext === 'xlsx' || d?.ext === 'cfb') return 'excel';
+  return null;
+}
+
+/** Documentos que sube Gof en una devolución aprobada (van a contabilidad, no al proveedor). */
+
+/**
+ * `etapa: 'gof'` = documento de Gof para contabilidad: solo mientras el
+ * reporte está en Aprobado (con Gof). Sin etapa = adjunto para el proveedor.
+ */
+export async function agregarAdjunto(reporteId, multerFile, usuario, { etapa } = {}) {
+  if (!multerFile) throw badRequest('Selecciona un archivo PDF o Excel.');
+  try {
+    // Los documentos de Gof tienen su propio permiso (documentar), validado en la ruta.
+    if (etapa !== 'gof') await exigirEdicion(reporteId, usuario);
+    const tipo = await tipoAdjunto(multerFile);
+    if (!tipo) throw badRequest('El archivo no es un PDF o Excel válido.');
+    const adj = {
+      filename: multerFile.filename,
+      originalname: path.basename(multerFile.originalname || multerFile.filename).slice(0, 255),
+      tipo,
+      uploaded_at: new Date().toISOString(),
+      uploaded_by: autor(usuario),
+      ...(etapa === 'gof' ? { etapa: 'gof' } : {}),
+    };
+    // El historial va en la misma transacción: si algo falla, el archivo no
+    // quedó referenciado y se puede borrar sin riesgo.
+    const res = await repo.modificarAdjuntos(
+      reporteId,
+      (a, estado) => {
+        const motivo = motivoNoAgregarAdjunto(estado, { gof: etapa === 'gof' });
+        if (motivo) throw conflict(motivo);
+        return [...a, adj];
+      },
+      () => eventoDe(usuario, 'AdjuntoAgregado', etapa === 'gof' ? `Documento para contabilidad: ${adj.originalname}` : adj.originalname)
+    );
+    if (!res) throw notFound('Reporte no encontrado.');
+  } catch (err) {
+    await fs.unlink(multerFile.path).catch(() => {});
+    throw err;
+  }
+  marcarGuardado(multerFile);
+  return obtenerDetalle(reporteId);
+}
+
+function indice(idx) {
+  const n = Number(idx);
+  if (!Number.isInteger(n) || n < 0) throw notFound('Adjunto no encontrado.');
+  return n;
+}
+
+export async function obtenerAdjunto(reporteId, idx) {
+  const r = await existeOFallar(reporteId);
+  const adj = parseJsonArray(r.Adjuntos)[indice(idx)];
+  if (!adj) throw notFound('Adjunto no encontrado.');
+  const ext = path.extname(adj.filename).toLowerCase();
+  const contentType =
+    adj.tipo === 'pdf'
+      ? 'application/pdf'
+      : ext === '.xls'
+        ? 'application/vnd.ms-excel'
+        : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  return { ruta: reporteAdjuntoPath(adj.filename), nombre: adj.originalname || adj.filename, contentType };
+}
+
+// Mismos permisos que la ruta de adjuntos para el proveedor.
+
+export async function eliminarAdjunto(reporteId, idx, usuario) {
+  const i = indice(idx);
+  const editaProveedor = puedeEditarReporte(usuario, await existeOFallar(reporteId));
+  let borrado = null;
+  const res = await repo.modificarAdjuntos(reporteId, (a, estado) => {
+    if (!a[i]) return null;
+    // Primero quién puede (403), después si el estado lo permite (409).
+    if (esDocGof(a[i])) {
+      if (!tienePermiso(usuario, 'productos_danados.documentar')) throw forbidden('Solo Gof puede quitar los documentos para contabilidad.');
+    } else if (!editaProveedor) {
+      throw forbidden('Solo puedes quitar archivos de los reportes que tú creaste.');
+    }
+    const motivo = motivoNoEliminarAdjunto(estado, a[i]);
+    if (motivo) throw conflict(motivo);
+    borrado = a[i];
+    return a.filter((_, k) => k !== i);
+  }, () => eventoDe(usuario, 'AdjuntoEliminado', borrado.originalname));
+  if (!res) throw notFound('Reporte no encontrado.');
+  if (!borrado) throw notFound('Adjunto no encontrado.');
+  // Solo después del commit (cambio + historial): si la BD falla, el archivo sigue referenciado.
+  await fs.unlink(reporteAdjuntoPath(borrado.filename)).catch((err) => {
+    if (err.code !== 'ENOENT') logger.error({ err, archivo: borrado.filename }, 'No se pudo borrar un adjunto de reporte');
+  });
+  return obtenerDetalle(reporteId);
+}
+
+// ------------------------------------------------------------------
+// Envío al proveedor por correo
+// ------------------------------------------------------------------
+
+const MIME_FOTO = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
+
+async function leerStream(stream) {
+  const partes = [];
+  for await (const p of stream) partes.push(p);
+  return Buffer.concat(partes);
+}
+
+/** Todo lo que lleva el correo: reporte, foto, adjuntos y quién lo envía. */
+async function armarCorreo(reporteId, usuario) {
+  const r = await existeOFallar(reporteId);
+  const correos = parseJsonArray(r.CorreosProveedor);
+  // Los documentos de Gof son para contabilidad, no para el proveedor.
+  const adjuntos = parseJsonArray(r.Adjuntos).filter((a) => !esDocGof(a));
+
+  let foto = null;
+  if (r.EvidenciaKey) {
+    const stream = await getEvidenceStream(r.EvidenciaProveedor, r.EvidenciaKey).catch(() => null);
+    if (stream) {
+      const ext = path.extname(r.EvidenciaKey).slice(1).toLowerCase();
+      foto = { buffer: await leerStream(stream), tipo: MIME_FOTO[ext] || 'image/jpeg', ext: ext || 'jpg' };
+    }
+  }
+
+  const archivos = [];
+  let total = foto?.buffer.length || 0;
+  for (const a of adjuntos) {
+    const ruta = reporteAdjuntoPath(a.filename);
+    const st = await fs.stat(ruta).catch(() => null);
+    if (!st) continue; // archivo ya no disponible: se omite
+    total += st.size;
+    archivos.push({ filename: a.originalname || a.filename, path: ruta });
+  }
+  const maxBytes = env.correo.maxAdjuntosMb * 1024 * 1024;
+  const avisos = [];
+  if (total > maxBytes) avisos.push(`Los archivos suman ${(total / 1048576).toFixed(1)} MB y el máximo es ${env.correo.maxAdjuntosMb} MB.`);
+  if (!correos.length) avisos.push('Agrega y guarda al menos un correo del proveedor.');
+  if (motivoNoEnviarProveedor(r.Estado)) avisos.push(motivoNoEnviarProveedor(r.Estado));
+
+  const remitente = await datosDeUsuario(autor(usuario));
+  if (!remitente.nombre || remitente.nombre === autor(usuario)) remitente.nombre = usuario.name || remitente.nombre;
+  return { r, correos, foto, archivos, remitente, avisos, excede: total > maxBytes };
+}
+
+export async function vistaPreviaCorreo(reporteId, usuario) {
+  const { r, correos, foto, archivos, remitente, avisos } = await armarCorreo(reporteId, usuario);
+  const { asunto, html } = plantillaReporteProveedor(r, {
+    remitente,
+    conFoto: Boolean(foto),
+    adjuntos: archivos.map((a) => a.filename),
+    // En la vista previa la foto va como data: (la CSP del portal lo permite).
+    srcFoto: foto ? `data:${foto.tipo};base64,${foto.buffer.toString('base64')}` : undefined,
+  });
+  let dominioAviso = null;
+  try {
+    validarDestinatarios(correos);
+  } catch (err) {
+    dominioAviso = err.message;
+  }
+  return {
+    asunto,
+    html,
+    para: correos,
+    cc: remitente.correo ? [remitente.correo] : [],
+    responderA: remitente.correo,
+    adjuntos: archivos.map((a) => a.filename),
+    conFoto: Boolean(foto),
+    configurado: correoConfigurado(),
+    avisos: [...avisos, ...(dominioAviso ? [dominioAviso] : []), ...(bloqueoReenvio(r) ? [bloqueoReenvio(r)] : [])],
+  };
+}
+
+/**
+ * Envía el reporte a los correos del proveedor guardados. Con copia a quien
+ * envía (y "Responder a" ella), así la respuesta del proveedor le llega a la
+ * compradora. `soloA` (opcional) manda el correo a otras direcciones en vez
+ * de las del proveedor, para pruebas; no marca el reporte como enviado.
+ */
+export async function enviarAlProveedor(reporteId, usuario, { soloA } = {}) {
+  const { r, correos, foto, archivos, remitente, excede } = await armarCorreo(reporteId, usuario);
+  const prueba = Array.isArray(soloA) && soloA.length > 0;
+  // El estado no se puede bloquear mientras sale el correo (n8n tarda hasta un
+  // minuto): se revisa justo antes de enviar.
+  if (!prueba && motivoNoEnviarProveedor(r.Estado)) throw conflict(motivoNoEnviarProveedor(r.Estado));
+  const bloqueo = prueba ? null : bloqueoReenvio(r);
+  if (bloqueo) throw conflict(bloqueo);
+  const para = prueba ? soloA : correos;
+  if (!para.length) throw badRequest('Agrega y guarda al menos un correo del proveedor antes de enviar.');
+  if (excede) throw badRequest(`Los archivos del reporte superan el máximo de ${env.correo.maxAdjuntosMb} MB para un correo.`);
+
+  const { asunto, html, texto } = plantillaReporteProveedor(r, {
+    remitente,
+    conFoto: Boolean(foto),
+    adjuntos: archivos.map((a) => a.filename),
+  });
+  const adjuntos = [
+    ...(foto ? [{ filename: `evidencia-${r.ReporteId}.${foto.ext}`, content: foto.buffer, contentType: foto.tipo, cid: 'evidencia' }] : []),
+    ...archivos,
+  ];
+  const cc = !prueba && remitente.correo && !para.includes(remitente.correo) ? [remitente.correo] : [];
+  const envio = await enviarCorreo({
+    para,
+    cc,
+    responderA: remitente.correo,
+    asunto: prueba ? `[PRUEBA] ${asunto}` : asunto,
+    html,
+    texto,
+    adjuntos,
+  });
+
+  if (!prueba) {
+    // El correo ya salió: si falla el registro NO se responde error (el usuario
+    // lo reenviaría). Queda en el log para corregirlo a mano.
+    const detalleEnvio = `Para: ${para.join(', ')}${cc.length ? ` · Copia: ${cc.join(', ')}` : ''}`.slice(0, 1000);
+    try {
+      await repo.registrarEnvioProveedor(reporteId, autor(usuario), eventoDe(usuario, 'EnviadoProveedor', detalleEnvio));
+    } catch (err) {
+      logger.error({ err, reporteId, para, cc }, 'Correo al proveedor enviado, pero no se pudo registrar el envío en la BD');
+    }
+  }
+  return { ...(await obtenerDetalle(reporteId)), envio: { para, cc, aceptados: envio.aceptados, rechazados: envio.rechazados } };
+}
+
+// ------------------------------------------------------------------
+// Eliminar reporte completo
+// ------------------------------------------------------------------
+
+export async function eliminarReporte(reporteId, usuario) {
+  // La regla se revisa dentro de la transacción del DELETE, con la fila bloqueada.
+  const res = await repo.eliminar(reporteId, motivoNoEliminar);
+  if (!res) throw notFound('Reporte no encontrado.');
+  if (res.bloqueado) throw conflict(res.bloqueado);
+  const { fila } = res;
+  // Solo después del commit: si la BD falla, los archivos siguen referenciados.
+  const archivos = parseJsonArray(fila.Adjuntos).map((a) => reporteAdjuntoPath(a.filename));
+  if (fila.EvidenciaKey && fila.EvidenciaProveedor === 'local') archivos.push(evidenciaAbsolutePath(fila.EvidenciaKey));
+  await Promise.all(
+    archivos.map((ruta) =>
+      fs.unlink(ruta).catch((err) => {
+        if (err.code !== 'ENOENT') logger.error({ err, ruta }, 'No se pudo borrar un archivo de un reporte eliminado');
+      })
+    )
+  );
+  logger.info({ reporteId, usuario: autor(usuario) }, 'Reporte de producto dañado eliminado');
+}

@@ -1,0 +1,37 @@
+### REFERENCIA — no está instalado ni activado. Revisar y copiar manualmente
+### a /etc/systemd/system/api-factura.service, luego:
+###   systemctl daemon-reload && systemctl enable --now api-factura
+
+[Unit]
+Description=Felix Portal API (Productos Dañados y demás módulos)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/Belleza
+ExecStart=/opt/node-22/bin/node src/index.js
+EnvironmentFile=/opt/Belleza/.env
+Restart=on-failure
+RestartSec=5
+User=www-data
+Group=www-data
+# Evita reinicios infinitos si el proceso crashea muy rápido en bucle:
+StartLimitIntervalSec=60
+StartLimitBurst=5
+# Endurecimiento: el proceso solo puede escribir en uploads/, no ve /root ni /home,
+# no gana privilegios y sus archivos nuevos no son legibles por otros usuarios del
+# servidor (UMask). Probado en el contenedor LXC. MemoryDenyWriteExecute NO: rompe el JIT de V8.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=/opt/Belleza/uploads
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

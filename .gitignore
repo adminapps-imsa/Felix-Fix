@@ -1,0 +1,10 @@
+node_modules/
+.env
+uploads/*
+!uploads/.gitkeep
+portal/node_modules/
+portal/dist/
+*.log
+
+# Configuración local de Claude Code (comandos e IPs del servidor)
+.claude/settings.local.json
