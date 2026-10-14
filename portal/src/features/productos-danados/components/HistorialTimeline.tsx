@@ -5,7 +5,7 @@ const ACCION_LABEL: Record<string, string> = {
   Creado: 'Reporte creado',
   Aprobado: 'Devolución aprobada · pasa a Gof',
   Rechazado: 'NF · pasa a Gof (documento 1700)',
-  Documento1700: 'Documento 1700 registrado · pasa al supervisor GOF',
+  Documento1700: 'Documento 1700 marcado · pasa al supervisor GOF',
   NFCerrado: 'NF validado y cerrado por el supervisor GOF',
   EnviadoContabilidad: 'Enviado a contabilidad',
   PagoRecibido: 'Pago del proveedor recibido · cerrado',

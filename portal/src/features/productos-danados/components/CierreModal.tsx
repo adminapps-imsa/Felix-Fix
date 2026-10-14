@@ -4,20 +4,22 @@ import { Field, Input, Textarea } from '../../../components/ui/Input';
 import { Button } from '../../../components/ui/Button';
 
 /**
- * Cierre de una etapa con datos opcionales: "Cerrar NF" (supervisor GOF, solo
- * comentario) o "Pago recibido" (contabilidad, referencia obligatoria).
+ * Cierre de una etapa: "Validar NF" (supervisor GOF, documento salida de NF
+ * obligatorio) o "Pago recibido" (contabilidad, referencia obligatoria), con
+ * comentario opcional.
  */
 export function CierreModal({
   titulo,
   texto,
-  conReferencia,
+  campo,
   textoConfirmar,
   onClose,
   onConfirm,
 }: {
   titulo: string;
   texto: React.ReactNode;
-  conReferencia?: boolean;
+  /** Dato obligatorio (se entrega en `referencia`). */
+  campo?: { label: string; placeholder?: string; error: string; mono?: boolean };
   textoConfirmar: string;
   onClose: () => void;
   onConfirm: (datos: { referencia: string; comentario: string }) => Promise<void>;
@@ -29,8 +31,8 @@ export function CierreModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (conReferencia && !referencia.trim()) {
-      setError('Escribe la referencia del pago.');
+    if (campo && !referencia.trim()) {
+      setError(campo.error);
       return;
     }
     setSaving(true);
@@ -50,13 +52,14 @@ export function CierreModal({
       <form onSubmit={handleSubmit} className="flex flex-col gap-4 text-sm">
         <div>{texto}</div>
         {error && <div className="anim-aparecer rounded-xl border border-danger/30 bg-danger/10 px-3 py-2 text-danger">{error}</div>}
-        {conReferencia && (
-          <Field label="Referencia del pago (obligatoria)">
+        {campo && (
+          <Field label={campo.label}>
             <Input
               value={referencia}
               onChange={(e) => setReferencia(e.target.value)}
               maxLength={200}
-              placeholder="N.º de transferencia, nota de crédito, cheque…"
+              placeholder={campo.placeholder}
+              className={campo.mono ? 'font-mono' : undefined}
               autoFocus
             />
           </Field>

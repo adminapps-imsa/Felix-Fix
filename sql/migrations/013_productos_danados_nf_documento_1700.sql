@@ -1,14 +1,17 @@
 -- Productos Dañados: el NF pasa por Gof (documento 1700) antes del supervisor GOF.
 --
 --   Pendiente --(compradora: NF)-----------------------------> Rechazado (NF, lo recibe Gof)
---   Rechazado --(Gof: check "Documento 1700" + su número)----> NFValidacion (lo recibe supervisorGof)
+--   Rechazado --(Gof: check "Documento 1700")----------------> NFValidacion (lo recibe supervisorGof)
 --   NFValidacion --(supervisorGof: validar y cerrar)---------> Cerrado
+--   (el número lo escribe el supervisor GOF: ver 014, «Documento salida de NF»)
 --
 -- El camino de Devolución aprobada no cambia (ver 010). Los NF que ya estaban
 -- en Rechazado quedan con Gof para su documento 1700.
 -- Idempotente, igual que el resto de las migraciones.
 
+-- La 014 la renombra a DocumentoSalidaNf: si ya existe esa, no se vuelve a crear.
 IF COL_LENGTH('$(SCHEMA).ReportesProductoDanado', 'Documento1700') IS NULL
+   AND COL_LENGTH('$(SCHEMA).ReportesProductoDanado', 'DocumentoSalidaNf') IS NULL
     ALTER TABLE $(SCHEMA).ReportesProductoDanado ADD Documento1700 NVARCHAR(50) NULL;
 GO
 

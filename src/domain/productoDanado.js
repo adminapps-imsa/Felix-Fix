@@ -7,7 +7,8 @@
 //
 // Estados (valor interno → lo que ve el usuario):
 //   Pendiente → Aprobado ("Devolución aprobada", Gof) → EnContabilidad → Cerrado
-//   Pendiente → Rechazado ("NF", Gof: documento 1700) → NFValidacion ("NF por validar", supervisor GOF) → Cerrado
+//   Pendiente → Rechazado ("NF", Gof: check documento 1700) → NFValidacion ("NF por validar", supervisor GOF:
+//   «Documento salida de NF» y validar) → Cerrado
 //   Aprobado → EnProceso → Procesado (baja en SAP; si falla, vuelve a Aprobado)
 
 /** Cada cambio de estado: desde dónde puede salir y a dónde llega. */
@@ -38,11 +39,14 @@ export function alcanceVista(permisos) {
 
 export const puedeVerReporte = (alcance, r) => alcance !== 'nf' || esNf(r);
 
-/** Número del documento 1700: obligatorio, sin espacios sobrantes. */
-export function motivoNoDocumento1700({ confirmado, numero }) {
-  if (confirmado !== true) return 'Marca el check «Documento 1700» para confirmar que ya está hecho en SAP.';
-  if (!String(numero ?? '').trim()) return 'Escribe el número del documento 1700.';
-  return null;
+/** Gof: el check «Documento 1700» debe estar marcado para pasarlo al supervisor GOF. */
+export function motivoNoDocumento1700({ confirmado }) {
+  return confirmado === true ? null : 'Marca el check «Documento 1700» para confirmar que ya está hecho en SAP.';
+}
+
+/** Supervisor GOF: para validar y cerrar el NF escribe el «Documento salida de NF». */
+export function motivoNoValidarNf({ numero }) {
+  return String(numero ?? '').trim() ? null : 'Escribe el número del documento salida de NF.';
 }
 
 // Correos del proveedor y adjuntos para el proveedor: solo antes de que el reporte siga a contabilidad/NF.

@@ -13,6 +13,7 @@ import {
   alcanceVista,
   puedeVerReporte,
   motivoNoDocumento1700,
+  motivoNoValidarNf,
 } from '../../src/domain/productoDanado.js';
 
 const docGof = { filename: 'a.pdf', etapa: 'gof' };
@@ -89,8 +90,14 @@ test('quién ve qué: «Ver solo los NF» sin «Ver reportes» ve solo NF', () =
   assert.equal(puedeVerReporte('todos', { Resolucion: null }), true);
 });
 
-test('documento 1700: check marcado y número obligatorios', () => {
-  assert.match(motivoNoDocumento1700({ confirmado: false, numero: '1700123' }), /Marca el check/);
-  assert.match(motivoNoDocumento1700({ confirmado: true, numero: '  ' }), /Escribe el número/);
-  assert.equal(motivoNoDocumento1700({ confirmado: true, numero: '1700123' }), null);
+test('Gof: el check «Documento 1700» es obligatorio (sin número)', () => {
+  assert.match(motivoNoDocumento1700({ confirmado: false }), /Marca el check/);
+  assert.match(motivoNoDocumento1700({}), /Marca el check/);
+  assert.equal(motivoNoDocumento1700({ confirmado: true }), null);
+});
+
+test('supervisor GOF: «Documento salida de NF» obligatorio para validar', () => {
+  assert.match(motivoNoValidarNf({ numero: '  ' }), /documento salida de NF/);
+  assert.match(motivoNoValidarNf({}), /documento salida de NF/);
+  assert.equal(motivoNoValidarNf({ numero: '1700123' }), null);
 });

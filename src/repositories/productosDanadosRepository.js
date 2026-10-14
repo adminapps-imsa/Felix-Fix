@@ -10,7 +10,7 @@ const SELECT_BASE = `
     r.Motivo, r.Cantidad, r.Descripcion, r.CorreosProveedor, r.Adjuntos,
     r.EnviadoProveedorAt, r.EnviadoProveedorPor, r.EnviosProveedor,
     r.EvidenciaProveedor, r.EvidenciaKey,
-    r.Estado, r.Resolucion, r.PagoReferencia, r.MotivoRechazo, r.ProcesadoIntentos, r.SapDocumentoId, r.Documento1700,
+    r.Estado, r.Resolucion, r.PagoReferencia, r.MotivoRechazo, r.ProcesadoIntentos, r.SapDocumentoId, r.DocumentoSalidaNf,
     r.FechaCreacion, r.FechaActualizacion
   FROM ${S}.ReportesProductoDanado r
   INNER JOIN ${S}.Tiendas t ON t.TiendaId = r.TiendaId
@@ -222,9 +222,9 @@ async function transicionEstado({ reporteId, estadoDesde, estadoHacia, camposExt
   if (camposExtra.incrementarIntentos) {
     sets.push('ProcesadoIntentos = ProcesadoIntentos + 1');
   }
-  if (camposExtra.documento1700 !== undefined) {
-    request.input('documento1700', sql.NVarChar(50), camposExtra.documento1700);
-    sets.push('Documento1700 = @documento1700');
+  if (camposExtra.documentoSalidaNf !== undefined) {
+    request.input('documentoSalidaNf', sql.NVarChar(50), camposExtra.documentoSalidaNf);
+    sets.push('DocumentoSalidaNf = @documentoSalidaNf');
   }
   if (camposExtra.sapDocumentoId !== undefined) {
     request.input('sapDocumentoId', sql.VarChar(50), camposExtra.sapDocumentoId);
@@ -290,11 +290,12 @@ export const aprobar = (reporteId, evento) => transicion('aprobar', { reporteId,
 export const rechazar = (reporteId, motivoRechazo, evento) =>
   transicion('rechazar', { reporteId, camposExtra: { motivoRechazo, resolucion: 'NF' }, evento });
 
-// NF con Gof: documento 1700 hecho en SAP → pasa al supervisor GOF.
-export const registrarDocumento1700 = (reporteId, numero, evento) =>
-  transicion('registrarDocumento1700', { reporteId, camposExtra: { documento1700: numero }, evento });
+// NF con Gof: check «Documento 1700» → pasa al supervisor GOF.
+export const registrarDocumento1700 = (reporteId, evento) => transicion('registrarDocumento1700', { reporteId, evento });
 
-export const cerrarNf = (reporteId, evento) => transicion('cerrarNf', { reporteId, evento });
+// Supervisor GOF: «Documento salida de NF» y cierra.
+export const cerrarNf = (reporteId, documentoSalidaNf, evento) =>
+  transicion('cerrarNf', { reporteId, camposExtra: { documentoSalidaNf }, evento });
 
 // `verificar` revisa los documentos de Gof con la fila bloqueada (nadie los quita a la vez).
 export const enviarAContabilidad = (reporteId, evento, verificar) => transicion('enviarAContabilidad', { reporteId, evento, verificar });

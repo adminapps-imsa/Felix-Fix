@@ -91,7 +91,7 @@ export const registrarDocumento1700 = asyncHandler(async (req, res) => {
 });
 
 export const cerrarNf = asyncHandler(async (req, res) => {
-  res.json(await service.cerrarNf(Number(req.params.id), req.body.comentario, req.user));
+  res.json(await service.cerrarNf(Number(req.params.id), req.body, req.user));
 });
 
 export const registrarPago = asyncHandler(async (req, res) => {

@@ -28,6 +28,7 @@ import {
   alcanceVista,
   puedeVerReporte,
   motivoNoDocumento1700,
+  motivoNoValidarNf,
 } from '../domain/productoDanado.js';
 import { logger } from '../utils/logger.js';
 
@@ -170,23 +171,27 @@ export async function rechazarReporte(reporteId, motivoRechazo, usuario) {
 //   contabilidad confirma el pago del proveedor y se cierra.
 // ------------------------------------------------------------------
 
-// NF: Gof marca el documento 1700 (con su número) y lo pasa al supervisor GOF.
-export async function registrarDocumento1700(reporteId, { confirmado, numero }, usuario) {
-  const motivo = motivoNoDocumento1700({ confirmado, numero });
+// NF: Gof marca el check «Documento 1700» y lo pasa al supervisor GOF.
+export async function registrarDocumento1700(reporteId, { confirmado }, usuario) {
+  const motivo = motivoNoDocumento1700({ confirmado });
   if (motivo) throw badRequest(motivo);
-  const num = String(numero).trim();
-  const ok = await repo.registrarDocumento1700(reporteId, num, eventoDe(usuario, 'Documento1700', `Documento 1700: ${num}`));
+  const ok = await repo.registrarDocumento1700(reporteId, eventoDe(usuario, 'Documento1700', 'Documento 1700 hecho en SAP'));
   if (!ok) throw conflict('El reporte ya no está en NF esperando el documento 1700 de Gof.');
   const detalle = await obtenerDetalle(reporteId);
-  avisarEtapa('nfValidar', detalle, { detalle: `Documento 1700: ${num}` });
+  avisarEtapa('nfValidar', detalle, { detalle: 'Gof marcó el documento 1700.' });
   return detalle;
 }
 
-export async function cerrarNf(reporteId, comentario, usuario) {
-  const ok = await repo.cerrarNf(reporteId, eventoDe(usuario, 'NFCerrado', comentario || null));
+// NF por validar: el supervisor GOF escribe el «Documento salida de NF» y cierra.
+export async function cerrarNf(reporteId, { numero, comentario }, usuario) {
+  const motivo = motivoNoValidarNf({ numero });
+  if (motivo) throw badRequest(motivo);
+  const num = String(numero).trim();
+  const detalleEvento = [`Documento salida de NF: ${num}`, comentario].filter(Boolean).join(' · ').slice(0, 1000);
+  const ok = await repo.cerrarNf(reporteId, num, eventoDe(usuario, 'NFCerrado', detalleEvento));
   if (!ok) throw conflict('El reporte ya no está esperando la validación del supervisor GOF.');
   const detalle = await obtenerDetalle(reporteId);
-  avisarEtapa('nfCerrado', detalle, { detalle: comentario });
+  avisarEtapa('nfCerrado', detalle, { detalle: detalleEvento });
   return detalle;
 }
 

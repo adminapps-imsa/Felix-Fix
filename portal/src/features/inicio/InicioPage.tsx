@@ -73,9 +73,9 @@ export function InicioPage() {
   if (puede(P.pdEnviar, P.pdAprobar))
     tareas.push({ id: 'pd-pend', cantidad: n(pd?.pendientes), titulo: 'Reportes por enviar al proveedor', detalle: 'Envíalos y registra la respuesta: Devolución aprobada o NF.', to: '/productos-danados?estado=Pendiente', tono: 'text-warning' });
   if (puede(P.pdNfDocumento))
-    tareas.push({ id: 'pd-nf-1700', cantidad: n(pd?.rechazados), titulo: 'Reportes NF: falta el documento 1700', detalle: 'Haz el documento 1700, márcalo con su número y pásalo al supervisor GOF.', to: '/productos-danados?estado=Rechazado', tono: 'text-danger' });
+    tareas.push({ id: 'pd-nf-1700', cantidad: n(pd?.rechazados), titulo: 'Reportes NF: falta el documento 1700', detalle: 'Haz el documento 1700, marca el check y pásalo al supervisor GOF.', to: '/productos-danados?estado=Rechazado', tono: 'text-danger' });
   if (puede(P.pdNf))
-    tareas.push({ id: 'pd-nf', cantidad: n(pd?.nfValidacion), titulo: 'Reportes NF por validar', detalle: 'Revisa el documento 1700 de Gof y valida el reporte para cerrarlo.', to: '/productos-danados?estado=NFValidacion', tono: 'text-danger' });
+    tareas.push({ id: 'pd-nf', cantidad: n(pd?.nfValidacion), titulo: 'Reportes NF por validar', detalle: 'Escribe el documento salida de NF y valida el reporte para cerrarlo.', to: '/productos-danados?estado=NFValidacion', tono: 'text-danger' });
   if (puede(P.pdDocumentar))
     tareas.push({ id: 'pd-doc', cantidad: n(pd?.aprobados), titulo: 'Devoluciones aprobadas por enviar a contabilidad', detalle: 'Sube el documento (PDF o Excel) y envíalas a contabilidad.', to: '/productos-danados?estado=Aprobado', tono: 'text-brand-600 dark:text-brand-400' });
   if (puede(P.pdPago))

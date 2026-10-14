@@ -53,10 +53,11 @@ export const correosSchema = z.object({
 
 export const documento1700Schema = z.object({
   confirmado: z.boolean({ required_error: 'Marca el check «Documento 1700».' }),
-  numero: z.string().trim().max(50, 'El número del documento 1700 es demasiado largo (máx. 50).'),
 });
 
+// Supervisor GOF: «Documento salida de NF» obligatorio (lo revisa el dominio) + comentario opcional.
 export const cerrarNfSchema = z.object({
+  numero: z.string().trim().max(50, 'El documento salida de NF es demasiado largo (máx. 50).').optional().default(''),
   comentario: z.string().trim().max(500).optional().or(z.literal('')),
 });
 

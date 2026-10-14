@@ -106,9 +106,10 @@ contra la base de datos del portal (`node sql/migrate.js`).
 ## Productos Dañados — flujo y avisos
 
 Pendiente → (compradora envía al proveedor) → **NF**: Gof marca el check
-«Documento 1700» con su número → **NF por validar**: supervisor GOF valida y
-cierra; o **Devolución aprobada**: Gof sube el documento → Contabilidad
-registra el pago → Cerrado (migración `013`). Los permisos de cada paso se
+«Documento 1700» → **NF por validar**: el supervisor GOF escribe el
+«Documento salida de NF» (obligatorio), valida y cierra; o **Devolución
+aprobada**: Gof sube el documento → Contabilidad registra el pago → Cerrado
+(migraciones `013` y `014`). Los permisos de cada paso se
 asignan por rol en Configuración.
 
 **Gof ve solo los NF**: el permiso «Ver solo los NF» (`productos_danados.ver_nf`)

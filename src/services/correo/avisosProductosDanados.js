@@ -69,7 +69,7 @@ export const EVENTOS = {
     area: {
       permiso: 'productos_danados.nf_documento',
       titulo: 'Reporte NF: falta el documento 1700',
-      accion: 'Haz el documento 1700 en SAP, márcalo en el reporte con su número y pásalo al supervisor GOF.',
+      accion: 'Haz el documento 1700 en SAP, marca el check «Documento 1700» en el reporte y pásalo al supervisor GOF.',
     },
     creador: {
       titulo: 'El proveedor no aprobó la devolución (NF)',
@@ -81,7 +81,7 @@ export const EVENTOS = {
     area: {
       permiso: 'productos_danados.nf',
       titulo: 'NF por validar',
-      accion: 'Gof registró el documento 1700. Revísalo y valida el reporte para cerrarlo.',
+      accion: 'Gof marcó el documento 1700. Escribe el número del documento salida de NF y valida el reporte para cerrarlo.',
     },
     creador: null,
   },
@@ -102,7 +102,7 @@ export const EVENTOS = {
     area: null,
     creador: {
       titulo: 'Tu reporte se cerró (NF)',
-      mensaje: 'El supervisor GOF validó el documento 1700 y cerró tu reporte sin devolución del proveedor.',
+      mensaje: 'El supervisor GOF validó tu reporte NF y lo cerró sin devolución del proveedor.',
     },
   },
   // Contabilidad registra el pago -> creador.

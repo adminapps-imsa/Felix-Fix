@@ -1,8 +1,8 @@
 /** Texto del catálogo de motivos (crece cuando alguien escribe uno nuevo). */
 export type Motivo = string;
 /**
- * Flujo: Pendiente → NF (Rechazado, con Gof: documento 1700) → NF por validar
- * (NFValidacion, con supervisor GOF) → Cerrado, o
+ * Flujo: Pendiente → NF (Rechazado, con Gof: check documento 1700) → NF por validar
+ * (NFValidacion, con supervisor GOF: documento salida de NF) → Cerrado, o
  * Pendiente → Devolución aprobada (Aprobado, con Gof) → EnContabilidad → Cerrado.
  * EnProceso/Procesado son de la baja en SAP (todavía sin integrar).
  */
@@ -59,8 +59,8 @@ export interface ReporteProductoDanado {
   MotivoRechazo: string | null;
   ProcesadoIntentos: number;
   SapDocumentoId: string | null;
-  /** Número del documento 1700 que registró Gof en un NF. */
-  Documento1700: string | null;
+  /** «Documento salida de NF» que escribió el supervisor GOF al validar un NF. */
+  DocumentoSalidaNf: string | null;
   FechaCreacion: string;
   FechaActualizacion: string;
 }
