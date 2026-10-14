@@ -29,15 +29,19 @@ export const esNf = (r) => r?.Resolucion === 'NF';
 
 /**
  * Qué reportes ve un usuario. `permisos`: Set de códigos del usuario.
- * "Ver reportes" ve todos; "Ver solo los NF" sin "Ver reportes", solo los NF;
- * el resto de los roles que trabajan el módulo ve todos (como hasta ahora).
+ * Devuelve null (ve todos) o las resoluciones que ve:
+ *   - «Ver reportes»: todos.
+ *   - «Ver solo los NF» sin «Ver reportes» (Gof): los NF y, si además sube el
+ *     documento de las devoluciones («documentar»), las devoluciones aprobadas.
+ *     Los pendientes de la compradora no.
+ *   - El resto de los roles que trabajan el módulo: todos (como hasta ahora).
  */
 export function alcanceVista(permisos) {
-  if (permisos.has('productos_danados.ver')) return 'todos';
-  return permisos.has('productos_danados.ver_nf') ? 'nf' : 'todos';
+  if (permisos.has('productos_danados.ver') || !permisos.has('productos_danados.ver_nf')) return null;
+  return permisos.has('productos_danados.documentar') ? ['NF', 'Devolucion'] : ['NF'];
 }
 
-export const puedeVerReporte = (alcance, r) => alcance !== 'nf' || esNf(r);
+export const puedeVerReporte = (alcance, r) => !alcance || alcance.includes(r?.Resolucion);
 
 /** Gof: el check «Documento 1700» debe estar marcado para pasarlo al supervisor GOF. */
 export function motivoNoDocumento1700({ confirmado }) {

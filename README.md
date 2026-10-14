@@ -121,9 +121,11 @@ productos, así que sí sirve para cerrar los demás). Si SAP no responde, no
 deja cerrar (503). Los permisos de cada paso se
 asignan por rol en Configuración.
 
-**Gof ve solo los NF**: el permiso «Ver solo los NF» (`productos_danados.ver_nf`)
-sin «Ver reportes» filtra lista, KPIs y detalle a los reportes NF (en cualquier
-etapa). Si el rol también tiene «Ver reportes», ve todos.
+**Gof ve solo lo suyo**: el permiso «Ver solo NF y devoluciones»
+(`productos_danados.ver_nf`) sin «Ver reportes» filtra lista, KPIs y detalle a
+los NF y, si el rol también tiene «Documento para contabilidad»
+(`productos_danados.documentar`), a las devoluciones aprobadas (en cualquier
+etapa). Los pendientes de la compradora no. Con «Ver reportes» ve todos.
 
 **Avisos por correo a cada área** (`src/services/correo/avisosProductosDanados.js`):
 cuando un reporte llega a una etapa se avisa a los usuarios cuyos roles tienen

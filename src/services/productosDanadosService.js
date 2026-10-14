@@ -68,7 +68,7 @@ export function inicioDiaPanama(fecha, dias = 0) {
 
 function toFiltros(query, usuario) {
   return {
-    soloNf: Boolean(usuario) && alcanceVista(usuario.permisos || new Set()) === 'nf',
+    resoluciones: usuario ? alcanceVista(usuario.permisos || new Set()) : null,
     tiendaId: query.tienda ? Number(query.tienda) : undefined,
     motivo: query.motivo || undefined,
     estado: query.estado || undefined,
@@ -90,7 +90,7 @@ export async function obtenerKpis(query, usuario) {
   return repo.obtenerKpis(toFiltros(query, usuario));
 }
 
-/** Quien solo ve los NF no abre otros reportes (ni su foto ni sus adjuntos): responde como si no existieran. */
+/** Quien ve solo una parte (Gof) no abre los demás reportes (ni su foto ni sus adjuntos): responde como si no existieran. */
 function exigirVisible(reporte, usuario) {
   if (usuario && !puedeVerReporte(alcanceVista(usuario.permisos || new Set()), reporte)) throw notFound('Reporte no encontrado.');
 }

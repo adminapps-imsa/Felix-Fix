@@ -14,7 +14,7 @@ export const PERMISOS = [
   { codigo: 'productos_danados.crear', modulo: 'Productos dañados', nombre: 'Crear reportes', descripcion: 'Registrar un producto dañado con su evidencia.' },
   { codigo: 'productos_danados.enviar', modulo: 'Productos dañados', nombre: 'Enviar al proveedor', descripcion: 'Enviar el reporte por correo al proveedor (con la foto y los adjuntos).' },
   { codigo: 'productos_danados.aprobar', modulo: 'Productos dañados', nombre: 'Devolución aprobada o NF', descripcion: 'Registrar la respuesta del proveedor: Devolución aprobada o NF.' },
-  { codigo: 'productos_danados.ver_nf', modulo: 'Productos dañados', nombre: 'Ver solo los NF', descripcion: 'Ver únicamente los reportes NF. Si el rol también tiene «Ver reportes», ve todos (Gof).' },
+  { codigo: 'productos_danados.ver_nf', modulo: 'Productos dañados', nombre: 'Ver solo NF y devoluciones', descripcion: 'Ver solo los reportes NF y, si el rol también sube el documento para contabilidad, las devoluciones aprobadas; no los pendientes. Con «Ver reportes» ve todos (Gof).' },
   { codigo: 'productos_danados.nf_documento', modulo: 'Productos dañados', nombre: 'Documento 1700 de los NF', descripcion: 'En los reportes NF, marcar el check «Documento 1700» y pasarlo al supervisor GOF (Gof).' },
   { codigo: 'productos_danados.nf', modulo: 'Productos dañados', nombre: 'Validar NF', descripcion: 'Recibir los NF con el documento 1700 marcado, escribir el «Documento salida de NF», validarlos y cerrarlos (supervisor GOF).' },
   { codigo: 'productos_danados.documentar', modulo: 'Productos dañados', nombre: 'Documento para contabilidad', descripcion: 'En las devoluciones aprobadas, subir el PDF o Excel y enviarlo a contabilidad (GOF).' },

@@ -15,23 +15,21 @@ const CARDS: Array<{ key: keyof Kpis; estado: Estado; label: string; quien: stri
   { key: 'cerrados', estado: 'Cerrado', label: 'Cerrados', quien: 'Terminados', icon: <Lock size={18} />, color: 'text-success' },
 ];
 
-// Quien solo ve los NF (Gof) ve solo las tarjetas del camino del NF.
-const ESTADOS_NF: Estado[] = ['Rechazado', 'NFValidacion', 'Cerrado'];
-
 export function KpiCards({
   kpis,
   estado,
   onEstado,
-  soloNf = false,
+  estadosVisibles,
 }: {
   kpis: Kpis | null;
   estado?: Estado | '';
   onEstado: (estado: Estado | '') => void;
-  soloNf?: boolean;
+  /** Quien ve solo una parte (Gof) ve solo las tarjetas de sus etapas. */
+  estadosVisibles?: Estado[];
 }) {
-  const cards = soloNf ? CARDS.filter((c) => ESTADOS_NF.includes(c.estado)) : CARDS;
+  const cards = estadosVisibles ? CARDS.filter((c) => estadosVisibles.includes(c.estado)) : CARDS;
   return (
-    <div className={cn('grid grid-cols-2 gap-3 sm:grid-cols-3', soloNf ? 'lg:grid-cols-3' : 'lg:grid-cols-6')}>
+    <div className={cn('grid grid-cols-2 gap-3 sm:grid-cols-3', cards.length === 6 ? 'lg:grid-cols-6' : 'lg:grid-cols-3')}>
       {cards.map((card) => {
         const activa = estado === card.estado;
         return (

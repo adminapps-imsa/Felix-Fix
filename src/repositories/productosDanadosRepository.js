@@ -26,8 +26,14 @@ function aplicarFiltros(request, filtros) {
     request.input('motivo', sql.NVarChar(100), filtros.motivo);
     condiciones.push('r.Motivo = @motivo');
   }
-  // Quien solo ve los NF (Gof): los demás reportes no aparecen en listas ni KPIs.
-  if (filtros.soloNf) condiciones.push("r.Resolucion = 'NF'");
+  // Quien ve solo una parte (Gof: NF y devoluciones aprobadas): lo demás no aparece en listas ni KPIs.
+  if (filtros.resoluciones) {
+    const params = filtros.resoluciones.map((res, i) => {
+      request.input(`resolucion${i}`, sql.VarChar(20), res);
+      return `@resolucion${i}`;
+    });
+    condiciones.push(`r.Resolucion IN (${params.join(', ')})`);
+  }
   if (filtros.estado) {
     request.input('estado', sql.VarChar(20), filtros.estado);
     condiciones.push('r.Estado = @estado');

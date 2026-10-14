@@ -81,15 +81,20 @@ test('ruta del NF: Gof (documento 1700) → supervisor GOF → cerrado', () => {
   assert.deepEqual(TRANSICIONES.cerrarNf, { desde: 'NFValidacion', hacia: 'Cerrado' });
 });
 
-test('quién ve qué: «Ver solo los NF» sin «Ver reportes» ve solo NF', () => {
-  assert.equal(alcanceVista(new Set(['productos_danados.ver'])), 'todos');
-  assert.equal(alcanceVista(new Set(['productos_danados.ver', 'productos_danados.ver_nf'])), 'todos');
-  assert.equal(alcanceVista(new Set(['productos_danados.ver_nf', 'productos_danados.nf_documento', 'productos_danados.documentar'])), 'nf');
-  assert.equal(alcanceVista(new Set(['productos_danados.pago'])), 'todos'); // contabilidad: como hasta ahora
-  assert.equal(puedeVerReporte('nf', { Resolucion: 'NF', Estado: 'Cerrado' }), true);
-  assert.equal(puedeVerReporte('nf', { Resolucion: 'Devolucion', Estado: 'Aprobado' }), false);
-  assert.equal(puedeVerReporte('nf', { Resolucion: null, Estado: 'Pendiente' }), false);
-  assert.equal(puedeVerReporte('todos', { Resolucion: null }), true);
+test('quién ve qué: Gof ve NF y devoluciones aprobadas, no los pendientes', () => {
+  const gof = new Set(['productos_danados.ver_nf', 'productos_danados.nf_documento', 'productos_danados.documentar']);
+  assert.equal(alcanceVista(new Set(['productos_danados.ver'])), null);
+  assert.equal(alcanceVista(new Set(['productos_danados.ver', 'productos_danados.ver_nf'])), null);
+  assert.deepEqual(alcanceVista(gof), ['NF', 'Devolucion']);
+  assert.deepEqual(alcanceVista(new Set(['productos_danados.ver_nf'])), ['NF']); // sin «documentar»: solo NF
+  assert.equal(alcanceVista(new Set(['productos_danados.pago'])), null); // contabilidad: como hasta ahora
+  const a = alcanceVista(gof);
+  assert.equal(puedeVerReporte(a, { Resolucion: 'NF', Estado: 'Cerrado' }), true);
+  assert.equal(puedeVerReporte(a, { Resolucion: 'Devolucion', Estado: 'Aprobado' }), true);
+  assert.equal(puedeVerReporte(a, { Resolucion: 'Devolucion', Estado: 'EnContabilidad' }), true);
+  assert.equal(puedeVerReporte(a, { Resolucion: null, Estado: 'Pendiente' }), false);
+  assert.equal(puedeVerReporte(['NF'], { Resolucion: 'Devolucion', Estado: 'Aprobado' }), false);
+  assert.equal(puedeVerReporte(null, { Resolucion: null }), true);
 });
 
 test('Gof: el check «Documento 1700» es obligatorio (sin número)', () => {
