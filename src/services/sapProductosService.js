@@ -134,6 +134,42 @@ export async function consultarProductos(codigos) {
   }
 }
 
+/**
+ * Documento de material en SAP (MSEG, por su número) y el material del código
+ * de barras del reporte, para validar el «Documento salida de NF».
+ * -> { disponible, encontrado, matnr, lineas: [{ mjahr, bwart, lgort, werks, matnr, menge }] }
+ * Nunca lanza: SAP caído o sin configurar => { disponible: false }.
+ */
+export async function documentoMaterialSap(numero, codigoBarra) {
+  if (!isSapConfigured()) return { disponible: false };
+  const codigo = String(codigoBarra ?? '').trim();
+  try {
+    const [filas, materiales] = await Promise.all([
+      consultar(
+        `SELECT MJAHR, BWART, LGORT, WERKS, MATNR, MENGE FROM ${T('MSEG')} WHERE MANDT = :mandt AND MBLNR = :mblnr`,
+        { mblnr: String(numero) }
+      ),
+      codigo ? materialesPorCodigo([codigo]) : Promise.resolve(new Map()),
+    ]);
+    return {
+      disponible: true,
+      encontrado: filas.length > 0,
+      matnr: materiales.get(codigo) ?? null,
+      lineas: filas.map((f) => ({
+        mjahr: f.MJAHR,
+        bwart: String(f.BWART).trim(),
+        lgort: String(f.LGORT).trim(),
+        werks: String(f.WERKS).trim(),
+        matnr: f.MATNR,
+        menge: Number(f.MENGE),
+      })),
+    };
+  } catch (err) {
+    logger.warn({ err: err.message }, 'SAP no disponible: no se pudo validar el documento salida de NF');
+    return { disponible: false };
+  }
+}
+
 export async function proveedorPorCodigoBarra(codigo) {
   const c = String(codigo ?? '').trim();
   if (!c || !isSapConfigured()) return null;

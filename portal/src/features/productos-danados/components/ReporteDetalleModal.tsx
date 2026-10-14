@@ -331,14 +331,15 @@ export function ReporteDetalleModal({
           campo={
             cierre === 'pago'
               ? { label: 'Referencia del pago (obligatoria)', placeholder: 'N.º de transferencia, nota de crédito, cheque…', error: 'Escribe la referencia del pago.' }
-              : { label: 'Documento salida de NF (obligatorio)', placeholder: 'Número del documento', error: 'Escribe el número del documento salida de NF.', mono: true }
+              : { label: 'Documento salida de NF (obligatorio)', placeholder: '10 dígitos, ej. 4904442290', error: 'Escribe el número del documento salida de NF.', mono: true }
           }
           textoConfirmar={cierre === 'nf' ? 'Validar y cerrar' : 'Confirmar pago y cerrar'}
           texto={
             cierre === 'nf' ? (
               <>
-                Gof marcó el <strong>documento 1700</strong>. Escribe el documento salida de NF; al validar, el{' '}
-                <strong>reporte #{reporte.ReporteId}</strong> quedará cerrado como NF.
+                Gof marcó el <strong>documento 1700</strong>. Escribe el documento salida de NF: el portal comprueba en SAP que sea la
+                salida (551) del almacén NF 1700 de este producto en esta tienda. Al validar, el <strong>reporte #{reporte.ReporteId}</strong>{' '}
+                quedará cerrado como NF.
               </>
             ) : (
               <>Confirma que se recibió el pago del proveedor por el <strong>reporte #{reporte.ReporteId}</strong>. El reporte quedará cerrado.</>

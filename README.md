@@ -109,7 +109,16 @@ Pendiente → (compradora envía al proveedor) → **NF**: Gof marca el check
 «Documento 1700» → **NF por validar**: el supervisor GOF escribe el
 «Documento salida de NF» (obligatorio), valida y cierra; o **Devolución
 aprobada**: Gof sube el documento → Contabilidad registra el pago → Cerrado
-(migraciones `013` y `014`). Los permisos de cada paso se
+(migraciones `013` y `014`).
+
+**Validación del «Documento salida de NF»** (`validarDocumentoSalidaNf` en
+`src/domain/productoDanado.js`, SAP solo lectura): 10 dígitos; existe en SAP
+(MSEG); es la salida del Almacén NF (movimiento **551** desde el almacén
+**1700**, que en cada tienda se llama «Almacén NF»); trae el material del
+código de barras del reporte en la tienda del reporte; y no se usó ya para
+cerrar otro reporte del mismo producto (un documento 551 trae varios
+productos, así que sí sirve para cerrar los demás). Si SAP no responde, no
+deja cerrar (503). Los permisos de cada paso se
 asignan por rol en Configuración.
 
 **Gof ve solo los NF**: el permiso «Ver solo los NF» (`productos_danados.ver_nf`)

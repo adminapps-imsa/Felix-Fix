@@ -13,8 +13,9 @@ import { env } from '../config/env.js';
 import * as historialRepo from '../repositories/historialRepository.js';
 import { saveEvidence, getEvidenceStream } from './evidenceStorage/index.js';
 import { darDeBajaInventario, SapBajaError, SapNoImplementadoError } from './sapBajaService.js';
+import { documentoMaterialSap } from './sapProductosService.js';
 import { parsePagination, buildPaginationMeta } from '../utils/pagination.js';
-import { badRequest, conflict, notFound, badGateway, forbidden } from '../utils/httpError.js';
+import { badRequest, conflict, notFound, badGateway, forbidden, serviceUnavailable } from '../utils/httpError.js';
 import { tienePermiso } from './acceso/permisos.js';
 import {
   esDocGof,
@@ -29,6 +30,8 @@ import {
   puedeVerReporte,
   motivoNoDocumento1700,
   motivoNoValidarNf,
+  validarDocumentoSalidaNf,
+  mismoCodigo,
 } from '../domain/productoDanado.js';
 import { logger } from '../utils/logger.js';
 
@@ -183,11 +186,25 @@ export async function registrarDocumento1700(reporteId, { confirmado }, usuario)
 }
 
 // NF por validar: el supervisor GOF escribe el «Documento salida de NF» y cierra.
+// El número se valida contra SAP: salida 551 del Almacén NF, del mismo producto y
+// tienda, y sin haberse usado ya para cerrar otro reporte del mismo producto.
 export async function cerrarNf(reporteId, { numero, comentario }, usuario) {
   const motivo = motivoNoValidarNf({ numero });
-  if (motivo) throw badRequest(motivo);
+  if (motivo) throw badRequest(motivo, { code: 'DOC_SALIDA_NF_FORMATO' });
   const num = String(numero).trim();
-  const detalleEvento = [`Documento salida de NF: ${num}`, comentario].filter(Boolean).join(' · ').slice(0, 1000);
+  const r = await existeOFallar(reporteId);
+  // Sin consultar SAP si el reporte no está esperando al supervisor GOF.
+  if (r.Estado !== 'NFValidacion') throw conflict('El reporte ya no está esperando la validación del supervisor GOF.');
+  const repetido = (await repo.reportesConDocumentoSalidaNf(num, reporteId)).find((o) => mismoCodigo(o.CodigoBarras, r.CodigoBarras));
+  const sap = await documentoMaterialSap(num, r.CodigoBarras);
+  const v = validarDocumentoSalidaNf({ numero: num, sap, tiendaCodigo: r.TiendaCodigo, codigoBarras: r.CodigoBarras, repetidoEn: repetido?.ReporteId ?? null });
+  if (v.code === 'SAP_NO_DISPONIBLE') throw serviceUnavailable(v.mensaje, { code: v.code });
+  if (v.code) throw badRequest(v.mensaje, { code: v.code });
+  const cantidadSap = v.lineas.reduce((t, l) => t + l.menge, 0);
+  const detalleEvento = [`Documento salida de NF: ${num} (SAP: 551 desde almacén 1700, ${r.TiendaCodigo}, ${cantidadSap} unid.)`, comentario]
+    .filter(Boolean)
+    .join(' · ')
+    .slice(0, 1000);
   const ok = await repo.cerrarNf(reporteId, num, eventoDe(usuario, 'NFCerrado', detalleEvento));
   if (!ok) throw conflict('El reporte ya no está esperando la validación del supervisor GOF.');
   const detalle = await obtenerDetalle(reporteId);

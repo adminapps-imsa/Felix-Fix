@@ -44,9 +44,52 @@ export function motivoNoDocumento1700({ confirmado }) {
   return confirmado === true ? null : 'Marca el check «Documento 1700» para confirmar que ya está hecho en SAP.';
 }
 
-/** Supervisor GOF: para validar y cerrar el NF escribe el «Documento salida de NF». */
+// «Documento salida de NF»: en SAP es la salida del Almacén NF (almacén 1700
+// de cada tienda) con movimiento 551, un documento de material de 10 dígitos.
+export const ALMACEN_NF = '1700';
+export const MOVIMIENTO_SALIDA_NF = '551';
+
+/** Supervisor GOF: el «Documento salida de NF» es obligatorio y tiene 10 dígitos. */
 export function motivoNoValidarNf({ numero }) {
-  return String(numero ?? '').trim() ? null : 'Escribe el número del documento salida de NF.';
+  const n = String(numero ?? '').trim();
+  if (!n) return 'Escribe el número del documento salida de NF.';
+  if (!/^\d{10}$/.test(n)) return `El documento salida de NF debe tener 10 dígitos (por ejemplo 4904442290). Escribiste «${n}».`;
+  return null;
+}
+
+/** Mismo código de barras aunque cambien los ceros a la izquierda o los espacios. */
+export const mismoCodigo = (a, b) => {
+  const n = (v) => String(v ?? '').trim().replace(/^0+(?=\d)/, '');
+  return Boolean(n(a)) && n(a) === n(b);
+};
+
+/**
+ * Valida el «Documento salida de NF» contra SAP y contra los otros reportes.
+ * `sap`: resultado de documentoMaterialSap; `repetidoEn`: id del reporte del
+ * mismo producto que ya se cerró con ese número (o null).
+ * Devuelve { mensaje, code } si no sirve, o { lineas } (las del producto) si sirve.
+ */
+export function validarDocumentoSalidaNf({ numero, sap, tiendaCodigo, codigoBarras, repetidoEn }) {
+  const no = (code, mensaje) => ({ code, mensaje });
+  if (repetidoEn) return no('DOC_SALIDA_NF_REPETIDO', `El documento ${numero} ya se usó para cerrar el reporte #${repetidoEn} del mismo producto.`);
+  if (!sap?.disponible) return no('SAP_NO_DISPONIBLE', 'No se pudo consultar SAP para validar el documento salida de NF. Intenta de nuevo en unos minutos.');
+  if (!sap.encontrado) return no('DOC_SALIDA_NF_NO_EXISTE', `El documento ${numero} no existe en SAP.`);
+  const salidas = sap.lineas.filter((l) => l.bwart === MOVIMIENTO_SALIDA_NF && l.lgort === ALMACEN_NF);
+  if (!salidas.length) {
+    return no('DOC_SALIDA_NF_NO_ES_SALIDA', `El documento ${numero} no es una salida del Almacén NF (movimiento ${MOVIMIENTO_SALIDA_NF} desde el almacén ${ALMACEN_NF}).`);
+  }
+  if (!String(codigoBarras ?? '').trim()) {
+    return no('DOC_SALIDA_NF_SIN_CODIGO', 'El reporte no tiene código de barras: no se puede comprobar que el documento sea del mismo producto.');
+  }
+  if (!sap.matnr) return no('DOC_SALIDA_NF_PRODUCTO_NO_SAP', `El código de barras ${codigoBarras} del reporte no existe en SAP: no se puede comprobar el producto.`);
+  const delProducto = salidas.filter((l) => l.matnr === sap.matnr);
+  if (!delProducto.length) return no('DOC_SALIDA_NF_OTRO_PRODUCTO', `El documento ${numero} no trae este producto (código de barras ${codigoBarras}).`);
+  const enTienda = tiendaCodigo ? delProducto.filter((l) => l.werks === tiendaCodigo) : delProducto;
+  if (!enTienda.length) {
+    const tiendas = [...new Set(delProducto.map((l) => l.werks))].join(', ');
+    return no('DOC_SALIDA_NF_OTRA_TIENDA', `El documento ${numero} es de la tienda ${tiendas} y el reporte es de ${tiendaCodigo}.`);
+  }
+  return { lineas: enTienda };
 }
 
 // Correos del proveedor y adjuntos para el proveedor: solo antes de que el reporte siga a contabilidad/NF.

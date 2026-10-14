@@ -14,6 +14,8 @@ import {
   puedeVerReporte,
   motivoNoDocumento1700,
   motivoNoValidarNf,
+  validarDocumentoSalidaNf,
+  mismoCodigo,
 } from '../../src/domain/productoDanado.js';
 
 const docGof = { filename: 'a.pdf', etapa: 'gof' };
@@ -96,8 +98,51 @@ test('Gof: el check «Documento 1700» es obligatorio (sin número)', () => {
   assert.equal(motivoNoDocumento1700({ confirmado: true }), null);
 });
 
-test('supervisor GOF: «Documento salida de NF» obligatorio para validar', () => {
-  assert.match(motivoNoValidarNf({ numero: '  ' }), /documento salida de NF/);
-  assert.match(motivoNoValidarNf({}), /documento salida de NF/);
-  assert.equal(motivoNoValidarNf({ numero: '1700123' }), null);
+test('supervisor GOF: «Documento salida de NF» obligatorio y de 10 dígitos', () => {
+  assert.match(motivoNoValidarNf({ numero: '  ' }), /Escribe el número/);
+  assert.match(motivoNoValidarNf({}), /Escribe el número/);
+  assert.match(motivoNoValidarNf({ numero: '1700123' }), /10 dígitos/);
+  assert.match(motivoNoValidarNf({ numero: '49044422900' }), /10 dígitos/);
+  assert.match(motivoNoValidarNf({ numero: '49044A2290' }), /10 dígitos/);
+  assert.equal(motivoNoValidarNf({ numero: ' 4904442290 ' }), null);
+});
+
+// SAP: documento 4904442290 con dos productos, salida 551 del almacén 1700 de TD15.
+const linea = (o) => ({ mjahr: '2026', bwart: '551', lgort: '1700', werks: 'TD15', matnr: 'MAT-A', menge: 2, ...o });
+const sapOk = { disponible: true, encontrado: true, matnr: 'MAT-A', lineas: [linea(), linea({ matnr: 'MAT-B', menge: 5 })] };
+const base = { numero: '4904442290', sap: sapOk, tiendaCodigo: 'TD15', codigoBarras: '7501234567890', repetidoEn: null };
+const codigo = (o) => validarDocumentoSalidaNf({ ...base, ...o }).code;
+
+test('documento salida de NF válido: salida 551 del almacén 1700, mismo producto y tienda', () => {
+  const v = validarDocumentoSalidaNf(base);
+  assert.equal(v.code, undefined);
+  assert.equal(v.lineas.length, 1);
+  assert.equal(v.lineas[0].menge, 2);
+});
+
+test('documento salida de NF: cada motivo de rechazo', () => {
+  assert.equal(codigo({ repetidoEn: 31 }), 'DOC_SALIDA_NF_REPETIDO');
+  assert.equal(codigo({ sap: { disponible: false } }), 'SAP_NO_DISPONIBLE');
+  assert.equal(codigo({ sap: { disponible: true, encontrado: false, lineas: [] } }), 'DOC_SALIDA_NF_NO_EXISTE');
+  // Un traslado 311 hacia el almacén NF no es la salida.
+  assert.equal(codigo({ sap: { ...sapOk, lineas: [linea({ bwart: '311' })] } }), 'DOC_SALIDA_NF_NO_ES_SALIDA');
+  // Un 551 desde otro almacén tampoco.
+  assert.equal(codigo({ sap: { ...sapOk, lineas: [linea({ lgort: '1000' })] } }), 'DOC_SALIDA_NF_NO_ES_SALIDA');
+  assert.equal(codigo({ codigoBarras: '' }), 'DOC_SALIDA_NF_SIN_CODIGO');
+  assert.equal(codigo({ sap: { ...sapOk, matnr: null } }), 'DOC_SALIDA_NF_PRODUCTO_NO_SAP');
+  assert.equal(codigo({ sap: { ...sapOk, matnr: 'MAT-Z' } }), 'DOC_SALIDA_NF_OTRO_PRODUCTO');
+  const otraTienda = validarDocumentoSalidaNf({ ...base, tiendaCodigo: 'TD04' });
+  assert.equal(otraTienda.code, 'DOC_SALIDA_NF_OTRA_TIENDA');
+  assert.match(otraTienda.mensaje, /es de la tienda TD15 y el reporte es de TD04/);
+});
+
+test('el mismo documento sirve para otro producto (un documento 551 trae varios)', () => {
+  assert.equal(validarDocumentoSalidaNf({ ...base, sap: { ...sapOk, matnr: 'MAT-B' } }).code, undefined);
+});
+
+test('mismo código de barras aunque cambien los ceros a la izquierda', () => {
+  assert.equal(mismoCodigo('007501234567890', '7501234567890'), true);
+  assert.equal(mismoCodigo(' 7501234567890 ', '7501234567890'), true);
+  assert.equal(mismoCodigo('7501234567891', '7501234567890'), false);
+  assert.equal(mismoCodigo(null, null), false);
 });

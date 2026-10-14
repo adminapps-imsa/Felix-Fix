@@ -293,6 +293,17 @@ export const rechazar = (reporteId, motivoRechazo, evento) =>
 // NF con Gof: check «Documento 1700» → pasa al supervisor GOF.
 export const registrarDocumento1700 = (reporteId, evento) => transicion('registrarDocumento1700', { reporteId, evento });
 
+/** Otros reportes cerrados con ese «Documento salida de NF» (para no repetirlo en el mismo producto). */
+export async function reportesConDocumentoSalidaNf(numero, excluirReporteId) {
+  const pool = await getPool();
+  const { recordset } = await pool
+    .request()
+    .input('numero', sql.NVarChar(50), numero)
+    .input('reporteId', sql.BigInt, excluirReporteId)
+    .query(`SELECT ReporteId, CodigoBarras FROM ${S}.ReportesProductoDanado WHERE DocumentoSalidaNf = @numero AND ReporteId <> @reporteId`);
+  return recordset;
+}
+
 // Supervisor GOF: «Documento salida de NF» y cierra.
 export const cerrarNf = (reporteId, documentoSalidaNf, evento) =>
   transicion('cerrarNf', { reporteId, camposExtra: { documentoSalidaNf }, evento });
