@@ -13,6 +13,7 @@ import {
   listarQuerySchema,
   correosSchema,
   cerrarNfSchema,
+  documento1700Schema,
   pagoRecibidoSchema,
 } from '../validators/productosDanados.schema.js';
 
@@ -32,6 +33,8 @@ const ver = requirePermiso(
   'productos_danados.procesar',
   'productos_danados.eliminar',
   'productos_danados.nf',
+  'productos_danados.ver_nf',
+  'productos_danados.nf_documento',
   'productos_danados.documentar',
   'productos_danados.pago'
 );
@@ -41,7 +44,7 @@ const editar = requirePermiso('productos_danados.crear', 'productos_danados.apro
 
 router.get('/', ver, validateQuery(listarQuerySchema), controller.listar);
 router.get('/kpis', ver, validateQuery(listarQuerySchema), controller.kpis);
-router.get('/catalogos', requirePermiso('productos_danados.ver', 'productos_danados.crear'), controller.catalogos);
+router.get('/catalogos', requirePermiso('productos_danados.ver', 'productos_danados.ver_nf', 'productos_danados.crear'), controller.catalogos);
 router.get('/:id', ver, controller.detalle);
 router.get('/:id/evidencia', ver, controller.evidencia);
 router.put('/:id/correos', editar, validateBody(correosSchema), controller.guardarCorreos);
@@ -65,6 +68,7 @@ router.get('/:id/adjuntos/:idx', ver, controller.adjunto);
 router.delete('/:id/adjuntos/:idx', requirePermiso('productos_danados.crear', 'productos_danados.aprobar', 'productos_danados.procesar', 'productos_danados.documentar'), controller.eliminarAdjunto);
 
 // Después de la respuesta del proveedor.
+router.patch('/:id/documento-1700', requirePermiso('productos_danados.nf_documento'), validateBody(documento1700Schema), controller.registrarDocumento1700);
 router.patch('/:id/cerrar-nf', requirePermiso('productos_danados.nf'), validateBody(cerrarNfSchema), controller.cerrarNf);
 router.post('/:id/documentos-gof', requirePermiso('productos_danados.documentar'), uploadAdjuntoReporte, borrarSiFalla, controller.agregarDocumentoGof);
 router.patch('/:id/enviar-contabilidad', requirePermiso('productos_danados.documentar'), controller.enviarAContabilidad);

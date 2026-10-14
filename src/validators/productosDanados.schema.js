@@ -51,6 +51,11 @@ export const correosSchema = z.object({
     .transform((c) => [...new Set(c)]),
 });
 
+export const documento1700Schema = z.object({
+  confirmado: z.boolean({ required_error: 'Marca el check «Documento 1700».' }),
+  numero: z.string().trim().max(50, 'El número del documento 1700 es demasiado largo (máx. 50).'),
+});
+
 export const cerrarNfSchema = z.object({
   comentario: z.string().trim().max(500).optional().or(z.literal('')),
 });

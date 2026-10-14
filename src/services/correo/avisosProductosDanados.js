@@ -64,17 +64,26 @@ export const EVENTOS = {
       mensaje: 'El proveedor aprobó la devolución de tu reporte. Sigue con Gof para el documento.',
     },
   },
-  // El proveedor no aprueba (NF) -> supervisor GOF + creador.
+  // El proveedor no aprueba (NF) -> Gof (documento 1700) + creador.
   nf: {
     area: {
-      permiso: 'productos_danados.nf',
-      titulo: 'Reporte NF para revisar',
-      accion: 'El proveedor no aprobó la devolución. Revisa el reporte y ciérralo.',
+      permiso: 'productos_danados.nf_documento',
+      titulo: 'Reporte NF: falta el documento 1700',
+      accion: 'Haz el documento 1700 en SAP, márcalo en el reporte con su número y pásalo al supervisor GOF.',
     },
     creador: {
       titulo: 'El proveedor no aprobó la devolución (NF)',
-      mensaje: 'El proveedor no aprobó la devolución de tu reporte. El supervisor GOF lo revisará.',
+      mensaje: 'El proveedor no aprobó la devolución de tu reporte. Gof hará el documento 1700 y el supervisor GOF lo validará.',
     },
+  },
+  // Gof registra el documento 1700 -> supervisor GOF (valida y cierra).
+  nfValidar: {
+    area: {
+      permiso: 'productos_danados.nf',
+      titulo: 'NF por validar',
+      accion: 'Gof registró el documento 1700. Revísalo y valida el reporte para cerrarlo.',
+    },
+    creador: null,
   },
   // Gof lo envía a contabilidad -> contabilidad + creador.
   contabilidad: {
@@ -93,7 +102,7 @@ export const EVENTOS = {
     area: null,
     creador: {
       titulo: 'Tu reporte se cerró (NF)',
-      mensaje: 'El supervisor GOF revisó y cerró tu reporte sin devolución del proveedor.',
+      mensaje: 'El supervisor GOF validó el documento 1700 y cerró tu reporte sin devolución del proveedor.',
     },
   },
   // Contabilidad registra el pago -> creador.

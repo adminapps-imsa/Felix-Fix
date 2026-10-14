@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { ArrowRight, ClipboardList, Package, Trash2 } from 'lucide-react';
+import { ArrowRight, ClipboardList, FileCheck2, Package, Send, Trash2 } from 'lucide-react';
 import { Modal } from '../../../components/ui/Modal';
 import { Button } from '../../../components/ui/Button';
+import { Field, Input } from '../../../components/ui/Input';
 import { Dato, SeccionDatos } from '../../../components/ui/DatosDetalle';
 import { RutaCaso, type PasoRuta } from '../../../components/ui/RutaCaso';
 import { EstadoBadge, MotivoBadge } from '../../../components/ui/Badge';
@@ -31,7 +32,9 @@ function siguientePaso(r: ReporteDetalle): string | null {
     case 'Pendiente':
       return 'Compradora: enviar al proveedor y registrar su respuesta (Devolución aprobada o NF).';
     case 'Rechazado':
-      return 'NF · lo revisa el supervisor GOF.';
+      return 'NF · Gof hace el documento 1700, lo marca aquí con su número y lo pasa al supervisor GOF.';
+    case 'NFValidacion':
+      return 'NF por validar · el supervisor GOF revisa el documento 1700 y cierra el reporte.';
     case 'Aprobado':
       return 'Devolución aprobada · Gof sube el documento (PDF o Excel) y lo envía a contabilidad.';
     case 'EnContabilidad':
@@ -51,11 +54,12 @@ function cambioA(r: ReporteDetalle, estado: Estado) {
 
 /**
  * Ruta del reporte. Después de la respuesta del proveedor se bifurca:
- * NF → cierre del supervisor GOF; Devolución aprobada → contabilidad → pago.
+ * NF → documento 1700 de Gof → validación del supervisor GOF;
+ * Devolución aprobada → contabilidad → pago.
  */
 function rutaReporte(r: ReporteDetalle): PasoRuta[] {
   const e = r.Estado;
-  const esNf = e === 'Rechazado' || (e === 'Cerrado' && r.Resolucion === 'NF');
+  const esNf = r.Resolucion === 'NF' || e === 'Rechazado' || e === 'NFValidacion';
   const respondido = e !== 'Pendiente';
   const reportado: PasoRuta = { titulo: 'Reportado', estado: 'hecho', fecha: r.FechaCreacion, quien: r.EmpleadoReportaNombre };
   const envio: PasoRuta = r.EnviadoProveedorAt
@@ -69,13 +73,20 @@ function rutaReporte(r: ReporteDetalle): PasoRuta[] {
       ? { titulo: 'NF', estado: 'hecho', tono: 'mal', ...cambioA(r, 'Rechazado') }
       : { titulo: 'Devolución aprobada', estado: 'hecho', tono: 'ok', ...cambioA(r, 'Aprobado') };
   if (esNf) {
+    const doc1700: PasoRuta =
+      e === 'Rechazado'
+        ? { titulo: 'Documento 1700', estado: 'actual', nota: 'Le toca a Gof' }
+        : r.Documento1700
+          ? { titulo: 'Documento 1700', estado: 'hecho', nota: `N.º ${r.Documento1700}`, ...cambioA(r, 'NFValidacion') }
+          : { titulo: 'Documento 1700', estado: 'hecho', nota: 'No se registró (reporte anterior)' };
     return [
       reportado,
       envio,
       respuesta,
+      doc1700,
       e === 'Cerrado'
-        ? { titulo: 'Cerrado', estado: 'hecho', ...cambioA(r, 'Cerrado') }
-        : { titulo: 'Cierre del NF', estado: 'actual', nota: 'Le toca al supervisor GOF' },
+        ? { titulo: 'Validado y cerrado', estado: 'hecho', tono: 'ok', ...cambioA(r, 'Cerrado') }
+        : { titulo: 'Validación del supervisor GOF', estado: e === 'NFValidacion' ? 'actual' : 'pendiente', nota: e === 'NFValidacion' ? 'Le toca al supervisor GOF' : null },
     ];
   }
   const enConta = e === 'EnContabilidad' || e === 'Cerrado';
@@ -204,6 +215,7 @@ export function ReporteDetalleModal({
                 <Dato label="Reportado por" value={reporte.EmpleadoReportaNombre} />
                 <Dato label="Fecha" value={formatFecha(reporte.FechaCreacion)} />
                 {reporte.SapDocumentoId && <Dato label="Documento SAP" value={reporte.SapDocumentoId} mono />}
+                {reporte.Documento1700 && <Dato label="Documento 1700" value={reporte.Documento1700} mono />}
                 {reporte.PagoReferencia && <Dato label="Referencia del pago" value={reporte.PagoReferencia} mono />}
               </SeccionDatos>
             </div>
@@ -242,6 +254,14 @@ export function ReporteDetalleModal({
             </div>
           )}
 
+          {/* NF con Gof: confirma el documento 1700 con su número y lo pasa al supervisor GOF. */}
+          {reporte.Estado === 'Rechazado' && puede(P.pdNfDocumento) && (
+            <Documento1700Form
+              busy={busy}
+              onEnviar={(numero) => runAction(() => apiProductosDanados.registrarDocumento1700(reporte.ReporteId, numero))}
+            />
+          )}
+
           <div>
             <div className="mb-2 text-sm font-medium opacity-70">Historial</div>
             <HistorialTimeline historial={reporte.historial} />
@@ -264,10 +284,10 @@ export function ReporteDetalleModal({
                 </Button>
               </RequirePermiso>
             )}
-            {reporte.Estado === 'Rechazado' && (
+            {reporte.Estado === 'NFValidacion' && (
               <RequirePermiso permiso={P.pdNf}>
                 <Button disabled={busy} onClick={() => setCierre('nf')}>
-                  Cerrar NF
+                  Validar y cerrar NF
                 </Button>
               </RequirePermiso>
             )}
@@ -311,12 +331,15 @@ export function ReporteDetalleModal({
 
       {cierre && reporte && (
         <CierreModal
-          titulo={cierre === 'nf' ? 'Cerrar NF' : 'Pago del proveedor recibido'}
+          titulo={cierre === 'nf' ? 'Validar NF' : 'Pago del proveedor recibido'}
           conReferencia={cierre === 'pago'}
-          textoConfirmar={cierre === 'nf' ? 'Cerrar NF' : 'Confirmar pago y cerrar'}
+          textoConfirmar={cierre === 'nf' ? 'Validar y cerrar' : 'Confirmar pago y cerrar'}
           texto={
             cierre === 'nf' ? (
-              <>El <strong>reporte #{reporte.ReporteId}</strong> quedará cerrado como NF.</>
+              <>
+                Gof registró el <strong>documento 1700 N.º {reporte.Documento1700}</strong>. Al validar, el{' '}
+                <strong>reporte #{reporte.ReporteId}</strong> quedará cerrado como NF.
+              </>
             ) : (
               <>Confirma que se recibió el pago del proveedor por el <strong>reporte #{reporte.ReporteId}</strong>. El reporte quedará cerrado.</>
             )
@@ -345,5 +368,31 @@ export function ReporteDetalleModal({
         />
       )}
     </Modal>
+  );
+}
+
+/** NF con Gof: check «Documento 1700» + su número; al enviar pasa al supervisor GOF. */
+function Documento1700Form({ busy, onEnviar }: { busy: boolean; onEnviar: (numero: string) => void }) {
+  const [hecho, setHecho] = useState(false);
+  const [numero, setNumero] = useState('');
+  const listo = hecho && numero.trim().length > 0;
+  return (
+    <div className="flex flex-col gap-3 rounded-xl border border-danger/25 bg-danger/[0.04] p-4">
+      <div className="flex items-center gap-2 text-sm font-semibold">
+        <FileCheck2 size={16} className="text-danger" /> Documento 1700
+      </div>
+      <label className="flex w-fit cursor-pointer items-center gap-2 text-sm">
+        <input type="checkbox" className="h-4 w-4 accent-brand-600" checked={hecho} onChange={(e) => setHecho(e.target.checked)} />
+        Documento 1700 hecho en SAP
+      </label>
+      <Field label="Número del documento 1700">
+        <Input value={numero} onChange={(e) => setNumero(e.target.value)} maxLength={50} className="font-mono" placeholder="Ej. 1700012345" disabled={!hecho} />
+      </Field>
+      <div className="flex justify-end">
+        <Button disabled={busy || !listo} title={listo ? undefined : 'Marca el check y escribe el número'} onClick={() => onEnviar(numero.trim())}>
+          <Send size={15} /> Enviar al supervisor GOF
+        </Button>
+      </div>
+    </div>
   );
 }

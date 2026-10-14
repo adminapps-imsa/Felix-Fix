@@ -10,7 +10,7 @@ const SELECT_BASE = `
     r.Motivo, r.Cantidad, r.Descripcion, r.CorreosProveedor, r.Adjuntos,
     r.EnviadoProveedorAt, r.EnviadoProveedorPor, r.EnviosProveedor,
     r.EvidenciaProveedor, r.EvidenciaKey,
-    r.Estado, r.Resolucion, r.PagoReferencia, r.MotivoRechazo, r.ProcesadoIntentos, r.SapDocumentoId,
+    r.Estado, r.Resolucion, r.PagoReferencia, r.MotivoRechazo, r.ProcesadoIntentos, r.SapDocumentoId, r.Documento1700,
     r.FechaCreacion, r.FechaActualizacion
   FROM ${S}.ReportesProductoDanado r
   INNER JOIN ${S}.Tiendas t ON t.TiendaId = r.TiendaId
@@ -26,6 +26,8 @@ function aplicarFiltros(request, filtros) {
     request.input('motivo', sql.NVarChar(100), filtros.motivo);
     condiciones.push('r.Motivo = @motivo');
   }
+  // Quien solo ve los NF (Gof): los demás reportes no aparecen en listas ni KPIs.
+  if (filtros.soloNf) condiciones.push("r.Resolucion = 'NF'");
   if (filtros.estado) {
     request.input('estado', sql.VarChar(20), filtros.estado);
     condiciones.push('r.Estado = @estado');
@@ -79,6 +81,7 @@ export async function obtenerKpis(filtros) {
       SUM(CASE WHEN Estado = 'Pendiente' THEN 1 ELSE 0 END) AS pendientes,
       SUM(CASE WHEN Estado = 'Aprobado' THEN 1 ELSE 0 END) AS aprobados,
       SUM(CASE WHEN Estado = 'Rechazado' THEN 1 ELSE 0 END) AS rechazados,
+      SUM(CASE WHEN Estado = 'NFValidacion' THEN 1 ELSE 0 END) AS nfValidacion,
       SUM(CASE WHEN Estado = 'Procesado' THEN 1 ELSE 0 END) AS procesados,
       SUM(CASE WHEN Estado = 'EnContabilidad' THEN 1 ELSE 0 END) AS enContabilidad,
       SUM(CASE WHEN Estado = 'Cerrado' THEN 1 ELSE 0 END) AS cerrados,
@@ -91,6 +94,7 @@ export async function obtenerKpis(filtros) {
     pendientes: row.pendientes || 0,
     aprobados: row.aprobados || 0,
     rechazados: row.rechazados || 0,
+    nfValidacion: row.nfValidacion || 0,
     procesados: row.procesados || 0,
     enContabilidad: row.enContabilidad || 0,
     cerrados: row.cerrados || 0,
@@ -218,6 +222,10 @@ async function transicionEstado({ reporteId, estadoDesde, estadoHacia, camposExt
   if (camposExtra.incrementarIntentos) {
     sets.push('ProcesadoIntentos = ProcesadoIntentos + 1');
   }
+  if (camposExtra.documento1700 !== undefined) {
+    request.input('documento1700', sql.NVarChar(50), camposExtra.documento1700);
+    sets.push('Documento1700 = @documento1700');
+  }
   if (camposExtra.sapDocumentoId !== undefined) {
     request.input('sapDocumentoId', sql.VarChar(50), camposExtra.sapDocumentoId);
     sets.push('SapDocumentoId = @sapDocumentoId');
@@ -281,6 +289,10 @@ export const aprobar = (reporteId, evento) => transicion('aprobar', { reporteId,
 // NF: pasa al supervisor GOF.
 export const rechazar = (reporteId, motivoRechazo, evento) =>
   transicion('rechazar', { reporteId, camposExtra: { motivoRechazo, resolucion: 'NF' }, evento });
+
+// NF con Gof: documento 1700 hecho en SAP → pasa al supervisor GOF.
+export const registrarDocumento1700 = (reporteId, numero, evento) =>
+  transicion('registrarDocumento1700', { reporteId, camposExtra: { documento1700: numero }, evento });
 
 export const cerrarNf = (reporteId, evento) => transicion('cerrarNf', { reporteId, evento });
 

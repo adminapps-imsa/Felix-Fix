@@ -4,19 +4,19 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { badRequest, notFound } from '../utils/httpError.js';
 
 export const listar = asyncHandler(async (req, res) => {
-  res.json(await service.listarReportes(req.query));
+  res.json(await service.listarReportes(req.query, req.user));
 });
 
 export const kpis = asyncHandler(async (req, res) => {
-  res.json(await service.obtenerKpis(req.query));
+  res.json(await service.obtenerKpis(req.query, req.user));
 });
 
 export const detalle = asyncHandler(async (req, res) => {
-  res.json(await service.obtenerDetalle(Number(req.params.id)));
+  res.json(await service.obtenerDetalle(Number(req.params.id), req.user));
 });
 
 export const evidencia = asyncHandler(async (req, res) => {
-  const stream = await service.obtenerEvidencia(Number(req.params.id));
+  const stream = await service.obtenerEvidencia(Number(req.params.id), req.user);
   stream.pipe(res);
 });
 
@@ -52,7 +52,7 @@ export const agregarAdjunto = asyncHandler(async (req, res) => {
 });
 
 export const adjunto = asyncHandler(async (req, res) => {
-  const { ruta, nombre, contentType } = await service.obtenerAdjunto(Number(req.params.id), req.params.idx);
+  const { ruta, nombre, contentType } = await service.obtenerAdjunto(Number(req.params.id), req.params.idx, req.user);
   if (!fs.existsSync(ruta)) throw notFound('El archivo ya no está disponible.');
   res.type(contentType);
   res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(nombre)}`);
@@ -84,6 +84,10 @@ export const agregarDocumentoGof = asyncHandler(async (req, res) => {
 
 export const enviarAContabilidad = asyncHandler(async (req, res) => {
   res.json(await service.enviarAContabilidad(Number(req.params.id), req.user));
+});
+
+export const registrarDocumento1700 = asyncHandler(async (req, res) => {
+  res.json(await service.registrarDocumento1700(Number(req.params.id), req.body, req.user));
 });
 
 export const cerrarNf = asyncHandler(async (req, res) => {

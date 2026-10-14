@@ -25,6 +25,9 @@ import {
   motivoNoEliminar,
   motivoNoEnviarProveedor,
   bloqueoReenvio,
+  alcanceVista,
+  puedeVerReporte,
+  motivoNoDocumento1700,
 } from '../domain/productoDanado.js';
 import { logger } from '../utils/logger.js';
 
@@ -59,8 +62,9 @@ export function inicioDiaPanama(fecha, dias = 0) {
   return new Date(Date.UTC(y, m - 1, d + dias, OFFSET_PANAMA_H));
 }
 
-function toFiltros(query) {
+function toFiltros(query, usuario) {
   return {
+    soloNf: Boolean(usuario) && alcanceVista(usuario.permisos || new Set()) === 'nf',
     tiendaId: query.tienda ? Number(query.tienda) : undefined,
     motivo: query.motivo || undefined,
     estado: query.estado || undefined,
@@ -71,20 +75,27 @@ function toFiltros(query) {
   };
 }
 
-export async function listarReportes(query) {
-  const filtros = toFiltros(query);
+export async function listarReportes(query, usuario) {
+  const filtros = toFiltros(query, usuario);
   const pagination = parsePagination(query);
   const { items, total } = await repo.listar(filtros, pagination);
   return { data: items.map(aDto), pagination: buildPaginationMeta({ ...pagination, total }) };
 }
 
-export async function obtenerKpis(query) {
-  return repo.obtenerKpis(toFiltros(query));
+export async function obtenerKpis(query, usuario) {
+  return repo.obtenerKpis(toFiltros(query, usuario));
 }
 
-export async function obtenerDetalle(reporteId) {
+/** Quien solo ve los NF no abre otros reportes (ni su foto ni sus adjuntos): responde como si no existieran. */
+function exigirVisible(reporte, usuario) {
+  if (usuario && !puedeVerReporte(alcanceVista(usuario.permisos || new Set()), reporte)) throw notFound('Reporte no encontrado.');
+}
+
+/** `usuario` (opcional): se pasa en las consultas para aplicar lo que puede ver. */
+export async function obtenerDetalle(reporteId, usuario) {
   const reporte = await repo.obtenerPorId(reporteId);
   if (!reporte) throw notFound('Reporte no encontrado.');
+  exigirVisible(reporte, usuario);
   const historial = await historialRepo.listarHistorialDeReporte(reporteId);
   const dto = aDto(reporte);
   const nombres = await nombresDeUsuarios([...dto.Adjuntos.map((a) => a.uploaded_by), dto.EnviadoProveedorPor]);
@@ -93,8 +104,9 @@ export async function obtenerDetalle(reporteId) {
   return { ...dto, historial };
 }
 
-export async function obtenerEvidencia(reporteId) {
+export async function obtenerEvidencia(reporteId, usuario) {
   const reporte = await repo.obtenerPorId(reporteId);
+  if (reporte) exigirVisible(reporte, usuario);
   if (!reporte || !reporte.EvidenciaKey) throw notFound('Este reporte no tiene evidencia adjunta.');
   const stream = await getEvidenceStream(reporte.EvidenciaProveedor, reporte.EvidenciaKey);
   if (!stream) throw notFound('El archivo de evidencia ya no está disponible.');
@@ -158,9 +170,21 @@ export async function rechazarReporte(reporteId, motivoRechazo, usuario) {
 //   contabilidad confirma el pago del proveedor y se cierra.
 // ------------------------------------------------------------------
 
+// NF: Gof marca el documento 1700 (con su número) y lo pasa al supervisor GOF.
+export async function registrarDocumento1700(reporteId, { confirmado, numero }, usuario) {
+  const motivo = motivoNoDocumento1700({ confirmado, numero });
+  if (motivo) throw badRequest(motivo);
+  const num = String(numero).trim();
+  const ok = await repo.registrarDocumento1700(reporteId, num, eventoDe(usuario, 'Documento1700', `Documento 1700: ${num}`));
+  if (!ok) throw conflict('El reporte ya no está en NF esperando el documento 1700 de Gof.');
+  const detalle = await obtenerDetalle(reporteId);
+  avisarEtapa('nfValidar', detalle, { detalle: `Documento 1700: ${num}` });
+  return detalle;
+}
+
 export async function cerrarNf(reporteId, comentario, usuario) {
   const ok = await repo.cerrarNf(reporteId, eventoDe(usuario, 'NFCerrado', comentario || null));
-  if (!ok) throw conflict('El reporte ya no está en NF esperando al supervisor GOF.');
+  if (!ok) throw conflict('El reporte ya no está esperando la validación del supervisor GOF.');
   const detalle = await obtenerDetalle(reporteId);
   avisarEtapa('nfCerrado', detalle, { detalle: comentario });
   return detalle;
@@ -347,8 +371,9 @@ function indice(idx) {
   return n;
 }
 
-export async function obtenerAdjunto(reporteId, idx) {
+export async function obtenerAdjunto(reporteId, idx, usuario) {
   const r = await existeOFallar(reporteId);
+  exigirVisible(r, usuario);
   const adj = parseJsonArray(r.Adjuntos)[indice(idx)];
   if (!adj) throw notFound('Adjunto no encontrado.');
   const ext = path.extname(adj.filename).toLowerCase();

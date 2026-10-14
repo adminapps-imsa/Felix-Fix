@@ -105,9 +105,15 @@ contra la base de datos del portal (`node sql/migrate.js`).
 
 ## Productos Dañados — flujo y avisos
 
-Pendiente → (compradora envía al proveedor) → **NF**: supervisor GOF cierra,
-o **Devolución aprobada**: Gof sube el documento → Contabilidad registra el
-pago → Cerrado. Los permisos de cada paso se asignan por rol en Configuración.
+Pendiente → (compradora envía al proveedor) → **NF**: Gof marca el check
+«Documento 1700» con su número → **NF por validar**: supervisor GOF valida y
+cierra; o **Devolución aprobada**: Gof sube el documento → Contabilidad
+registra el pago → Cerrado (migración `013`). Los permisos de cada paso se
+asignan por rol en Configuración.
+
+**Gof ve solo los NF**: el permiso «Ver solo los NF» (`productos_danados.ver_nf`)
+sin «Ver reportes» filtra lista, KPIs y detalle a los reportes NF (en cualquier
+etapa). Si el rol también tiene «Ver reportes», ve todos.
 
 **Avisos por correo a cada área** (`src/services/correo/avisosProductosDanados.js`):
 cuando un reporte llega a una etapa se avisa a los usuarios cuyos roles tienen
@@ -116,7 +122,8 @@ el permiso de esa etapa:
 | Etapa | Permiso que recibe el aviso |
 |---|---|
 | Reporte nuevo (Pendiente) | `productos_danados.enviar` |
-| NF | `productos_danados.nf` |
+| NF (falta el documento 1700) | `productos_danados.nf_documento` |
+| NF por validar | `productos_danados.nf` |
 | Devolución aprobada | `productos_danados.documentar` |
 | En contabilidad | `productos_danados.pago` |
 

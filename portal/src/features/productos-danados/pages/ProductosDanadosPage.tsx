@@ -30,9 +30,11 @@ export function ProductosDanadosPage() {
   const [filtros, setFiltros] = useState<Filtros>(() => {
     if (estadoEnlace && estadoEnlace in ESTADO_LABEL) return { ...FILTROS_INICIALES, estado: estadoEnlace as Estado };
     if (puede(P.pdVer, P.pdAprobar)) return FILTROS_INICIALES;
-    const estado = puede(P.pdNf) ? 'Rechazado' : puede(P.pdDocumentar) ? 'Aprobado' : puede(P.pdPago) ? 'EnContabilidad' : '';
+    const estado = puede(P.pdNfDocumento) ? 'Rechazado' : puede(P.pdNf) ? 'NFValidacion' : puede(P.pdDocumentar) ? 'Aprobado' : puede(P.pdPago) ? 'EnContabilidad' : '';
     return { ...FILTROS_INICIALES, estado };
   });
+  // Igual que el backend: «Ver solo los NF» sin «Ver reportes» (Gof).
+  const soloNf = !puede(P.pdVer) && puede(P.pdVerNf);
   const [showNuevo, setShowNuevo] = useState(() => params.get('nuevo') === '1' && puede(P.pdCrear));
   const [seleccionado, setSeleccionado] = useState<ReporteProductoDanado | null>(null);
 
@@ -53,7 +55,7 @@ export function ProductosDanadosPage() {
         </RequirePermiso>
       </BandaPagina>
 
-      <KpiCards kpis={kpis} estado={filtros.estado} onEstado={(estado) => setFiltros((f) => ({ ...f, estado, page: 1 }))} />
+      <KpiCards kpis={kpis} soloNf={soloNf} estado={filtros.estado} onEstado={(estado) => setFiltros((f) => ({ ...f, estado, page: 1 }))} />
 
       <FiltersBar filtros={filtros} onChange={setFiltros} tiendas={tiendas} />
 

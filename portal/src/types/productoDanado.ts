@@ -1,11 +1,12 @@
 /** Texto del catálogo de motivos (crece cuando alguien escribe uno nuevo). */
 export type Motivo = string;
 /**
- * Flujo: Pendiente → NF (Rechazado, con supervisor GOF) → Cerrado, o
+ * Flujo: Pendiente → NF (Rechazado, con Gof: documento 1700) → NF por validar
+ * (NFValidacion, con supervisor GOF) → Cerrado, o
  * Pendiente → Devolución aprobada (Aprobado, con Gof) → EnContabilidad → Cerrado.
  * EnProceso/Procesado son de la baja en SAP (todavía sin integrar).
  */
-export type Estado = 'Pendiente' | 'Aprobado' | 'Rechazado' | 'EnContabilidad' | 'Cerrado' | 'EnProceso' | 'Procesado';
+export type Estado = 'Pendiente' | 'Aprobado' | 'Rechazado' | 'NFValidacion' | 'EnContabilidad' | 'Cerrado' | 'EnProceso' | 'Procesado';
 
 // Códigos de antes de que el motivo fuera un catálogo (la migración 008 ya
 // los reescribió; se conserva por si llega alguno sin migrar).
@@ -16,6 +17,7 @@ export const ESTADO_LABEL: Record<Estado, string> = {
   Pendiente: 'Pendiente',
   Aprobado: 'Devolución aprobada',
   Rechazado: 'NF',
+  NFValidacion: 'NF por validar',
   EnContabilidad: 'En contabilidad',
   Cerrado: 'Cerrado',
   EnProceso: 'Procesando…',
@@ -57,6 +59,8 @@ export interface ReporteProductoDanado {
   MotivoRechazo: string | null;
   ProcesadoIntentos: number;
   SapDocumentoId: string | null;
+  /** Número del documento 1700 que registró Gof en un NF. */
+  Documento1700: string | null;
   FechaCreacion: string;
   FechaActualizacion: string;
 }
@@ -116,6 +120,7 @@ export interface Kpis {
   pendientes: number;
   aprobados: number;
   rechazados: number;
+  nfValidacion: number;
   procesados: number;
   enContabilidad: number;
   cerrados: number;

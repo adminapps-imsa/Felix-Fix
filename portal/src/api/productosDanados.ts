@@ -68,6 +68,10 @@ export const enviarAlProveedor = (id: number) => api.post<ResultadoEnvioProveedo
 
 export const eliminarReporte = (id: number) => api.del<void>(`/productos-danados/${id}`);
 
+/** NF: Gof confirma el documento 1700 con su número y lo pasa al supervisor GOF. */
+export const registrarDocumento1700 = (id: number, numero: string) =>
+  api.patch<ReporteDetalle>(`/productos-danados/${id}/documento-1700`, { confirmado: true, numero });
+
 export const cerrarNf = (id: number, comentario: string) => api.patch<ReporteDetalle>(`/productos-danados/${id}/cerrar-nf`, { comentario });
 
 export function subirDocumentoGof(id: number, archivo: File) {

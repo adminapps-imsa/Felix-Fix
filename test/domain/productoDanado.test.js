@@ -10,6 +10,9 @@ import {
   motivoNoEnviarProveedor,
   bloqueoReenvio,
   MAX_ENVIOS_PROVEEDOR,
+  alcanceVista,
+  puedeVerReporte,
+  motivoNoDocumento1700,
 } from '../../src/domain/productoDanado.js';
 
 const docGof = { filename: 'a.pdf', etapa: 'gof' };
@@ -19,8 +22,6 @@ test('ruta de estados: Devolución aprobada → Gof → contabilidad → cerrado
   assert.deepEqual(TRANSICIONES.aprobar, { desde: 'Pendiente', hacia: 'Aprobado' });
   assert.deepEqual(TRANSICIONES.enviarAContabilidad, { desde: 'Aprobado', hacia: 'EnContabilidad' });
   assert.deepEqual(TRANSICIONES.registrarPago, { desde: 'EnContabilidad', hacia: 'Cerrado' });
-  assert.deepEqual(TRANSICIONES.rechazar, { desde: 'Pendiente', hacia: 'Rechazado' });
-  assert.deepEqual(TRANSICIONES.cerrarNf, { desde: 'Rechazado', hacia: 'Cerrado' });
 });
 
 test('correos y adjuntos del proveedor: solo en Pendiente o Aprobado', () => {
@@ -66,4 +67,30 @@ test('enviar al proveedor: solo Pendiente, con tope y espera entre envíos', () 
   assert.match(bloqueoReenvio({ EnviosProveedor: 1, EnviadoProveedorAt: '2026-10-14T11:57:00Z' }, ahora), /en 7 minutos/);
   assert.match(bloqueoReenvio({ EnviosProveedor: 1, EnviadoProveedorAt: '2026-10-14T11:50:30Z' }, ahora), /en 1 minuto\./);
   assert.equal(bloqueoReenvio({ EnviosProveedor: 1, EnviadoProveedorAt: '2026-10-14T11:49:00Z' }, ahora), null);
+});
+
+// ------------------------------------------------------------------
+// NF: documento 1700 de Gof y validación del supervisor GOF
+// ------------------------------------------------------------------
+test('ruta del NF: Gof (documento 1700) → supervisor GOF → cerrado', () => {
+  assert.deepEqual(TRANSICIONES.rechazar, { desde: 'Pendiente', hacia: 'Rechazado' });
+  assert.deepEqual(TRANSICIONES.registrarDocumento1700, { desde: 'Rechazado', hacia: 'NFValidacion' });
+  assert.deepEqual(TRANSICIONES.cerrarNf, { desde: 'NFValidacion', hacia: 'Cerrado' });
+});
+
+test('quién ve qué: «Ver solo los NF» sin «Ver reportes» ve solo NF', () => {
+  assert.equal(alcanceVista(new Set(['productos_danados.ver'])), 'todos');
+  assert.equal(alcanceVista(new Set(['productos_danados.ver', 'productos_danados.ver_nf'])), 'todos');
+  assert.equal(alcanceVista(new Set(['productos_danados.ver_nf', 'productos_danados.nf_documento', 'productos_danados.documentar'])), 'nf');
+  assert.equal(alcanceVista(new Set(['productos_danados.pago'])), 'todos'); // contabilidad: como hasta ahora
+  assert.equal(puedeVerReporte('nf', { Resolucion: 'NF', Estado: 'Cerrado' }), true);
+  assert.equal(puedeVerReporte('nf', { Resolucion: 'Devolucion', Estado: 'Aprobado' }), false);
+  assert.equal(puedeVerReporte('nf', { Resolucion: null, Estado: 'Pendiente' }), false);
+  assert.equal(puedeVerReporte('todos', { Resolucion: null }), true);
+});
+
+test('documento 1700: check marcado y número obligatorios', () => {
+  assert.match(motivoNoDocumento1700({ confirmado: false, numero: '1700123' }), /Marca el check/);
+  assert.match(motivoNoDocumento1700({ confirmado: true, numero: '  ' }), /Escribe el número/);
+  assert.equal(motivoNoDocumento1700({ confirmado: true, numero: '1700123' }), null);
 });

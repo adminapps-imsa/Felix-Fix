@@ -7,20 +7,43 @@
 //
 // Estados (valor interno → lo que ve el usuario):
 //   Pendiente → Aprobado ("Devolución aprobada", Gof) → EnContabilidad → Cerrado
-//   Pendiente → Rechazado ("NF", supervisor GOF) → Cerrado
+//   Pendiente → Rechazado ("NF", Gof: documento 1700) → NFValidacion ("NF por validar", supervisor GOF) → Cerrado
 //   Aprobado → EnProceso → Procesado (baja en SAP; si falla, vuelve a Aprobado)
 
 /** Cada cambio de estado: desde dónde puede salir y a dónde llega. */
 export const TRANSICIONES = {
   aprobar: { desde: 'Pendiente', hacia: 'Aprobado' },
   rechazar: { desde: 'Pendiente', hacia: 'Rechazado' },
-  cerrarNf: { desde: 'Rechazado', hacia: 'Cerrado' },
+  registrarDocumento1700: { desde: 'Rechazado', hacia: 'NFValidacion' },
+  cerrarNf: { desde: 'NFValidacion', hacia: 'Cerrado' },
   enviarAContabilidad: { desde: 'Aprobado', hacia: 'EnContabilidad' },
   registrarPago: { desde: 'EnContabilidad', hacia: 'Cerrado' },
   marcarEnProceso: { desde: 'Aprobado', hacia: 'EnProceso' },
   marcarProcesado: { desde: 'EnProceso', hacia: 'Procesado' },
   revertirAAprobado: { desde: 'EnProceso', hacia: 'Aprobado' },
 };
+
+/** Reporte NF (en cualquier etapa: con Gof, por validar o cerrado). */
+export const esNf = (r) => r?.Resolucion === 'NF';
+
+/**
+ * Qué reportes ve un usuario. `permisos`: Set de códigos del usuario.
+ * "Ver reportes" ve todos; "Ver solo los NF" sin "Ver reportes", solo los NF;
+ * el resto de los roles que trabajan el módulo ve todos (como hasta ahora).
+ */
+export function alcanceVista(permisos) {
+  if (permisos.has('productos_danados.ver')) return 'todos';
+  return permisos.has('productos_danados.ver_nf') ? 'nf' : 'todos';
+}
+
+export const puedeVerReporte = (alcance, r) => alcance !== 'nf' || esNf(r);
+
+/** Número del documento 1700: obligatorio, sin espacios sobrantes. */
+export function motivoNoDocumento1700({ confirmado, numero }) {
+  if (confirmado !== true) return 'Marca el check «Documento 1700» para confirmar que ya está hecho en SAP.';
+  if (!String(numero ?? '').trim()) return 'Escribe el número del documento 1700.';
+  return null;
+}
 
 // Correos del proveedor y adjuntos para el proveedor: solo antes de que el reporte siga a contabilidad/NF.
 export const ESTADOS_EDITABLES = ['Pendiente', 'Aprobado'];
