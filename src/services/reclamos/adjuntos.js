@@ -112,17 +112,17 @@ async function exigirPdfDeEsteReclamo(r, numeroPdf) {
 }
 
 export async function agregarAdjunto(token, multerFile, usuario) {
-  if (!multerFile) throw badRequest('Selecciona un archivo Excel o PDF.');
+  if (!multerFile) throw badRequest('Selecciona una foto, un Excel o un PDF.');
   const creados = [multerFile.filename];
   try {
     const r = await verificarPuedeAdjuntar(token, usuario);
 
     const tipo = await tipoRealDeArchivo(multerFile);
-    if (!tipo) throw badRequest('El archivo no es un Excel o PDF válido.');
+    if (!tipo) throw badRequest('El archivo no es una foto (JPG, PNG o WebP), un Excel o un PDF válido.');
     const lectura = tipo === 'pdf' ? await leerNotaPdf(multerFile.path) : null;
     if (lectura) await exigirPdfDeEsteReclamo(r, lectura.numeroDocumento);
     const repetido = await archivoIgual(r, multerFile.path);
-    // Un Excel o un PDF ya validado repetido no aporta nada: se rechaza sin leerlo más.
+    // Una foto, un Excel o un PDF ya validado repetido no aporta nada: se rechaza sin leerlo más.
     if (repetido && (tipo !== 'pdf' || repetido.adjunto?.notaAprobada || !repetido.adjunto)) {
       throw conflict(`Este archivo ya está en el reclamo («${repetido.nombre}»). No se sube dos veces.`, { code: 'ARCHIVO_REPETIDO' });
     }
@@ -164,7 +164,7 @@ export async function agregarAdjunto(token, multerFile, usuario) {
     const adj = {
       filename: multerFile.filename,
       originalname: path.basename(multerFile.originalname || multerFile.filename).slice(0, 255),
-      tipo: tipo === 'pdf' ? 'pdf' : 'excel',
+      tipo: tipo === 'pdf' || tipo === 'imagen' ? tipo : 'excel',
       ...(nota?.notaAprobada && { notaAprobada: true, documentoSap: nota.documentoSap }),
       uploaded_at: new Date().toISOString(),
       uploaded_by: nombreUsuario(usuario),

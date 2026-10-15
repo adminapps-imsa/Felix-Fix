@@ -58,6 +58,8 @@ export async function adjunto(token, idx) {
   const contentType =
     adj.tipo === 'pdf'
       ? 'application/pdf'
+      : adj.tipo === 'imagen'
+        ? CONTENT_TYPE_IMAGEN[ext.slice(1).replace('jpeg', 'jpg')] || 'application/octet-stream'
       : ext === '.xls'
         ? 'application/vnd.ms-excel'
         : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';

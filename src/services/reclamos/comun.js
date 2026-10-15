@@ -34,6 +34,7 @@ export function tipoReal(detected) {
   if (detected.ext === 'xlsx') return 'xlsx';
   if (detected.ext === 'cfb') return 'xls';
   if (detected.ext === 'pdf') return 'pdf';
+  if (['jpg', 'png', 'webp'].includes(detected.ext)) return 'imagen';
   return null;
 }
 

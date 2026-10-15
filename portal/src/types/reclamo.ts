@@ -21,7 +21,7 @@ export interface ImagenExcel {
 export interface AdjuntoExtra {
   filename: string;
   originalname: string;
-  tipo: 'excel' | 'pdf';
+  tipo: 'excel' | 'pdf' | 'imagen';
   /** Nota de débito validada: todos sus productos estaban aprobados por la compradora. */
   notaAprobada?: boolean;
   documentoSap?: string | null;

@@ -16,6 +16,9 @@ const EXCEL_MIME = new Set([
 const PDF_MIME = new Set(['application/pdf']);
 const EXCEL_EXT = new Set(['.xlsx', '.xls']);
 const PDF_EXT = new Set(['.pdf']);
+// Fotos del reclamo (solo como adjunto). El contenido real se revisa por firma.
+const IMAGEN_MIME = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' };
+const IMAGEN_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp']);
 
 function extDe(file) {
   return path.extname(file.originalname || '').toLowerCase();
@@ -31,10 +34,16 @@ function esPdf(file) {
   return PDF_MIME.has(file.mimetype) || (file.mimetype === 'application/octet-stream' && PDF_EXT.has(ext));
 }
 
+function esImagen(file) {
+  const ext = extDe(file);
+  return Boolean(IMAGEN_MIME[file.mimetype]) || (file.mimetype === 'application/octet-stream' && IMAGEN_EXT.has(ext));
+}
+
 function extSegura(file) {
   const ext = extDe(file);
-  if (EXCEL_EXT.has(ext) || PDF_EXT.has(ext)) return ext;
+  if (EXCEL_EXT.has(ext) || PDF_EXT.has(ext) || IMAGEN_EXT.has(ext)) return ext;
   if (PDF_MIME.has(file.mimetype)) return '.pdf';
+  if (IMAGEN_MIME[file.mimetype]) return IMAGEN_MIME[file.mimetype];
   if (file.mimetype === 'application/vnd.ms-excel') return '.xls';
   return '.xlsx';
 }
@@ -53,6 +62,13 @@ function soloExcel(req, file, cb) {
 
 function excelOPdf(req, file, cb) {
   if (!esExcel(file) && !esPdf(file)) return cb(badRequest('Solo se permiten archivos Excel (.xlsx/.xls) o PDF.'));
+  cb(null, true);
+}
+
+function imagenExcelOPdf(req, file, cb) {
+  if (!esImagen(file) && !esExcel(file) && !esPdf(file)) {
+    return cb(badRequest('Solo se permiten fotos (JPG, PNG o WebP), Excel (.xlsx/.xls) o PDF.'));
+  }
   cb(null, true);
 }
 
@@ -90,8 +106,8 @@ export const uploadExcelPreview = multer({ storage: multer.memoryStorage(), file
   'excel'
 );
 
-/** Adjunto de soporte adicional (Excel o PDF), uno por petición. */
-export const uploadAdjuntoReclamo = multer({ storage: diskStorage, fileFilter: excelOPdf, limits }).single('archivo');
+/** Adjunto de soporte adicional (foto, Excel o PDF), uno por petición. */
+export const uploadAdjuntoReclamo = multer({ storage: diskStorage, fileFilter: imagenExcelOPdf, limits }).single('archivo');
 
 // ------------------------------------------------------------------
 // Adjuntos de Productos Dañados (PDF/Excel para el correo al proveedor).

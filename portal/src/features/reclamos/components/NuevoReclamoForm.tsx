@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Eye, FileSpreadsheet, FileText, LoaderCircle, Paperclip, Plus, ScanLine, Store, Trash2, Upload, Warehouse } from 'lucide-react';
+import { AlertTriangle, Camera, CheckCircle2, Eye, FileSpreadsheet, FileText, LoaderCircle, Plus, ScanLine, Store, Trash2, Upload, Warehouse } from 'lucide-react';
 import { Modal } from '../../../components/ui/Modal';
 import { SeccionForm, ZonaArchivo } from '../../../components/ui/Formulario';
 import { Field, Input, Select, Textarea } from '../../../components/ui/Input';
@@ -15,6 +15,7 @@ import type { CatalogosReclamo, DocumentoSapUsado, OrigenReclamo, PreviewExcel, 
 import { TIPOS, TIPO_LABEL, TIPO_LABEL_CORTO, TIPOS_SOLO_NOTIFICACION, categoriaTipo } from '../lib/tipos';
 import { TipoBadge } from './Badges';
 import { ExcelPreviewModal, PdfPreviewModal } from './VisoresLazy';
+import { ImagenPreviewModal } from './ImagenPreviewModal';
 
 interface Campos {
   origen: OrigenReclamo | '';
@@ -112,6 +113,18 @@ let pdfSeq = 0;
 
 const esPdf = (f: File) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf');
 const esExcel = (f: File) => /\.(xlsx|xls)$/i.test(f.name);
+const esImagen = (f: File) => ['image/jpeg', 'image/png', 'image/webp'].includes(f.type) || /\.(jpe?g|png|webp)$/i.test(f.name);
+
+/** Miniatura de una foto elegida en el formulario (aún no subida). */
+function MiniFoto({ file }: { file: File }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    const u = URL.createObjectURL(file);
+    setUrl(u);
+    return () => URL.revokeObjectURL(u);
+  }, [file]);
+  return url ? <img src={url} alt="" className="size-10 shrink-0 rounded-lg object-cover" /> : <span className="size-10 shrink-0 rounded-lg bg-black/5 dark:bg-white/10" />;
+}
 
 export function NuevoReclamoForm({
   tiendas,
@@ -384,9 +397,9 @@ export function NuevoReclamoForm({
 
   // Los PDF son siempre de documentos SAP: van a su sección para validarlos.
   const agregarAdjuntos = (files: File[]) => {
-    const validos = files.filter((f) => esPdf(f) || esExcel(f));
-    if (validos.length < files.length) setError('Solo se pueden adjuntar archivos Excel o PDF.');
-    setAdjuntos((a) => [...a, ...validos.filter(esExcel)]);
+    const validos = files.filter((f) => esImagen(f) || esPdf(f) || esExcel(f));
+    if (validos.length < files.length) setError('Solo se pueden adjuntar fotos (JPG, PNG o WebP), Excel o PDF.');
+    setAdjuntos((a) => [...a, ...validos.filter((f) => esImagen(f) || esExcel(f))]);
     const pdfs = validos.filter(esPdf);
     if (pdfs.length) agregarPdfsSap(pdfs);
   };
@@ -442,7 +455,7 @@ export function NuevoReclamoForm({
       // Best-effort: el reclamo ya existe; lo que falle se reintenta desde el detalle.
       const fallidos: string[] = [];
       for (const [i, adj] of adjuntos.entries()) {
-        setProgreso(`Subiendo adjunto ${i + 1} de ${adjuntos.length}…`);
+        setProgreso(`Subiendo ${esImagen(adj) ? 'foto' : 'adjunto'} ${i + 1} de ${adjuntos.length}…`);
         try {
           await apiReclamos.subirAdjunto(reclamo.Token, adj);
         } catch {
@@ -875,12 +888,18 @@ export function NuevoReclamoForm({
           />
         </SeccionForm>
 
-        <SeccionForm paso={4} titulo="Archivos y comentario" ayuda="Opcional: Excel adicionales y un comentario. Los PDF van en Documentos SAP.">
+        <SeccionForm paso={4} titulo="Fotos y comentario" ayuda="Opcional: fotos del producto o de la mercancía y un comentario. También acepta Excel; los PDF pasan a Documentos SAP.">
           {adjuntos.length > 0 && (
             <ul className="flex flex-col gap-1.5">
               {adjuntos.map((a, i) => (
                 <li key={`${a.name}-${i}`} className="anim-aparecer flex items-center gap-2 rounded-xl border border-black/10 px-3 py-2 text-sm dark:border-white/10">
-                  {esPdf(a) ? <FileText size={16} className="shrink-0 text-brand-600 dark:text-brand-400" /> : <FileSpreadsheet size={16} className="shrink-0 text-success" />}
+                  {esImagen(a) ? (
+                    <MiniFoto file={a} />
+                  ) : esPdf(a) ? (
+                    <FileText size={16} className="shrink-0 text-brand-600 dark:text-brand-400" />
+                  ) : (
+                    <FileSpreadsheet size={16} className="shrink-0 text-success" />
+                  )}
                   <span className="min-w-0 flex-1 truncate">{a.name}</span>
                   <button type="button" aria-label="Vista previa" className="rounded-full p-1.5 hover:bg-black/5 dark:hover:bg-white/10" onClick={() => setVerAdjunto(a)}>
                     <Eye size={15} />
@@ -900,10 +919,10 @@ export function NuevoReclamoForm({
           <ZonaArchivo
             compacta
             multiple
-            icono={Paperclip}
-            titulo={adjuntos.length ? 'Agregar otro archivo' : 'Agregar archivos'}
-            ayuda="o suéltalos aquí · Excel"
-            accept=".xlsx,.xls"
+            icono={Camera}
+            titulo={adjuntos.some(esImagen) ? 'Agregar más fotos' : 'Agregar fotos'}
+            ayuda="o suéltalas aquí · JPG, PNG o WebP (también Excel o PDF)"
+            accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp,.xlsx,.xls,.pdf,application/pdf"
             onArchivos={agregarAdjuntos}
           />
           <Field label="Comentario" opcional tag={tag('comentario')} resaltar={autos.has('comentario')}>
@@ -949,7 +968,9 @@ export function NuevoReclamoForm({
       )}
 
       {verAdjunto &&
-        (esPdf(verAdjunto) ? (
+        (esImagen(verAdjunto) ? (
+          <ImagenPreviewModal titulo={verAdjunto.name} cargar={async () => verAdjunto} onClose={() => setVerAdjunto(null)} />
+        ) : esPdf(verAdjunto) ? (
           <PdfPreviewModal titulo={verAdjunto.name} cargar={async () => verAdjunto} onClose={() => setVerAdjunto(null)} />
         ) : (
           <ExcelPreviewModal titulo={verAdjunto.name} cargar={() => verAdjunto.arrayBuffer()} onClose={() => setVerAdjunto(null)} />

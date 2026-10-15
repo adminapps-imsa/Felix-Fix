@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type React from 'react';
-import { AlertTriangle, Download, Eye, FileSpreadsheet, FileText, Paperclip, Trash2 } from 'lucide-react';
+import { AlertTriangle, Download, Eye, FileSpreadsheet, FileText, Image as ImageIcon, Paperclip, Trash2 } from 'lucide-react';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { Button } from '../../../components/ui/Button';
 import { ApiError, guardarBlob } from '../../../api/client';
@@ -11,6 +11,7 @@ import type { AdjuntoExtra, Reclamo } from '../../../types/reclamo';
 import { ExcelPreviewModal, PdfPreviewModal } from './VisoresLazy';
 import type { FotoDeHoja } from './ExcelPreviewModal';
 import { ConfirmModal } from './ConfirmModal';
+import { ImagenPreviewModal } from './ImagenPreviewModal';
 
 const ORIGEN_PRINCIPAL = 'principal';
 
@@ -109,13 +110,19 @@ export function AdjuntosSection({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <span className="etiqueta">Adjunto de reclamo (PDF o Excel)</span>
+        <span className="etiqueta">Fotos y adjuntos del reclamo (fotos, PDF o Excel)</span>
         {reclamo.AdjuntosExtra.length === 0 && <p className="text-sm opacity-60">Sin archivos adicionales.</p>}
         {reclamo.AdjuntosExtra.map((adj, idx) => {
           const nFotos = fotosDe(adj.filename).length;
           return (
             <div key={adj.filename} className="flex items-center gap-2 rounded-xl border border-black/10 px-3 py-2 text-sm dark:border-white/10">
-              {adj.tipo === 'pdf' ? <FileText size={16} className="shrink-0 text-brand-600 dark:text-brand-400" /> : <FileSpreadsheet size={16} className="shrink-0 text-success" />}
+              {adj.tipo === 'imagen' ? (
+                <ImageIcon size={16} className="shrink-0 text-brand-600 dark:text-brand-400" />
+              ) : adj.tipo === 'pdf' ? (
+                <FileText size={16} className="shrink-0 text-brand-600 dark:text-brand-400" />
+              ) : (
+                <FileSpreadsheet size={16} className="shrink-0 text-success" />
+              )}
               <span className="min-w-0 flex-1">
                 <span className="block truncate">
                   {adj.tipo === 'pdf' && (
@@ -173,8 +180,8 @@ export function AdjuntosSection({
         {puedeAdjuntar && (
           <label className="flex w-fit cursor-pointer items-center gap-2 rounded-full border border-dashed border-black/20 px-4 py-2 text-sm hover:border-brand-500/50 dark:border-white/20">
             <Paperclip size={15} className="opacity-60" />
-            {subiendo || 'Agregar archivo (Excel o PDF)'}
-            <input type="file" multiple accept=".xlsx,.xls,.pdf,application/pdf" className="hidden" disabled={Boolean(subiendo)} onChange={handleSubir} />
+            {subiendo || 'Agregar fotos o archivos (fotos, Excel o PDF)'}
+            <input type="file" multiple accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp,.xlsx,.xls,.pdf,application/pdf" className="hidden" disabled={Boolean(subiendo)} onChange={handleSubir} />
           </label>
         )}
       </div>
@@ -189,7 +196,14 @@ export function AdjuntosSection({
         />
       )}
       {vista?.kind === 'adjunto' &&
-        (vista.adj.tipo === 'pdf' ? (
+        (vista.adj.tipo === 'imagen' ? (
+          <ImagenPreviewModal
+            titulo={vista.adj.originalname}
+            cargar={() => apiReclamos.descargarAdjunto(token, vista.idx)}
+            onDescargar={() => descargarAdjunto(vista.idx, vista.adj)}
+            onClose={() => setVista(null)}
+          />
+        ) : vista.adj.tipo === 'pdf' ? (
           <PdfPreviewModal
             titulo={vista.adj.originalname}
             cargar={() => apiReclamos.descargarAdjunto(token, vista.idx)}

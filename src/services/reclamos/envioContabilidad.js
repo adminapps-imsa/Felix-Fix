@@ -46,7 +46,7 @@ async function archivosParaContabilidad(r) {
     candidatos.push({
       guardado: a.filename,
       nombre: nombreDeReclamo(numero, a.originalname || a.filename),
-      descripcion: a.tipo === 'pdf' ? 'PDF del reclamo' : 'Excel adjunto del reclamo',
+      descripcion: a.tipo === 'pdf' ? 'PDF del reclamo' : a.tipo === 'imagen' ? 'Foto del reclamo' : 'Excel adjunto del reclamo',
     });
   }
   const archivos = [];
