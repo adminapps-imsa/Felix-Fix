@@ -21,6 +21,7 @@ import { consultarProductos, proveedorPorCodigoBarra } from '../sapProductosServ
 import { leerNotaPdf } from '../contabilidad/leerNotaPdf.js';
 import { crearReclamoSchema } from '../../validators/reclamos.schema.js';
 import { badRequest } from '../../utils/httpError.js';
+import { tienePermiso } from '../acceso/permisos.js';
 import { env } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
 import { normalizarDocSap, motivoDocsRepetidos, motivoDocsEnOtrosReclamos, documentosUsados } from '../../domain/reclamo.js';
@@ -269,6 +270,9 @@ export async function crear(body, multerFile, usuario, pdfs = []) {
   const archivosCreados = [...(multerFile ? [multerFile.filename] : []), ...pdfs.map((f) => f.filename)];
   try {
     const data = validarCampos(body);
+    if (data.origen === 'cedi' && tienePermiso(usuario, 'reclamos.solo_tienda')) {
+      throw badRequest('Tu rol solo crea reclamos de Tienda, no de CEDI.', { code: 'SOLO_TIENDA' });
+    }
     // Un documento SAP pertenece a un solo reclamo: se revisa antes de leer
     // archivos (aviso rápido) y otra vez dentro de la transacción del alta.
     const docsSap = [data.sapDoc1, data.sapDoc2, data.sapDoc3, ...data.sapDocsExtra].filter(Boolean);

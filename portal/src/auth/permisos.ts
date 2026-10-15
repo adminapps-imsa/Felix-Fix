@@ -18,6 +18,7 @@ export const P = {
   recContabilidad: 'reclamos.contabilidad',
   recEnviarContabilidad: 'reclamos.enviar_contabilidad',
   recEliminar: 'reclamos.eliminar',
+  recSoloTienda: 'reclamos.solo_tienda',
   config: 'configuracion.administrar',
 } as const;
 

@@ -28,6 +28,7 @@ export const PERMISOS = [
   { codigo: 'reclamos.decidir', modulo: 'Reclamos', nombre: 'Aprobar o rechazar', descripcion: 'Decidir reclamos y productos, adjuntar archivos a cualquier reclamo y enviar los reclamos cerrados a contabilidad.' },
   { codigo: 'reclamos.enviar_contabilidad', modulo: 'Reclamos', nombre: 'Enviar reclamos a contabilidad', descripcion: 'Enviar a contabilidad los reclamos ya cerrados por la compradora (Gof, Torre de Control), después de subir el documento con lo aprobado.' },
   { codigo: 'reclamos.contabilidad', modulo: 'Reclamos', nombre: 'Recibir reclamos en contabilidad', descripcion: 'Recibir por correo los reclamos que la compradora envía a contabilidad, con sus productos y adjuntos.' },
+  { codigo: 'reclamos.solo_tienda', modulo: 'Reclamos', nombre: 'Solo reclamos de Tienda', descripcion: 'Al crear un reclamo solo puede elegir Tienda, no CEDI (Gof).' },
   { codigo: 'reclamos.eliminar', modulo: 'Reclamos', nombre: 'Eliminar', descripcion: 'Eliminar reclamos y sus adjuntos.' },
 ];
 
@@ -38,5 +39,7 @@ export const tienePermiso = (user, permiso) => Boolean(user?.permisos?.has(permi
 
 /** Los que se pueden dar a un rol desde Configuración. */
 export const ASIGNABLES = new Set(PERMISOS.map((p) => p.codigo));
+/** Los que quitan opciones en vez de darlas: el super administrador no los lleva. */
+export const RESTRICCIONES = new Set(['reclamos.solo_tienda']);
 /** Todos (los del super administrador). */
-export const CODIGOS = new Set([...ASIGNABLES, PERMISO_CONFIGURACION]);
+export const CODIGOS = new Set([...[...ASIGNABLES].filter((p) => !RESTRICCIONES.has(p)), PERMISO_CONFIGURACION]);

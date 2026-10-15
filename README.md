@@ -156,6 +156,9 @@ Excel "Tienda" y "CEDI". Backend en `src/routes/reclamos.routes.js` →
   al crear y no se pueden decidir a mano (409). Sobrante/diferencias sí.
 - **Adjuntos**: quien creó el reclamo (en los suyos), quien decide, o quien
   tiene `reclamos.adjuntar` (Torre de Control) en cualquier reclamo.
+- **Solo Tienda** (`reclamos.solo_tienda`, rol Gof): el formulario solo
+  ofrece Tienda y el backend rechaza crear un reclamo CEDI (`SOLO_TIENDA`).
+  El super administrador no lleva este permiso (`RESTRICCIONES`).
 - **Envío a contabilidad**: con el reclamo cerrado (resuelto/rechazado), quien
   decide lo envía por correo a los usuarios con `reclamos.contabilidad`:
   datos, decisión, productos y todos los archivos, nombrados

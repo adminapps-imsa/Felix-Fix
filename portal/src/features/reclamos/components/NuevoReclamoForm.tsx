@@ -6,6 +6,8 @@ import { Field, Input, Select, Textarea } from '../../../components/ui/Input';
 import { Button } from '../../../components/ui/Button';
 import { Combobox } from '../../../components/ui/Combobox';
 import { ApiError } from '../../../api/client';
+import { P } from '../../../auth/permisos';
+import { useAuth } from '../../../auth/useAuth';
 import * as apiReclamos from '../../../api/reclamos';
 import { cn } from '../../../lib/cn';
 import type { Tienda } from '../../../types/productoDanado';
@@ -126,7 +128,10 @@ export function NuevoReclamoForm({
   const [parseError, setParseError] = useState<string | null>(null);
   const parseSeq = useRef(0);
 
-  const [campos, setCampos] = useState<Campos>(CAMPOS_VACIOS);
+  // Gof no hace reclamos de CEDI: solo ve Tienda, ya elegida.
+  const soloTienda = useAuth().puede(P.recSoloTienda);
+  const origenes: OrigenReclamo[] = soloTienda ? ['tienda'] : ['tienda', 'cedi'];
+  const [campos, setCampos] = useState<Campos>(() => (soloTienda ? { ...CAMPOS_VACIOS, origen: 'tienda', fechaRegistro: hoyIso() } : CAMPOS_VACIOS));
   const [tipo, setTipo] = useState<TipoReclamo | ''>('');
   const [modoManual, setModoManual] = useState(false);
   const [sapDocs, setSapDocs] = useState<string[]>(['', '', '']);
@@ -239,7 +244,7 @@ export function NuevoReclamoForm({
       if (seq !== parseSeq.current) return; // el usuario ya eligió otro archivo
       setPreview(p);
       const delExcel = {
-        origen: p.origen,
+        origen: soloTienda ? 'tienda' : p.origen,
         sucursal: p.sucursal || '',
         fechaRegistro: p.fechaRegistro || '',
         numeroEmbarqueFactura: p.numeroEmbarqueFactura || '',
@@ -388,9 +393,12 @@ export function NuevoReclamoForm({
 
   // ---------------- Envío ----------------
 
+  const excelCedi = soloTienda && preview?.origen === 'cedi';
+
   // Todos los motivos por los que aún no se puede crear: se muestran en el popup al intentarlo.
   const motivos = [
     !campos.origen && 'Elige el origen del reclamo (Tienda o CEDI).',
+    excelCedi && 'El Excel es de la plantilla CEDI: tu rol solo crea reclamos de Tienda.',
     !excel && 'Adjunta el Excel del reclamo: es obligatorio.',
     parsing && 'Se está leyendo el Excel; espera un momento.',
     excel && !parsing && !tipo && 'Selecciona el tipo de reclamo.',
@@ -537,9 +545,9 @@ export function NuevoReclamoForm({
 
   // Cada paso se marca completo con la misma regla que habilita "Crear reclamo".
   const faltanDatos = faltantes.filter((f) => f !== 'Origen' && f !== 'Documento SAP');
-  const paso1Completo = Boolean(campos.origen && excel && !parsing && tipo && !desajuste);
+  const paso1Completo = Boolean(campos.origen && excel && !parsing && tipo && !desajuste && !excelCedi);
   const paso2Completo = Boolean(campos.origen) && faltanDatos.length === 0;
-  const plantilla = esCedi ? 'plantilla CEDI' : campos.origen === 'tienda' ? 'plantilla Tienda' : 'plantilla Tienda o CEDI';
+  const plantilla = esCedi ? 'plantilla CEDI' : campos.origen === 'tienda' || soloTienda ? 'plantilla Tienda' : 'plantilla Tienda o CEDI';
 
   return (
     <Modal title="Nuevo reclamo" onClose={onClose} wide dismissible={false}>
@@ -547,8 +555,8 @@ export function NuevoReclamoForm({
         {error && <div className="anim-aparecer rounded-xl border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
 
         <SeccionForm paso={1} completa={paso1Completo} titulo="Origen y Excel" ayuda="El portal lee el Excel y llena lo que pueda por ti.">
-          <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Origen del reclamo">
-            {(['tienda', 'cedi'] as OrigenReclamo[]).map((o) => {
+          <div className={cn('grid gap-2', origenes.length > 1 && 'grid-cols-2')} role="radiogroup" aria-label="Origen del reclamo">
+            {origenes.map((o) => {
               const Icono = o === 'tienda' ? Store : Warehouse;
               const activo = campos.origen === o;
               return (
@@ -590,6 +598,12 @@ export function NuevoReclamoForm({
             <p className="anim-aparecer flex items-center gap-2 text-sm opacity-70">
               <LoaderCircle size={15} className="animate-spin motion-reduce:animate-none" /> Leyendo el Excel y validando los códigos en SAP…
             </p>
+          )}
+          {excelCedi && (
+            <div className="anim-aparecer flex items-start gap-2 rounded-xl border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
+              <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+              <span>Este Excel es de la plantilla CEDI. Tu rol solo crea reclamos de Tienda: sube el Excel de la plantilla Tienda.</span>
+            </div>
           )}
           {parseError && (
             <div className="anim-aparecer flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-sm">
