@@ -1,6 +1,6 @@
-### REFERENCIA — no está instalado ni activado. Revisar y copiar manualmente
-### a /etc/systemd/system/api-factura.service, luego:
-###   systemctl daemon-reload && systemctl enable --now api-factura
+### Copia de /etc/systemd/system/api-factura.service (instalado y activo).
+### Si se cambia aquí, copiarlo allá y luego:
+###   systemctl daemon-reload && systemctl restart api-factura
 
 [Unit]
 Description=Felix Portal API (Productos Dañados y demás módulos)

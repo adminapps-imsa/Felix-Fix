@@ -8,3 +8,4 @@ portal/dist/
 
 # Configuración local de Claude Code (comandos e IPs del servidor)
 .claude/settings.local.json
+*.tsbuildinfo

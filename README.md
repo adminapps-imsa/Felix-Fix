@@ -9,7 +9,7 @@ MSSQL + OracleDB(SAP), frontend React + TypeScript + Vite + Tailwind CSS v4.
 src/            backend (Express, entry point src/index.js, puerto 3001)
 sql/migrations/ scripts .sql numerados para SQL Server (ver sql/migrations/README.md)
 uploads/        evidencia local (fotos), gitignored
-deploy/         systemd + Nginx de REFERENCIA — no instalados, revisar antes de aplicar
+deploy/         systemd + Nginx: copia de lo instalado en /etc (ver punto 8 de «Decisiones»)
 portal/         frontend Vite (build en portal/dist/, servido por Nginx)
 test/           pruebas automáticas (npm test)
 ```
@@ -40,7 +40,7 @@ npm test                # pruebas de las reglas del dominio
 
 Sin `DB_SERVER/DB_NAME/DB_USER/DB_PASSWORD` configurados, cualquier endpoint
 que toque la base falla con un mensaje explícito (no crashea en silencio).
-Sin `KEYCLOAK_ISSUER_URL/JWKS_URI/AUDIENCE`, las rutas protegidas responden
+Sin `KEYCLOAK_ISSUER_URL/JWKS_URI/CLIENT_ID/CLIENT_SECRET`, las rutas protegidas responden
 **503** (fail-closed) — nunca quedan abiertas sin autenticación.
 `AUTH_DISABLED=true` en `.env` es una puerta de escape solo para desarrollo
 local sin Keycloak levantado; nunca debe usarse en producción.
@@ -56,7 +56,7 @@ npm run dev              # proxy /api -> http://localhost:3001
 
 ## Base de datos
 
-Ver `sql/migrations/README.md`. Ejecutar los scripts en orden (000 a 010)
+Ver `sql/migrations/README.md`. Ejecutar los scripts en orden (000 a 018)
 contra la base de datos del portal (`node sql/migrate.js`).
 
 ## Decisiones tomadas sin información completa (revisar)
@@ -150,8 +150,10 @@ Excel "Tienda" y "CEDI". Backend en `src/routes/reclamos.routes.js` →
 `src/services/reclamosService.js` (+ `src/services/reclamos/`), frontend en
 `portal/src/features/reclamos/`. Migración: `sql/migrations/005_create_reclamos.sql`.
 
-- **Acceso**: rol `KEYCLOAK_ROLE_RECLAMOS` (ver/crear). Aprobar/rechazar y
-  eliminar: solo los usernames de `RECLAMOS_ADMIN_USERS` (separados por coma).
+- **Acceso**: por permisos del rol, asignados en Configuración → Roles y
+  permisos (`reclamos.ver`, `crear`, `decidir`, `eliminar`…; tabla
+  `RolPermisos`). El rol de super administrador (`KEYCLOAK_ROLE_SUPERADMIN`,
+  por defecto «Administrador») los tiene todos.
 - **Auto-aprobado por producto**: faltante_real y cualquier daño se aprueban
   al crear y no se pueden decidir a mano (409). Sobrante/diferencias sí.
 - **Adjuntos**: quien creó el reclamo (en los suyos), quien decide, o quien
@@ -176,6 +178,34 @@ Excel "Tienda" y "CEDI". Backend en `src/routes/reclamos.routes.js` →
   archivo dos veces (por contenido) ni un PDF de un documento de otro
   reclamo; si se vuelve a subir un PDF que ya estaba sin validar y ahora
   coincide con lo aprobado, se valida el existente en vez de duplicarlo.
+- **Fecha de llegada de la mercancía obligatoria** (Tienda y CEDI, migración
+  `016`): una fecha real y no posterior a hoy (`motivoFechaLlegadaInvalida`).
+  Se escribe a mano (no sale del Excel); los reclamos viejos no la tienen.
+- **Devolver a quien lo creó** (migración `017`, `src/services/reclamos/devolucion.js`):
+  si algo está mal, la compradora (`reclamos.decidir`) pulsa «Devolver» con un
+  comentario obligatorio. El reclamo pasa a `devuelto` («Con comentario de
+  compradora») y no se decide hasta que vuelva. Quien lo creó (o el super
+  administrador) corrige los datos y los documentos SAP (`PATCH /:token/datos`;
+  el origen, el tipo y los productos no cambian), sube o quita PDF en Adjuntos y
+  pulsa «Reenviar» (`POST /:token/reenviar`): vuelve a `pendiente` si cada
+  documento SAP tiene su PDF y no queda el PDF de uno que se quitó
+  (`motivoNoReenviar`). Las decisiones de productos ya tomadas se conservan.
+  Cada devolución y reenvío queda en `ReclamoComentarios` y avisa por correo:
+  a quien lo creó al devolver y a la compradora que lo devolvió al reenviar.
+- **Avisos por correo de Reclamos** (`src/services/correo/avisosReclamos.js`,
+  nunca bloquean): reclamo **nuevo** pendiente → `reclamos.decidir`;
+  **devuelto** → quien lo creó; **reenviado** → la compradora que lo devolvió;
+  **cerrado** (confirmado o rechazado) → `reclamos.enviar_contabilidad` y quien
+  lo creó. Todos los correos del portal usan el diseño común de
+  `src/services/correo/diseno.js` (franja índigo, fondo blanco, solo colores
+  del portal) y `destinatarios.js` para saber a quién avisar.
+- **Devolución al proveedor** (tipo `devolucion`, migración `018`): el Excel
+  reconoce el motivo «DEVOLUCIÓN» (`detectarTipoPorMotivo`); la compradora
+  decide sus productos como en sobrante/diferencias. En esos reclamos Gof
+  (permiso `reclamos.retiro_proveedor`, asignarlo en Configuración) marca que
+  el proveedor retiró el producto con foto y día (`POST/DELETE /:token/retiro`,
+  `src/services/reclamos/retiro.js`, regla `motivoNoRegistrarRetiro`). Solo
+  deja constancia: no cambia el estado ni las decisiones.
 - **Excel siempre obligatorio.** Documento SAP obligatorio salvo
   `RECLAMOS_SAP_DOC_OPCIONAL=true` fuera de producción.
 - **Plantilla CEDI con encabezado**: arriba de la tabla puede traer
@@ -190,3 +220,45 @@ Excel "Tienda" y "CEDI". Backend en `src/routes/reclamos.routes.js` →
   `SAP_V_PRECIO_VENTA`) e infiere el proveedor de la plantilla CEDI por su
   última OC (`EKPO`→`EKKO`→`LFA1`). Mandante 600, esquema `SAPSR3`. Si SAP no
   responde, la validación queda como "no disponible" y no bloquea.
+
+## Tablero (por rol)
+
+`/tablero` en el portal, `GET /api/tablero?dias=7|30|90|365` en la API
+(`src/services/tableroService.js`, reglas puras en `src/domain/tablero.js`).
+Se arma con los permisos del usuario, igual que Inicio, y está pensado para
+leerse de un vistazo:
+
+1. **Resumen**: una frase con cuántos casos esperan por ti y un semáforo
+   (en tiempo hasta 7 días; revisar 8–14; atrasado 15+, contados desde que el
+   caso llegó a su etapa), con el botón «Empezar por el más antiguo», y lo
+   que hiciste en el periodo (solo lo que tiene movimiento). Tienda ve en qué
+   etapa están sus reportes.
+2. **Tus tareas**: una tarjeta por etapa que le toca, con su cantidad y su semáforo.
+3. **Cómo van los casos**: por módulo, la ruta del caso (cuántos hay en cada
+   etapa y cuánto se tarda entre etapas; la más lenta en ámbar) y las
+   columnas día a día.
+4. **Ver de dónde vienen los casos** (plegado): tiendas, motivos, divisiones, proveedores.
+
+Productos Dañados respeta la vista parcial de Gof (`alcanceVista`). En «Vista
+por», «Lo que hiciste» sigue siendo el del administrador. Solo lectura.
+
+## Configuración → Correos
+
+Solo el Administrador. Lista todos los correos que manda el portal
+(`src/services/correo/catalogoCorreos.js`) con cuándo sale cada uno, quién lo
+recibe y su vista previa con datos de EJEMPLO (escritorio, celular o solo
+texto); «Enviarme una prueba» lo manda al correo de quien lo pide con
+«[PRUEBA]» en el asunto. Desde ahí también se envía el **correo de bienvenida**
+(`plantillaBienvenida.js`): qué es el portal, lo que puede hacer la persona
+según los permisos de sus roles, cómo entrar y el botón «Entrar al portal»
+(`PORTAL_URL`). Solo a quien tiene rol y correo; cada envío queda en el
+Historial (`bienvenida`). Hasta 50 personas por envío y 10 envíos por minuto.
+
+## Divisiones
+
+Por ahora solo **Perfumería** y **Cosméticos** (migración `015`). Son las
+activas de `ReclamoCatalogos` (`Tipo = 'division'`): los formularios las
+muestran como botones y la API rechaza cualquier otra (`exigirDivision`,
+`src/services/divisiones.js`); ya no se agregan divisiones nuevas al escribir.
+Los reportes y reclamos viejos conservan la suya. Para ofrecer otra: insertarla
+o poner `Activo = 1` en el catálogo.
