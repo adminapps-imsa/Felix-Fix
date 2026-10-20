@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Search } from 'lucide-react';
+import { Landmark, Search, SearchX } from 'lucide-react';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { Input } from '../../../components/ui/Input';
 import { Pagination } from '../../../components/ui/Pagination';
+import { EstadoVacio } from '../../../components/ui/EstadoVacio';
 import { listarReportes } from '../../../api/productosDanados';
 import type { PaginationMeta, ReporteProductoDanado } from '../../../types/productoDanado';
 import { ReportesTable } from '../../productos-danados/components/ReportesTable';
@@ -62,15 +63,36 @@ export function PagosProductosDanados() {
         />
       </GlassCard>
 
-      {error && <div className="anim-aparecer rounded-xl border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
-
-      {!loading && !error && data.length === 0 ? (
-        <GlassCard className="py-10 text-center text-sm opacity-60">
-          {qDebounced ? 'No hay reportes que coincidan con la búsqueda.' : '¡Todo al día! No hay reportes esperando el pago del proveedor.'}
-        </GlassCard>
-      ) : (
-        <ReportesTable data={data} loading={loading} onSelect={setSeleccionado} />
-      )}
+      <ReportesTable
+        data={data}
+        loading={loading}
+        error={error}
+        onReintentar={reload}
+        clave={`${qDebounced}|${page}`}
+        onSelect={setSeleccionado}
+        vacio={
+          qDebounced ? (
+            <EstadoVacio
+              icono={SearchX}
+              titulo="No hay reportes que coincidan con la búsqueda"
+              accion={
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQ('');
+                    setPage(1);
+                  }}
+                  className="rounded-full px-4 py-2 text-sm font-semibold text-brand-600 hover:bg-brand-500/10 dark:text-brand-400"
+                >
+                  Quitar búsqueda
+                </button>
+              }
+            />
+          ) : (
+            <EstadoVacio icono={Landmark} titulo="¡Todo al día!" texto="No hay reportes esperando el pago del proveedor." />
+          )
+        }
+      />
       {pagination && <Pagination meta={pagination} onPageChange={setPage} />}
 
       {seleccionado && <ReporteDetalleModal reporteId={seleccionado.ReporteId} onClose={() => setSeleccionado(null)} onChanged={reload} />}

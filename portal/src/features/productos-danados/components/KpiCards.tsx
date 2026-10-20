@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
 import { Clock, XCircle, FileUp, Landmark, Lock, FileCheck2 } from 'lucide-react';
 import { GlassCard } from '../../../components/ui/GlassCard';
-import { formatCantidad } from '../../../lib/formatters';
+import { Cifra } from '../../../components/ui/Cifra';
+import { Esqueleto } from '../../../components/ui/Esqueleto';
 import { cn } from '../../../lib/cn';
 import type { Estado, Kpis } from '../../../types/productoDanado';
 
@@ -21,7 +22,8 @@ export function KpiCards({
   onEstado,
   estadosVisibles,
 }: {
-  kpis: Kpis | null;
+  /** `undefined`: todavía cargando (esqueleto en la cifra); `null`: no se pudo cargar. */
+  kpis: Kpis | null | undefined;
   estado?: Estado | '';
   onEstado: (estado: Estado | '') => void;
   /** Quien ve solo una parte (Gof) ve solo las tarjetas de sus etapas. */
@@ -51,7 +53,11 @@ export function KpiCards({
                 <span className={cn('chip-icono', card.color)}>{card.icon}</span>
                 <span className="text-sm font-semibold leading-tight opacity-80">{card.label}</span>
               </span>
-              <span className="cifra-kpi mt-2">{kpis ? formatCantidad(kpis[card.key]) : '—'}</span>
+              {kpis === undefined ? (
+                <Esqueleto className="mt-2 h-8 w-14" />
+              ) : (
+                <span className="cifra-kpi mt-2">{kpis ? <Cifra valor={kpis[card.key]} /> : '—'}</span>
+              )}
               <span className="text-xs opacity-55">{card.quien}</span>
             </GlassCard>
           </button>

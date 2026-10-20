@@ -19,6 +19,7 @@ export const P = {
   recEnviarContabilidad: 'reclamos.enviar_contabilidad',
   recEliminar: 'reclamos.eliminar',
   recSoloTienda: 'reclamos.solo_tienda',
+  recRetiro: 'reclamos.retiro_proveedor',
   config: 'configuracion.administrar',
 } as const;
 
@@ -26,5 +27,5 @@ export const P = {
 // "Confirmar pago" (pdPago) y "Recibir reclamos en contabilidad" (recContabilidad) se
 // trabajan desde el apartado Contabilidad: por sí solos no abren los otros menús.
 export const ACCESO_PRODUCTOS = [P.pdVer, P.pdCrear, P.pdEnviar, P.pdAprobar, P.pdProcesar, P.pdEliminar, P.pdNf, P.pdVerNf, P.pdNfDocumento, P.pdDocumentar];
-export const ACCESO_RECLAMOS = [P.recVer, P.recCrear, P.recAdjuntar, P.recDecidir, P.recEliminar, P.recEnviarContabilidad];
+export const ACCESO_RECLAMOS = [P.recVer, P.recCrear, P.recAdjuntar, P.recDecidir, P.recEliminar, P.recEnviarContabilidad, P.recRetiro];
 export const ACCESO_CONTABILIDAD = [P.recContabilidad, P.pdPago];

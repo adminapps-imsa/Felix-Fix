@@ -29,7 +29,7 @@ export function ConfirmModal({
           </Button>
           <Button
             variant="danger"
-            disabled={busy}
+            estado={busy ? 'cargando' : null}
             onClick={async () => {
               setBusy(true);
               setError(null);

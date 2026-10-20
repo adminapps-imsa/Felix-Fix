@@ -1,5 +1,5 @@
-import React, { createContext, useCallback, useEffect, useState } from 'react';
-import { clearSession, getSessionExp, getToken, getVista, loadSession, saveSession, setVista, type AuthUser, type Limites } from './session';
+import React, { createContext, useCallback, useEffect, useRef, useState } from 'react';
+import { clearSession, getIdToken, getSessionExp, getToken, getVista, loadSession, saveSession, setVista, type AuthUser, type Limites } from './session';
 
 export type { AuthUser };
 
@@ -131,10 +131,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [servidorNoDisponible, setServidorNoDisponible] = useState(false);
 
+  // Número del último /auth/me pedido. Un refresco viejo (salido sin X-Vista-Rol)
+  // puede volver después de cambiarVista y borraría la vista: solo vale la respuesta más reciente.
+  const secuencia = useRef(0);
+
   /** Pide los permisos actuales. Si la sesión venció, la borra y manda a iniciar sesión. */
   const refrescar = useCallback(async (): Promise<boolean> => {
+    const n = ++secuencia.current;
     try {
       const me = await pedirMe();
+      if (n !== secuencia.current) return false; // ya hay un pedido más nuevo: este se descarta
       if (!me) {
         clearSession();
         setServidorNoDisponible(false);
@@ -149,6 +155,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setServidorNoDisponible(false);
       return true;
     } catch (err) {
+      if (n !== secuencia.current) return false;
       // 503 o sin red: si todavía no había sesión verificada, App muestra "El servidor no está disponible".
       setServidorNoDisponible(true);
       // Error de red puntual: se mantiene lo que había, se reintenta en el próximo ciclo.
@@ -215,7 +222,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      saveSession(data.token, data.user);
+      saveSession(data.token, data.user, data.idToken);
       window.history.replaceState({}, '', '/');
       await refrescar();
     } catch (err) {
@@ -248,11 +255,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     },
     logout: () => {
       if (AUTH_DISABLED) return;
+      // Se lee antes de borrar la sesión. Con id_token_hint Keycloak cierra sin pedir confirmación.
+      const idToken = getIdToken();
       clearSession();
       const params = new URLSearchParams({
         client_id: KEYCLOAK_CLIENT_ID,
         post_logout_redirect_uri: window.location.origin,
       });
+      if (idToken) params.set('id_token_hint', idToken);
       window.location.href = realmUrl(`/protocol/openid-connect/logout?${params}`);
     },
   };

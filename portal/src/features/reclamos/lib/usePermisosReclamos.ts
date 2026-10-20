@@ -12,7 +12,7 @@ export function usePermisosReclamos() {
   useEffect(() => {
     obtenerPermisos()
       .then(setPermisos)
-      .catch(() => setPermisos({ puedeCrear: false, puedeDecidir: false, puedeEliminar: false, puedeAdjuntar: false, puedeAdjuntarCerrado: false, puedeEnviarContabilidad: false, esAdmin: false, username: '' }));
+      .catch(() => setPermisos({ puedeCrear: false, puedeDecidir: false, puedeEliminar: false, puedeAdjuntar: false, puedeAdjuntarCerrado: false, puedeEnviarContabilidad: false, puedeDevolver: false, puedeCorregirCualquiera: false, puedeRegistrarRetiro: false, esAdmin: false, username: '' }));
   }, [firma]);
   return permisos;
 }

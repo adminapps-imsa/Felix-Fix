@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
-import { Check, ChevronRight, RotateCcw, Search, ShieldCheck, X } from 'lucide-react';
+import { Check, CheckCircle2, ChevronRight, FileSpreadsheet, Loader2, RotateCcw, Search, SearchX, ShieldCheck, X } from 'lucide-react';
 import { GlassCard } from '../../../components/ui/GlassCard';
+import { EstadoVacio } from '../../../components/ui/EstadoVacio';
+import { useAvisos } from '../../../components/ui/Avisos';
 import { ApiError } from '../../../api/client';
 import * as apiReclamos from '../../../api/reclamos';
 import { cn } from '../../../lib/cn';
@@ -106,7 +108,7 @@ export function ProductosSection({
     return (
       <GlassCard>
         <h2 className="mb-1 text-base font-bold">Productos</h2>
-        <p className="text-sm opacity-60">No se pudo extraer el detalle de productos del Excel. Revisa el archivo adjunto.</p>
+        <EstadoVacio icono={FileSpreadsheet} className="py-8" titulo="Sin productos" texto="No se pudo extraer el detalle de productos del Excel. Revisa el archivo adjunto." />
       </GlassCard>
     );
   }
@@ -199,10 +201,12 @@ export function ProductosSection({
               <span className="opacity-60">Decisión</span>
             </div>
             {visibles.length ? (
-              <div className="divide-y divide-black/5 dark:divide-white/5">
-                {visibles.map((l) => (
+              // Al cambiar de filtro las filas entran en cascada (al escribir en la búsqueda, no).
+              <div key={filtro} className="divide-y divide-black/5 dark:divide-white/5">
+                {visibles.map((l, i) => (
                   <ProductoFila
                     key={l.Posicion}
+                    indice={i}
                     token={token}
                     linea={l}
                     esAdmin={esAdmin}
@@ -215,9 +219,11 @@ export function ProductosSection({
                 ))}
               </div>
             ) : (
-              <p className="px-4 py-8 text-center text-sm opacity-60">
-                {busqueda ? 'Ningún producto coincide con la búsqueda.' : filtro === 'pendiente' ? 'No quedan productos por decidir.' : 'No hay productos en este estado.'}
-              </p>
+              <EstadoVacio
+                className="py-8"
+                icono={busqueda ? SearchX : filtro === 'pendiente' ? CheckCircle2 : Search}
+                titulo={busqueda ? 'Ningún producto coincide con la búsqueda.' : filtro === 'pendiente' ? 'No quedan productos por decidir.' : 'No hay productos en este estado.'}
+              />
             )}
           </div>
           {visibles.length > 8 && <p className="-mt-2 text-xs opacity-50">Mostrando {visibles.length} de {manuales.length}. Desplázate dentro del recuadro para ver el resto.</p>}
@@ -260,19 +266,23 @@ function DecisionMasiva({
   onCancelar: () => void;
 }) {
   const [comentario, setComentario] = useState('');
-  const [busy, setBusy] = useState(false);
+  // Cuál decisión está guardándose (su botón lleva la ruedita).
+  const [busy, setBusy] = useState<'aprobado' | 'rechazado' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const avisos = useAvisos();
 
   const decidir = async (decision: 'aprobado' | 'rechazado') => {
-    setBusy(true);
+    setBusy(decision);
     setError(null);
     try {
       const r = await apiReclamos.decidirLineas(token, posiciones, decision, comentario);
       onHecho(r.lineas);
+      const n = posiciones.length;
+      avisos.ok(`${n} ${n === 1 ? 'producto' : 'productos'} ${decision === 'aprobado' ? (n === 1 ? 'aprobado' : 'aprobados') : n === 1 ? 'rechazado' : 'rechazados'}.`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo guardar la decisión.');
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   };
 
@@ -289,19 +299,19 @@ function DecisionMasiva({
         onChange={(e) => setComentario(e.target.value)}
       />
       <div className="flex gap-1.5">
-        <button type="button" className={cn(MINI_BOTON, 'flex-1 justify-center hover:bg-black/5 md:flex-none dark:hover:bg-white/5')} disabled={busy} onClick={onCancelar}>
+        <button type="button" className={cn(MINI_BOTON, 'flex-1 justify-center hover:bg-black/5 md:flex-none dark:hover:bg-white/5')} disabled={Boolean(busy)} onClick={onCancelar}>
           Cancelar
         </button>
-        <button type="button" className={cn(MINI_BOTON, 'flex-1 justify-center bg-danger text-white hover:bg-red-600 md:flex-none')} disabled={busy} onClick={() => decidir('rechazado')}>
-          <X size={13} /> Rechazar {posiciones.length}
+        <button type="button" className={cn(MINI_BOTON, 'flex-1 justify-center bg-danger text-white hover:bg-red-600 md:flex-none')} disabled={Boolean(busy)} onClick={() => decidir('rechazado')}>
+          {busy === 'rechazado' ? <Ruedita /> : <X size={13} />} Rechazar {posiciones.length}
         </button>
         <button
           type="button"
           className={cn(MINI_BOTON, 'flex-1 justify-center bg-brand-500 text-white hover:bg-brand-600 md:flex-none dark:bg-brand-400 dark:text-slate-950 dark:hover:bg-brand-500')}
-          disabled={busy}
+          disabled={Boolean(busy)}
           onClick={() => decidir('aprobado')}
         >
-          <Check size={13} /> Aprobar {posiciones.length}
+          {busy === 'aprobado' ? <Ruedita /> : <Check size={13} />} Aprobar {posiciones.length}
         </button>
       </div>
       {error && <p className="text-xs text-danger md:basis-full">{error}</p>}
@@ -332,8 +342,8 @@ function GrupoAutomatico({ grupo }: { grupo: Grupo }) {
               </tr>
             </thead>
             <tbody>
-              {grupo.lineas.map((l) => (
-                <tr key={l.Posicion} className="border-t border-black/5 dark:border-white/5">
+              {grupo.lineas.map((l, i) => (
+                <tr key={l.Posicion} className="anim-fila border-t border-black/5 dark:border-white/5" style={{ ['--i' as string]: i }}>
                   <td className="px-4 py-2 opacity-50">{l.Posicion}</td>
                   <td className="px-4 py-2 font-mono text-xs">
                     {l.CodigoBarra}
@@ -360,11 +370,15 @@ const FILA_GRID = 'px-3 md:grid md:grid-cols-[2.25rem_minmax(0,26rem)_4rem_6rem_
 const FILA_GRID_SEL =
   'grid grid-cols-[1.25rem_minmax(0,1fr)] gap-x-2.5 px-3 md:grid-cols-[1.25rem_2.25rem_minmax(0,26rem)_4rem_6rem_minmax(0,1fr)] md:items-center md:gap-3';
 
+/** Ruedita en lugar del ícono de un botón chico mientras guarda. */
+const Ruedita = () => <Loader2 size={13} className="animate-spin" aria-hidden />;
+
 const MINI_BOTON =
   'inline-flex h-8 shrink-0 items-center gap-1 rounded-full px-3 text-xs font-semibold transition-[background-color,color,transform,opacity] duration-150 active:scale-[0.96] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50';
 
 /** Un producto por fila, compacto: datos a la izquierda y la decisión a la derecha. */
 function ProductoFila({
+  indice,
   token,
   linea: l,
   esAdmin,
@@ -374,6 +388,8 @@ function ProductoFila({
   onSeleccionar,
   onActualizada,
 }: {
+  /** Orden en la lista: retrasa su entrada en cascada (la clase lo limita a las primeras). */
+  indice: number;
   token: string;
   linea: ReclamoLinea;
   esAdmin: boolean;
@@ -385,19 +401,24 @@ function ProductoFila({
   onActualizada: (linea: ReclamoLinea) => void;
 }) {
   const [comentario, setComentario] = useState('');
-  const [busy, setBusy] = useState(false);
+  // Qué se está guardando (su botón lleva la ruedita).
+  const [busy, setBusy] = useState<'aprobado' | 'rechazado' | 'deshacer' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const avisos = useAvisos();
 
-  const run = async (fn: () => Promise<ReclamoLinea>) => {
-    setBusy(true);
+  const run = async (accion: 'aprobado' | 'rechazado' | 'deshacer', fn: () => Promise<ReclamoLinea>) => {
+    setBusy(accion);
     setError(null);
     try {
       onActualizada(await fn());
       setComentario('');
+      avisos.ok(
+        accion === 'deshacer' ? `Decisión del producto ${l.Posicion} deshecha.` : `Producto ${l.Posicion} ${accion === 'aprobado' ? 'aprobado' : 'rechazado'}.`
+      );
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo guardar la decisión.');
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   };
 
@@ -407,9 +428,10 @@ function ProductoFila({
   return (
     <div
       data-producto
+      style={{ ['--i' as string]: indice }}
       className={cn(
         onSeleccionar ? FILA_GRID_SEL : cn(FILA_GRID, 'flex flex-col'),
-        'gap-y-2 border-l-[3px] py-2.5 text-sm',
+        'anim-fila gap-y-2 border-l-[3px] py-2.5 text-sm transition-colors duration-200',
         l.DecStatus === 'aprobado' && 'border-l-success bg-success/5',
         l.DecStatus === 'rechazado' && 'border-l-danger bg-danger/5',
         !decidido && (seleccionado ? 'border-l-brand-500 bg-brand-500/5' : 'border-l-transparent')
@@ -470,11 +492,11 @@ function ProductoFila({
               <button
                 type="button"
                 className={cn(MINI_BOTON, 'ml-auto px-2 md:ml-0 hover:bg-black/5 dark:hover:bg-white/5')}
-                disabled={busy}
+                disabled={Boolean(busy)}
                 title="Deshacer decisión"
-                onClick={() => run(() => apiReclamos.deshacerLinea(token, l.Posicion))}
+                onClick={() => run('deshacer', () => apiReclamos.deshacerLinea(token, l.Posicion))}
               >
-                <RotateCcw size={13} /> Deshacer
+                {busy === 'deshacer' ? <Ruedita /> : <RotateCcw size={13} />} Deshacer
               </button>
             )}
           </div>
@@ -491,18 +513,18 @@ function ProductoFila({
             <button
               type="button"
               className={cn(MINI_BOTON, 'flex-1 justify-center md:flex-none bg-danger text-white hover:bg-red-600')}
-              disabled={busy}
-              onClick={() => run(() => apiReclamos.decidirLinea(token, l.Posicion, 'rechazado', comentario))}
+              disabled={Boolean(busy)}
+              onClick={() => run('rechazado', () => apiReclamos.decidirLinea(token, l.Posicion, 'rechazado', comentario))}
             >
-              <X size={13} /> Rechazar
+              {busy === 'rechazado' ? <Ruedita /> : <X size={13} />} Rechazar
             </button>
             <button
               type="button"
               className={cn(MINI_BOTON, 'flex-1 justify-center md:flex-none bg-brand-500 text-white hover:bg-brand-600 dark:bg-brand-400 dark:text-slate-950 dark:hover:bg-brand-500')}
-              disabled={busy}
-              onClick={() => run(() => apiReclamos.decidirLinea(token, l.Posicion, 'aprobado', comentario))}
+              disabled={Boolean(busy)}
+              onClick={() => run('aprobado', () => apiReclamos.decidirLinea(token, l.Posicion, 'aprobado', comentario))}
             >
-              <Check size={13} /> Aprobar
+              {busy === 'aprobado' ? <Ruedita /> : <Check size={13} />} Aprobar
             </button>
           </div>
         ) : (

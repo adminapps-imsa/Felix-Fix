@@ -1,9 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useId, useState } from 'react';
 import { ImagePlus, X } from 'lucide-react';
 import { Modal } from '../../../components/ui/Modal';
 import { Field, Input, Select, Textarea } from '../../../components/ui/Input';
 import { Button } from '../../../components/ui/Button';
+import { useAvisos } from '../../../components/ui/Avisos';
 import { Combobox } from '../../../components/ui/Combobox';
+import { SelectorOpciones } from '../../../components/ui/SelectorOpciones';
 import { SeccionForm, ZonaArchivo } from '../../../components/ui/Formulario';
 import type { Tienda } from '../../../types/productoDanado';
 import { useCatalogos, invalidarCatalogos } from '../hooks/useCatalogos';
@@ -11,6 +13,7 @@ import { crearReporte } from '../../../api/productosDanados';
 import { ApiError } from '../../../api/client';
 import { useLimites } from '../../../auth/useLimites';
 import { comprimirImagen } from '../../../lib/comprimirImagen';
+import { normalizarTexto } from '../../../lib/texto';
 
 const EVIDENCIA_TIPOS = ['image/jpeg', 'image/png', 'image/webp'];
 
@@ -32,7 +35,9 @@ export function NuevoReporteForm({
   const cat = useCatalogos();
   const EVIDENCIA_MAX_MB = useLimites().evidenciaMb;
   const [procesandoFoto, setProcesandoFoto] = useState(false);
-  const esNuevo = (v: string, lista: string[]) => !lista.some((x) => x.toUpperCase() === v.trim().toUpperCase());
+  const esNuevo = (v: string, lista: string[]) => !lista.some((x) => normalizarTexto(x) === normalizarTexto(v));
+  const idDivision = useId();
+  const avisos = useAvisos();
 
   // Libera la object URL de la vista previa al cambiar de foto o al cerrar el formulario.
   useEffect(() => {
@@ -71,11 +76,12 @@ export function NuevoReporteForm({
       form.set('division', division.trim());
       form.set('motivo', motivo.trim());
       if (foto) form.set('evidencia', foto);
-      await crearReporte(form);
-      // Un valor nuevo ya quedó en el catálogo: que aparezca en el próximo formulario y en los filtros.
-      if (esNuevo(division, cat.divisiones) || esNuevo(motivo, cat.motivos)) invalidarCatalogos();
+      const creado = await crearReporte(form);
+      // Un motivo nuevo ya quedó en el catálogo: que aparezca en el próximo formulario y en los filtros.
+      if (esNuevo(motivo, cat.motivos)) invalidarCatalogos();
       onCreated();
       onClose();
+      avisos.ok(`Reporte #${creado.ReporteId} creado.`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo crear el reporte.');
     } finally {
@@ -119,15 +125,15 @@ export function NuevoReporteForm({
             <Field label="Marca" opcional>
               <Input name="marca" maxLength={100} />
             </Field>
-            <Field label="División">
-              <Combobox
+            <Field label="División" grupo idEtiqueta={idDivision}>
+              <SelectorOpciones
                 required
                 value={division}
                 onChange={setDivision}
                 opciones={cat.divisiones}
-                nuevoLabel="Agregar división"
-                placeholder="Elige o escribe una nueva"
-                maxLength={100}
+                etiquetaId={idDivision}
+                error={cat.error ? 'No se pudieron cargar las divisiones.' : null}
+                onReintentar={cat.reintentar}
               />
             </Field>
           </div>
@@ -201,7 +207,7 @@ export function NuevoReporteForm({
           <Button type="button" variant="secondary" onClick={onClose}>
             Cancelar
           </Button>
-          <Button type="submit" disabled={saving || procesandoFoto}>
+          <Button type="submit" disabled={procesandoFoto} estado={saving ? 'cargando' : null}>
             {saving ? 'Guardando…' : 'Crear reporte'}
           </Button>
         </div>

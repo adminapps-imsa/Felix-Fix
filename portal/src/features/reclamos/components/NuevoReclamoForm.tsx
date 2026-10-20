@@ -1,15 +1,19 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Camera, CheckCircle2, Eye, FileSpreadsheet, FileText, LoaderCircle, Plus, ScanLine, Store, Trash2, Upload, Warehouse } from 'lucide-react';
 import { Modal } from '../../../components/ui/Modal';
 import { SeccionForm, ZonaArchivo } from '../../../components/ui/Formulario';
 import { Field, Input, Select, Textarea } from '../../../components/ui/Input';
 import { Button } from '../../../components/ui/Button';
+import { useAvisos } from '../../../components/ui/Avisos';
 import { Combobox } from '../../../components/ui/Combobox';
+import { SelectorOpciones } from '../../../components/ui/SelectorOpciones';
+import { CampoFecha } from '../../../components/ui/CampoFecha';
 import { ApiError } from '../../../api/client';
 import { P } from '../../../auth/permisos';
 import { useAuth } from '../../../auth/useAuth';
 import * as apiReclamos from '../../../api/reclamos';
 import { cn } from '../../../lib/cn';
+import { normalizarTexto } from '../../../lib/texto';
 import type { Tienda } from '../../../types/productoDanado';
 import type { CatalogosReclamo, DocumentoSapUsado, OrigenReclamo, PreviewExcel, Reclamo, RelacionProveedor, TipoReclamo } from '../../../types/reclamo';
 import { TIPOS, TIPO_LABEL, TIPO_LABEL_CORTO, TIPOS_SOLO_NOTIFICACION, categoriaTipo } from '../lib/tipos';
@@ -21,6 +25,8 @@ interface Campos {
   origen: OrigenReclamo | '';
   sucursal: string;
   fechaRegistro: string;
+  /** Cuándo llegó la mercancía: obligatoria (Tienda y CEDI), no se toma del Excel. */
+  fechaLlegadaMercancia: string;
   numeroEmbarqueFactura: string;
   mundo: string;
   departamento: string;
@@ -35,6 +41,7 @@ const CAMPOS_VACIOS: Campos = {
   origen: '',
   sucursal: '',
   fechaRegistro: '',
+  fechaLlegadaMercancia: '',
   numeroEmbarqueFactura: '',
   mundo: '',
   departamento: '',
@@ -69,9 +76,9 @@ async function cargarCatalogos(): Promise<CatalogosReclamo> {
   return datos;
 }
 
-/** Tras crear un reclamo con una división nueva, que aparezca la próxima vez. */
-function invalidarCatalogos() {
-  catalogosCache = null;
+/** La división tal como está en el catálogo (sin importar mayúsculas ni tildes), o '' si no es una de las permitidas. */
+function divisionDelCatalogo(valor: string | null | undefined, divisiones: string[]) {
+  return valor ? (divisiones.find((d) => normalizarTexto(d) === normalizarTexto(valor)) ?? '') : '';
 }
 
 const unico = (arr: string[] | undefined) => (arr?.length === 1 ? arr[0] : '');
@@ -145,6 +152,10 @@ export function NuevoReclamoForm({
   const soloTienda = useAuth().puede(P.recSoloTienda);
   const origenes: OrigenReclamo[] = soloTienda ? ['tienda'] : ['tienda', 'cedi'];
   const [campos, setCampos] = useState<Campos>(() => (soloTienda ? { ...CAMPOS_VACIOS, origen: 'tienda', fechaRegistro: hoyIso() } : CAMPOS_VACIOS));
+  // Último estado dibujado, para leerlo tras un await (procesarExcel) sin hacerlo dentro de un updater.
+  const camposRef = useRef(campos);
+  camposRef.current = campos;
+  const idDivision = useId();
   const [tipo, setTipo] = useState<TipoReclamo | ''>('');
   const [modoManual, setModoManual] = useState(false);
   const [sapDocs, setSapDocs] = useState<string[]>(['', '', '']);
@@ -176,15 +187,24 @@ export function NuevoReclamoForm({
   };
 
   const [catalogos, setCatalogos] = useState<CatalogosReclamo | null>(null);
+  // Falló /catalogos: los demás campos quedan como texto libre, pero la división
+  // (solo se elige, no se escribe) necesita el catálogo: se ofrece reintentar.
+  const [errorCatalogos, setErrorCatalogos] = useState(false);
+  const [intentoCatalogos, setIntentoCatalogos] = useState(0);
   useEffect(() => {
     let vivo = true;
+    setErrorCatalogos(false);
     cargarCatalogos()
       .then((c) => vivo && setCatalogos(c))
-      .catch(() => vivo && setCatalogos(CATALOGOS_VACIOS)); // sin catálogo: todo queda como texto libre
+      .catch(() => {
+        if (!vivo) return;
+        setCatalogos(CATALOGOS_VACIOS); // sin catálogo: todo queda como texto libre
+        setErrorCatalogos(true);
+      });
     return () => {
       vivo = false;
     };
-  }, []);
+  }, [intentoCatalogos]);
   const cat = catalogos ?? CATALOGOS_VACIOS;
 
   // Proveedor del catálogo -> sus mundos/departamentos/marcas/compradoras van
@@ -241,7 +261,7 @@ export function NuevoReclamoForm({
   const procesarExcel = async (file: File | null) => {
     // Todo lo que vino del archivo anterior se descarta ANTES de leer el nuevo.
     // Lo que eligió el usuario (no viene del Excel) se conserva.
-    setCampos((c) => ({ ...CAMPOS_VACIOS, origen: c.origen, compradora: c.compradora, division: c.division, comentario: c.comentario }));
+    setCampos((c) => ({ ...CAMPOS_VACIOS, origen: c.origen, compradora: c.compradora, division: c.division, comentario: c.comentario, fechaLlegadaMercancia: c.fechaLlegadaMercancia }));
     setTipo('');
     setModoManual(false);
     setPreview(null);
@@ -267,22 +287,24 @@ export function NuevoReclamoForm({
         proveedor: p.proveedor || '',
       };
       const marcados = new Set<CampoAuto>((Object.keys(delExcel) as (keyof typeof delExcel)[]).filter((k) => delExcel[k]));
-      if (p.division) marcados.add('division');
-      setCampos((c) => {
-        // Compradora y comentario solo se sugieren si el usuario no puso nada.
-        if (!c.compradora && p.compradora) marcados.add('compradora');
-        if (!c.comentario && p.comentario) marcados.add('comentario');
-        return {
-          ...c,
-          ...delExcel,
-          // La división del encabezado CEDI manda; sin ella se conserva la elegida.
-          division: p.division || c.division,
-          // Sin fecha en el Excel (la plantilla CEDI suele venir sin ella): hoy.
-          fechaRegistro: delExcel.fechaRegistro || hoyIso(),
-          compradora: c.compradora || p.compradora || '',
-          comentario: c.comentario || p.comentario || '',
-        };
-      });
+      // La división del encabezado CEDI solo se toma si es una de las permitidas (Perfumería o Cosméticos).
+      const divisionExcel = divisionDelCatalogo(p.division, cat.divisiones);
+      if (divisionExcel) marcados.add('division');
+      // Compradora y comentario solo se sugieren si el usuario no puso nada. Las
+      // marcas se calculan aquí con el estado actual, no dentro del updater.
+      const actuales = camposRef.current;
+      if (!actuales.compradora && p.compradora) marcados.add('compradora');
+      if (!actuales.comentario && p.comentario) marcados.add('comentario');
+      setCampos((c) => ({
+        ...c,
+        ...delExcel,
+        // La división del encabezado CEDI manda; sin ella se conserva la elegida.
+        division: divisionExcel || c.division,
+        // Sin fecha en el Excel (la plantilla CEDI suele venir sin ella): hoy.
+        fechaRegistro: delExcel.fechaRegistro || hoyIso(),
+        compradora: c.compradora || p.compradora || '',
+        comentario: c.comentario || p.comentario || '',
+      }));
       if (p.documentosSap.length) {
         setSapDocs([...p.documentosSap, '', '', ''].slice(0, Math.max(3, p.documentosSap.length)));
         marcados.add('sapDocs');
@@ -342,7 +364,9 @@ export function NuevoReclamoForm({
   const claveConsulta = [...clavesDocs].sort().join(',');
   useEffect(() => {
     if (!claveConsulta) {
+      // Se borró lo escrito antes de que saliera la consulta: ya no hay nada que revisar.
       setDocsUsados(new Map());
+      setRevisandoDocs(false);
       return;
     }
     // Espera a que se deje de escribir; una respuesta vieja no pisa a la nueva.
@@ -383,6 +407,8 @@ export function NuevoReclamoForm({
     !campos.origen && 'Origen',
     campos.origen === 'tienda' && !campos.sucursal.trim() && 'Sucursal',
     !campos.fechaRegistro && 'Fecha',
+    !campos.fechaLlegadaMercancia && 'Fecha de llegada de la mercancía',
+    campos.fechaLlegadaMercancia > hoyIso() && 'Fecha de llegada (no puede ser posterior a hoy)',
     campos.origen === 'cedi' && !campos.division.trim() && 'División',
     !campos.proveedor.trim() && 'Proveedor',
     !campos.compradora.trim() && 'Compradora',
@@ -425,6 +451,7 @@ export function NuevoReclamoForm({
   ].filter(Boolean) as string[];
   const bloqueo = motivos[0] ?? null;
   const [popup, setPopup] = useState<{ titulo: string; motivos: string[] } | null>(null);
+  const avisos = useAvisos();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -450,7 +477,6 @@ export function NuevoReclamoForm({
 
       setProgreso('Creando reclamo…');
       const reclamo = await apiReclamos.crearReclamo(form);
-      if (campos.division) invalidarCatalogos();
 
       // Best-effort: el reclamo ya existe; lo que falle se reintenta desde el detalle.
       const fallidos: string[] = [];
@@ -462,6 +488,8 @@ export function NuevoReclamoForm({
           fallidos.push(adj.name);
         }
       }
+      // Si algún adjunto falló, el detalle ya lo explica en su aviso; aquí solo se confirma el reclamo.
+      avisos.ok(`Reclamo ${reclamo.Numero} creado.`);
       onCreated(reclamo, fallidos);
     } catch (err) {
       const mensaje = err instanceof ApiError ? err.message : 'No se pudo crear el reclamo.';
@@ -538,15 +566,15 @@ export function NuevoReclamoForm({
     </Field>
   );
   const campoDivision = (
-    <Field label="División" tag={tag('division')} resaltar={autos.has('division')}>
-      <Combobox
+    <Field label="División" grupo idEtiqueta={idDivision} tag={tag('division')} resaltar={autos.has('division')}>
+      <SelectorOpciones
         required
         value={campos.division}
         onChange={(v) => set('division', v)}
         opciones={cat.divisiones}
-        nuevoLabel="Agregar división"
-        placeholder="Elige o escribe una nueva"
-        maxLength={100}
+        etiquetaId={idDivision}
+        error={errorCatalogos ? 'No se pudieron cargar las divisiones.' : null}
+        onReintentar={() => setIntentoCatalogos((n) => n + 1)}
       />
     </Field>
   );
@@ -765,7 +793,10 @@ export function NuevoReclamoForm({
                 </>
               )}
               <Field label="Fecha de registro" tag={tag('fechaRegistro')} resaltar={autos.has('fechaRegistro')}>
-                <Input type="date" required value={campos.fechaRegistro} onChange={(e) => set('fechaRegistro', e.target.value)} />
+                <CampoFecha required value={campos.fechaRegistro} onChange={(v) => set('fechaRegistro', v)} />
+              </Field>
+              <Field label="Llegada de la mercancía">
+                <CampoFecha required max={hoyIso()} value={campos.fechaLlegadaMercancia} onChange={(v) => set('fechaLlegadaMercancia', v)} />
               </Field>
               {campoCompradora}
               {campoMundo}
@@ -939,7 +970,7 @@ export function NuevoReclamoForm({
           <Button type="button" variant="secondary" onClick={onClose} disabled={saving}>
             Cancelar
           </Button>
-          <Button type="submit" disabled={saving} aria-disabled={Boolean(bloqueo)} className={cn(bloqueo && 'opacity-60')}>
+          <Button type="submit" estado={saving ? 'cargando' : null} aria-disabled={Boolean(bloqueo)} className={cn(bloqueo && 'opacity-60')}>
             <Upload size={15} /> {saving ? 'Guardando…' : 'Crear reclamo'}
           </Button>
         </div>

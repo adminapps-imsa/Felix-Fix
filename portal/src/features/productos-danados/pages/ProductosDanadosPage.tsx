@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { PackageSearch, Plus } from 'lucide-react';
+import { PackageSearch, Plus, SearchX } from 'lucide-react';
+import { EstadoVacio } from '../../../components/ui/EstadoVacio';
 import { BandaPagina, TituloPagina } from '../../../components/ui/TituloPagina';
 import { Button } from '../../../components/ui/Button';
 import { RequirePermiso } from '../../../auth/RequirePermiso';
@@ -28,7 +29,7 @@ export function ProductosDanadosPage() {
   // Quien solo trabaja una etapa (supervisor GOF, Gof, contabilidad) abre con
   // la lista filtrada en lo que le toca; puede quitar el filtro.
   const [filtros, setFiltros] = useState<Filtros>(() => {
-    if (estadoEnlace && estadoEnlace in ESTADO_LABEL) return { ...FILTROS_INICIALES, estado: estadoEnlace as Estado };
+    if (estadoEnlace && Object.hasOwn(ESTADO_LABEL, estadoEnlace)) return { ...FILTROS_INICIALES, estado: estadoEnlace as Estado };
     if (puede(P.pdVer, P.pdAprobar)) return FILTROS_INICIALES;
     // Gof trabaja dos etapas (NF y Devolución aprobada): abre sin filtro, ya ve solo lo suyo.
     if (puede(P.pdNfDocumento) && puede(P.pdDocumentar)) return FILTROS_INICIALES;
@@ -42,11 +43,42 @@ export function ProductosDanadosPage() {
     ? ['Rechazado', 'NFValidacion', ...(puede(P.pdDocumentar) ? (['Aprobado', 'EnContabilidad'] as Estado[]) : []), 'Cerrado']
     : undefined;
   const [showNuevo, setShowNuevo] = useState(() => params.get('nuevo') === '1' && puede(P.pdCrear));
-  const [seleccionado, setSeleccionado] = useState<ReporteProductoDanado | null>(null);
+  // Desde el Tablero se llega a un reporte puntual (?reporte=52): se abre su detalle.
+  const [seleccionado, setSeleccionado] = useState<Pick<ReporteProductoDanado, 'ReporteId'> | null>(() => {
+    const id = Number(params.get('reporte'));
+    return Number.isInteger(id) && id > 0 ? { ReporteId: id } : null;
+  });
 
   const tiendas = useTiendas();
   const { data, pagination, loading, error, reload, reloadToken } = useProductosDanados(filtros);
   const kpis = useKpis(filtros, reloadToken);
+  // La página no cuenta como filtro: con ella cambia la «tanda» de filas pero no el texto del vacío.
+  const { page: _p, pageSize: _ps, ...soloFiltros } = filtros;
+  const hayFiltros = Object.values(soloFiltros).some(Boolean);
+  const vacio = hayFiltros ? (
+    <EstadoVacio
+      icono={SearchX}
+      titulo="No hay reportes con estos filtros"
+      accion={
+        <Button variant="ghost" onClick={() => setFiltros(FILTROS_INICIALES)}>
+          Quitar filtros
+        </Button>
+      }
+    />
+  ) : (
+    <EstadoVacio
+      icono={PackageSearch}
+      titulo="Todavía no hay reportes"
+      texto={puede(P.pdCrear) ? 'Cuando reportes un producto dañado aparecerá aquí.' : 'Cuando se reporte un producto dañado aparecerá aquí.'}
+      accion={
+        puede(P.pdCrear) && (
+          <Button onClick={() => setShowNuevo(true)}>
+            <Plus size={16} /> Nuevo reporte
+          </Button>
+        )
+      }
+    />
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -65,9 +97,7 @@ export function ProductosDanadosPage() {
 
       <FiltersBar filtros={filtros} onChange={setFiltros} tiendas={tiendas} />
 
-      {error && <div className="anim-aparecer rounded-xl border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
-
-      <ReportesTable data={data} loading={loading} onSelect={setSeleccionado} />
+      <ReportesTable data={data} loading={loading} error={error} onReintentar={reload} vacio={vacio} clave={JSON.stringify(filtros)} onSelect={setSeleccionado} />
 
       {pagination && <Pagination meta={pagination} onPageChange={(page) => setFiltros((f) => ({ ...f, page }))} />}
 

@@ -1,8 +1,8 @@
-import { CheckCircle2, Clock, Bell, XCircle } from 'lucide-react';
+import { CheckCircle2, Clock, Bell, XCircle, Undo2, Truck } from 'lucide-react';
 import type React from 'react';
 import { cn } from '../../../lib/cn';
-import type { StatusReclamo, TipoReclamo } from '../../../types/reclamo';
-import { STATUS_LABEL, TIPO_LABEL_CORTO } from '../lib/tipos';
+import type { Reclamo, StatusReclamo, TipoReclamo } from '../../../types/reclamo';
+import { STATUS_LABEL, TIPO_LABEL_CORTO, esDevolucion, formatFechaCorta } from '../lib/tipos';
 
 // Mismos colores que EstadoBadge de Productos Dañados.
 const STATUS_STYLE: Record<StatusReclamo, string> = {
@@ -10,6 +10,8 @@ const STATUS_STYLE: Record<StatusReclamo, string> = {
   notificado: 'bg-brand-500/15 text-brand-600 dark:text-brand-400 border border-brand-500/30',
   resuelto: 'bg-success/15 text-success border border-success/30',
   rechazado: 'bg-danger/15 text-danger border border-danger/30',
+  // Devuelto a quien lo creó: le toca corregirlo.
+  devuelto: 'bg-brand-500/15 text-brand-600 dark:text-brand-400 border border-brand-500/30',
 };
 
 const STATUS_ICON: Record<StatusReclamo, React.ReactNode> = {
@@ -17,6 +19,7 @@ const STATUS_ICON: Record<StatusReclamo, React.ReactNode> = {
   notificado: <Bell size={12} />,
   resuelto: <CheckCircle2 size={12} />,
   rechazado: <XCircle size={12} />,
+  devuelto: <Undo2 size={12} />,
 };
 
 export function StatusReclamoBadge({ status, className }: { status: StatusReclamo; className?: string }) {
@@ -40,6 +43,23 @@ export function TipoBadge({ tipo, count, activo }: { tipo: TipoReclamo; count?: 
     >
       {TIPO_LABEL_CORTO[tipo]}
       {count !== undefined && <span className="opacity-80">· {count}</span>}
+    </span>
+  );
+}
+
+/**
+ * Reclamos de devolución: si el proveedor ya retiró el producto (verde, con el
+ * día) o si falta. En los demás reclamos no muestra nada.
+ */
+export function RetiroBadge({ reclamo, className }: { reclamo: Pick<Reclamo, 'Tipo' | 'LineasDevolucion' | 'RetiroProveedorFecha'>; className?: string }) {
+  if (!esDevolucion(reclamo)) return null;
+  return reclamo.RetiroProveedorFecha ? (
+    <span className={cn('badge-pill border border-success/30 bg-success/15 text-success', className)} title={`El proveedor retiró el producto el ${formatFechaCorta(reclamo.RetiroProveedorFecha)}`}>
+      <Truck size={12} /> Retirado
+    </span>
+  ) : (
+    <span className={cn('badge-pill border border-black/10 bg-black/5 dark:border-white/15 dark:bg-white/10', className)} title="El proveedor todavía no retira el producto">
+      <Truck size={12} /> Retiro pendiente
     </span>
   );
 }

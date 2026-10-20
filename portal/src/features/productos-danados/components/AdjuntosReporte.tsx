@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import type React from 'react';
-import { Eye, FileSpreadsheet, FileText, Paperclip, Trash2 } from 'lucide-react';
+import { Eye, FileSpreadsheet, FileText, Loader2, Paperclip, Trash2 } from 'lucide-react';
 import { Button } from '../../../components/ui/Button';
+import { useAvisos } from '../../../components/ui/Avisos';
 import { ApiError, guardarBlob } from '../../../api/client';
 import * as apiProductosDanados from '../../../api/productosDanados';
 import { formatFecha } from '../../../lib/formatters';
@@ -32,12 +33,13 @@ export function AdjuntosReporte({
   const [subiendo, setSubiendo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { adjuntoMb: ADJUNTO_MAX_MB, correoMb } = useLimites();
+  const avisos = useAvisos();
   const id = reporte.ReporteId;
   const esGof = etapa === 'gof';
   const lista = reporte.Adjuntos.map((adj, idx) => ({ adj, idx })).filter(({ adj }) => (adj.etapa === 'gof') === esGof);
   const subir = esGof ? apiProductosDanados.subirDocumentoGof : apiProductosDanados.subirAdjunto;
 
-  const descargar = async (idx: number, adj: AdjuntoReporte) => guardarBlob(await apiProductosDanados.descargarAdjunto(id, idx), adj.originalname);
+  const descargar = async (idx: number, adj: AdjuntoReporte) => guardarBlob(await apiProductosDanados.descargarAdjunto(id, idx, adj.filename), adj.originalname);
 
   const handleSubir = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -48,15 +50,22 @@ export function AdjuntosReporte({
     const grandes = files.filter((f) => f.size > ADJUNTO_MAX_MB * 1024 * 1024);
     for (const f of grandes) fallidos.push(`${f.name}: pesa ${(f.size / 1024 / 1024).toFixed(1)} MB (máximo ${ADJUNTO_MAX_MB} MB)`);
     const aSubir = files.filter((f) => !grandes.includes(f));
+    let subidos = 0;
     for (const [i, f] of aSubir.entries()) {
       setSubiendo(`Subiendo ${i + 1} de ${aSubir.length}…`);
       try {
         onActualizado(await subir(id, f));
+        subidos++;
       } catch (err) {
         fallidos.push(`${f.name}: ${err instanceof ApiError ? err.message : 'error'}`);
       }
     }
     setSubiendo(null);
+    // Lo que sí subió se confirma con un aviso; lo que falló queda escrito aquí abajo.
+    if (subidos) {
+      const que = esGof ? (subidos === 1 ? 'documento' : 'documentos') : subidos === 1 ? 'archivo' : 'archivos';
+      avisos.ok(subidos === 1 ? `Se subió 1 ${que}.` : `Se subieron ${subidos} ${que}.`);
+    }
     if (fallidos.length) setError(`No se pudieron subir: ${fallidos.join(' · ')}`);
   };
 
@@ -88,7 +97,7 @@ export function AdjuntosReporte({
       {error && <p className="text-xs text-danger">{error}</p>}
       {editable && (
         <label className="flex w-fit cursor-pointer items-center gap-2 rounded-full border border-dashed border-black/20 px-4 py-2 text-sm hover:border-brand-500/50 dark:border-white/20">
-          <Paperclip size={15} className="opacity-60" />
+          {subiendo ? <Loader2 size={15} className="animate-spin opacity-60" aria-hidden /> : <Paperclip size={15} className="opacity-60" />}
           {subiendo || (esGof ? 'Subir documento (PDF o Excel)' : 'Agregar archivo (PDF o Excel)')}
           <input type="file" multiple accept=".xlsx,.xls,.pdf,application/pdf" className="hidden" disabled={Boolean(subiendo)} onChange={handleSubir} />
         </label>
@@ -104,14 +113,14 @@ export function AdjuntosReporte({
         (vista.adj.tipo === 'pdf' ? (
           <PdfPreviewModal
             titulo={vista.adj.originalname}
-            cargar={() => apiProductosDanados.descargarAdjunto(id, vista.idx)}
+            cargar={() => apiProductosDanados.descargarAdjunto(id, vista.idx, vista.adj.filename)}
             onDescargar={() => descargar(vista.idx, vista.adj)}
             onClose={() => setVista(null)}
           />
         ) : (
           <ExcelPreviewModal
             titulo={vista.adj.originalname}
-            cargar={async () => (await apiProductosDanados.descargarAdjunto(id, vista.idx)).arrayBuffer()}
+            cargar={async () => (await apiProductosDanados.descargarAdjunto(id, vista.idx, vista.adj.filename)).arrayBuffer()}
             onDescargar={() => descargar(vista.idx, vista.adj)}
             onClose={() => setVista(null)}
           />
@@ -123,8 +132,9 @@ export function AdjuntosReporte({
           textoConfirmar="Eliminar"
           onClose={() => setAEliminar(null)}
           onConfirm={async () => {
-            onActualizado(await apiProductosDanados.eliminarAdjunto(id, aEliminar.idx));
+            onActualizado(await apiProductosDanados.eliminarAdjunto(id, aEliminar.idx, aEliminar.adj.filename));
             setAEliminar(null);
+            avisos.ok(`${esGof ? 'Documento' : 'Adjunto'} «${aEliminar.adj.originalname}» eliminado.`);
           }}
         >
           ¿Eliminar <strong>{aEliminar.adj.originalname}</strong>? No se puede deshacer.

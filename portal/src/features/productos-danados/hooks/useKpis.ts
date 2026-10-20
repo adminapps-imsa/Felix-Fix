@@ -3,7 +3,8 @@ import * as apiProductosDanados from '../../../api/productosDanados';
 import type { Filtros, Kpis } from '../../../types/productoDanado';
 
 export function useKpis(filtrosLista: Filtros, reloadToken: number) {
-  const [kpis, setKpis] = useState<Kpis | null>(null);
+  // `undefined` mientras llega la primera respuesta (esqueleto); `null` si falló («—»).
+  const [kpis, setKpis] = useState<Kpis | null | undefined>(undefined);
   // Cada tarjeta es un estado: el filtro de estado (y la página) no aplica a los conteos.
   const { estado: _e, page: _p, ...filtros } = filtrosLista;
 

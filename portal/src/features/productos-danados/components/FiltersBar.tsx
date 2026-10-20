@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { Input, Select } from '../../../components/ui/Input';
+import { CampoFecha } from '../../../components/ui/CampoFecha';
 import { ESTADO_LABEL } from '../../../types/productoDanado';
 import { useCatalogos } from '../hooks/useCatalogos';
 import type { Filtros, Tienda } from '../../../types/productoDanado';
@@ -79,11 +80,11 @@ export function FiltersBar({
       <div className="flex gap-2 lg:col-span-2">
         <label className="flex min-w-[8.75rem] flex-1 flex-col gap-0.5">
           <span className="text-xs font-medium opacity-70">Desde</span>
-          <Input type="date" aria-label="Fecha desde" value={filtros.fechaDesde || ''} max={filtros.fechaHasta || undefined} onChange={(e) => set('fechaDesde', e.target.value)} />
+          <CampoFecha aria-label="Fecha desde" value={filtros.fechaDesde || ''} max={filtros.fechaHasta || undefined} onChange={(v) => set('fechaDesde', v)} />
         </label>
         <label className="flex min-w-[8.75rem] flex-1 flex-col gap-0.5">
           <span className="text-xs font-medium opacity-70">Hasta</span>
-          <Input type="date" aria-label="Fecha hasta" value={filtros.fechaHasta || ''} min={filtros.fechaDesde || undefined} onChange={(e) => set('fechaHasta', e.target.value)} />
+          <CampoFecha aria-label="Fecha hasta" value={filtros.fechaHasta || ''} min={filtros.fechaDesde || undefined} onChange={(v) => set('fechaHasta', v)} />
         </label>
       </div>
     </GlassCard>

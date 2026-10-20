@@ -41,10 +41,10 @@ export function RechazarModal({
           <Textarea rows={4} value={motivo} onChange={(e) => setMotivo(e.target.value)} maxLength={500} required />
         </Field>
         <div className="flex justify-end gap-2">
-          <Button type="button" variant="secondary" onClick={onClose}>
+          <Button type="button" variant="secondary" onClick={onClose} disabled={saving}>
             Cancelar
           </Button>
-          <Button type="submit" variant="danger" disabled={saving}>
+          <Button type="submit" variant="danger" estado={saving ? 'cargando' : null}>
             {saving ? 'Guardando…' : 'Confirmar NF'}
           </Button>
         </div>

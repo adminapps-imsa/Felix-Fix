@@ -1,22 +1,27 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { AlertTriangle, ArrowLeft, Building2, CheckCircle2, ClipboardList, FileText, Landmark, Send, Trash2, XCircle } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Building2, CheckCircle2, ClipboardList, FileText, Landmark, Send, Trash2, Undo2, XCircle } from 'lucide-react';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { BandaPagina } from '../../../components/ui/TituloPagina';
 import { Dato, SeccionDatos } from '../../../components/ui/DatosDetalle';
 import { RutaCaso, type PasoRuta } from '../../../components/ui/RutaCaso';
 import { Button } from '../../../components/ui/Button';
 import { Textarea } from '../../../components/ui/Input';
+import { EsqueletoDetalle } from '../../../components/ui/Esqueleto';
+import { BotonReintentar, EstadoVacio } from '../../../components/ui/EstadoVacio';
+import { useAvisos } from '../../../components/ui/Avisos';
 import { ApiError } from '../../../api/client';
 import * as apiReclamos from '../../../api/reclamos';
 import { formatFecha } from '../../../lib/formatters';
 import type { Reclamo, ReclamoLinea } from '../../../types/reclamo';
-import { StatusReclamoBadge } from '../components/Badges';
+import { RetiroBadge, StatusReclamoBadge } from '../components/Badges';
 import { ProductosSection } from '../components/ProductosSection';
 import { AdjuntosSection } from '../components/AdjuntosSection';
 import { ConfirmModal } from '../components/ConfirmModal';
+import { DevolucionReclamo, DevolverModal } from '../components/DevolucionReclamo';
+import { RetiroProveedor } from '../components/RetiroProveedor';
 import { usePermisosReclamos } from '../lib/usePermisosReclamos';
-import { TIPO_LABEL, formatFechaCorta } from '../lib/tipos';
+import { TIPO_LABEL, formatFechaCorta, esDevolucion } from '../lib/tipos';
 
 export function ReclamoDetallePage() {
   const { token = '' } = useParams();
@@ -32,27 +37,52 @@ export function ReclamoDetallePage() {
   const [lineas, setLineas] = useState<ReclamoLinea[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [confirmarEliminar, setConfirmarEliminar] = useState(false);
+  const avisos = useAvisos();
+
+  // Token vigente: al pasar de un reclamo a otro, una respuesta tardía del
+  // anterior no debe pisar al nuevo (ni la carga inicial ni las recargas sueltas).
+  const tokenActual = useRef(token);
+  tokenActual.current = token;
 
   const cargar = useCallback(() => {
+    let cancelado = false;
     setError(null);
+    setReclamo(null);
+    setLineas([]);
     Promise.all([apiReclamos.obtenerReclamo(token), apiReclamos.obtenerLineas(token)])
       .then(([r, ls]) => {
+        if (cancelado) return;
         setReclamo(r);
         setLineas(ls);
       })
-      .catch((err) => setError(err instanceof ApiError && err.status === 404 ? 'El reclamo no existe o fue eliminado.' : 'No se pudo cargar el reclamo.'));
+      .catch((err) => {
+        if (cancelado) return;
+        setError(err instanceof ApiError && err.status === 404 ? 'El reclamo no existe o fue eliminado.' : 'No se pudo cargar el reclamo.');
+      });
+    return () => {
+      cancelado = true;
+    };
   }, [token]);
 
   useEffect(cargar, [cargar]);
 
+  /** Vuelve a pedir el encabezado; se descarta si mientras tanto se cambió de reclamo. */
+  const recargarReclamo = () => {
+    const pedido = token;
+    apiReclamos
+      .obtenerReclamo(pedido)
+      .then((r) => tokenActual.current === pedido && setReclamo(r))
+      .catch(() => {});
+  };
+
   const actualizarLinea = (l: ReclamoLinea) => {
     setLineas((ls) => ls.map((x) => (x.Posicion === l.Posicion ? l : x)));
     // El encabezado lleva el conteo de pendientes.
-    apiReclamos.obtenerReclamo(token).then(setReclamo).catch(() => {});
+    recargarReclamo();
   };
   const actualizarLineas = (ls: ReclamoLinea[]) => {
     setLineas(ls);
-    apiReclamos.obtenerReclamo(token).then(setReclamo).catch(() => {});
+    recargarReclamo();
   };
 
   if (error) {
@@ -61,17 +91,37 @@ export function ReclamoDetallePage() {
         <BandaPagina>
           <BackLink />
         </BandaPagina>
-        <div className="anim-aparecer rounded-xl border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>
+        <GlassCard className="!p-0">
+          <EstadoVacio
+            icono={ClipboardList}
+            tono="error"
+            titulo={error}
+            // Si no existe, reintentar no sirve: solo queda volver a la lista.
+            accion={error.startsWith('No se pudo') ? <BotonReintentar onClick={cargar} /> : undefined}
+          />
+        </GlassCard>
       </div>
     );
   }
-  if (!reclamo) return <p className="text-sm opacity-60">Cargando…</p>;
+  if (!reclamo)
+    return (
+      <div className="flex flex-col gap-6">
+        <BandaPagina detalle>
+          <BackLink />
+        </BandaPagina>
+        <EsqueletoDetalle />
+      </div>
+    );
 
   const cerrado = reclamo.Status === 'resuelto' || reclamo.Status === 'rechazado';
   // Igual que el backend (409): ya enviado a contabilidad o cerrado, no se elimina ni se tocan los adjuntos.
   const bloqueado = cerrado || Boolean(reclamo.EnviadoContabilidadAt);
   // Quien decide o tiene "Adjuntar en cualquier reclamo" (Torre de Control) adjunta en cualquiera; quien crea, en los suyos.
   const puedeAdjuntar = Boolean(permisos?.puedeAdjuntar) || (Boolean(permisos?.puedeCrear) && permisos?.username === reclamo.CreatedBy);
+  // Devuelto por la compradora: lo corrige quien lo creó (o el super administrador), que también puede quitar adjuntos.
+  const devuelto = reclamo.Status === 'devuelto';
+  const puedeCorregir =
+    devuelto && Boolean(permisos?.puedeCrear) && (permisos?.username === reclamo.CreatedBy || Boolean(permisos?.puedeCorregirCualquiera));
 
   return (
     <div className="flex flex-col gap-6">
@@ -87,11 +137,19 @@ export function ReclamoDetallePage() {
         )}
         <span className="etiqueta">Reclamo</span>
         <h1 className="numero-caso text-5xl">{reclamo.Numero}</h1>
-        <StatusReclamoBadge status={reclamo.Status} className="mt-1" />
+        <div className="mt-1 flex flex-wrap justify-center gap-2">
+          <StatusReclamoBadge status={reclamo.Status} />
+          <RetiroBadge reclamo={reclamo} />
+        </div>
         <RutaCaso pasos={rutaReclamo(reclamo)} className="mt-5 w-full max-w-3xl text-left" />
       </GlassCard>
       {/* Debajo de la tarjeta principal: sobre la franja de color no se leería. */}
       {aviso && <div className="rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-sm">{aviso}</div>}
+
+      <DevolucionReclamo reclamo={reclamo} puedeCorregir={puedeCorregir} onActualizado={setReclamo} />
+
+      {/* Devolución al proveedor: Gof marca cuándo retiró el producto (no cambia el flujo). */}
+      {esDevolucion(reclamo) && <RetiroProveedor reclamo={reclamo} puedeRegistrar={Boolean(permisos?.puedeRegistrarRetiro)} onActualizado={setReclamo} />}
 
       <GlassCard className="flex flex-col gap-5">
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3 lg:gap-0 lg:divide-x lg:divide-black/5 dark:lg:divide-white/5">
@@ -101,6 +159,7 @@ export function ReclamoDetallePage() {
             {reclamo.Origen === 'tienda' && <Dato label="Sucursal" value={reclamo.Sucursal} />}
             {reclamo.Origen === 'cedi' && <Dato label="División" value={reclamo.Division} />}
             <Dato label="Fecha de registro" value={formatFechaCorta(reclamo.FechaRegistro)} />
+            <Dato label="Llegada de la mercancía" value={formatFechaCorta(reclamo.FechaLlegadaMercancia)} />
           </SeccionDatos>
           <SeccionDatos icono={<Building2 size={15} />} titulo="Proveedor y mercancía" className="lg:px-6">
             <Dato label="Proveedor" value={reclamo.Proveedor} />
@@ -130,6 +189,7 @@ export function ReclamoDetallePage() {
         <DecisionReclamo
           reclamo={reclamo}
           pendientes={lineas.filter((l) => l.DecStatus === 'pendiente').length}
+          puedeDevolver={Boolean(permisos?.puedeDevolver) && Boolean(reclamo.CreatedBy)}
           onDecidido={setReclamo}
         />
       )}
@@ -138,11 +198,11 @@ export function ReclamoDetallePage() {
         <EnvioContabilidad reclamo={reclamo} puedeEnviar={puedeEnviarContabilidad && cerrado} onEnviado={setReclamo} />
       )}
 
-      <ProductosSection token={reclamo.Token} lineas={lineas} esAdmin={puedeDecidir} cerrado={cerrado} onLineaActualizada={actualizarLinea} onLineasActualizadas={actualizarLineas} />
+      <ProductosSection token={reclamo.Token} lineas={lineas} esAdmin={puedeDecidir} cerrado={cerrado || devuelto} onLineaActualizada={actualizarLinea} onLineasActualizadas={actualizarLineas} />
 
       <AdjuntosSection
         reclamo={reclamo}
-        esAdmin={puedeEliminar && !reclamo.EnviadoContabilidadAt}
+        esAdmin={(puedeEliminar || puedeCorregir) && !reclamo.EnviadoContabilidadAt}
         puedeAdjuntar={puedeAdjuntar && (!bloqueado || Boolean(permisos?.puedeAdjuntarCerrado))}
         onActualizado={setReclamo}
       />
@@ -154,6 +214,7 @@ export function ReclamoDetallePage() {
           onClose={() => setConfirmarEliminar(false)}
           onConfirm={async () => {
             await apiReclamos.eliminarReclamo(reclamo.Token);
+            avisos.ok(`Reclamo ${reclamo.Numero} eliminado.`);
             navigate('/reclamos', { replace: true });
           }}
         >
@@ -192,6 +253,7 @@ function EnvioContabilidad({
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
+  const avisos = useAvisos();
   const nArchivos = (reclamo.TieneExcel ? 1 : 0) + reclamo.AdjuntosExtra.length;
   const nPdf = reclamo.AdjuntosExtra.filter((a) => a.tipo === 'pdf').length;
   // Con productos aprobados, primero se sube la nota de débito validada (sección Adjuntos).
@@ -210,6 +272,7 @@ function EnvioContabilidad({
         setAviso(`Se envió, pero el servidor de correo rechazó: ${envio.rechazados.join(', ')}. Esas direcciones no lo recibieron.`);
       } else {
         setOk(`Enviado a ${envio.para.join(', ')}${envio.cc.length ? ` (copia a ${envio.cc.join(', ')})` : ''}.`);
+        avisos.ok(`Reclamo ${reclamo.Numero} enviado a contabilidad.`);
       }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo enviar a contabilidad.');
@@ -252,7 +315,7 @@ function EnvioContabilidad({
           {ok && <p className="text-sm text-success">{ok}</p>}
           {aviso && <p className="text-sm text-warning">{aviso}</p>}
           <div className="flex justify-end">
-            <Button disabled={busy} onClick={enviar}>
+            <Button estado={busy ? 'cargando' : null} onClick={enviar}>
               <Send size={15} /> {busy ? 'Enviando…' : reclamo.EnviadoContabilidadAt ? 'Reenviar a contabilidad' : 'Enviar a contabilidad'}
             </Button>
           </div>
@@ -265,25 +328,31 @@ function EnvioContabilidad({
 function DecisionReclamo({
   reclamo,
   pendientes,
+  puedeDevolver,
   onDecidido,
 }: {
   reclamo: Reclamo;
   pendientes: number;
+  puedeDevolver: boolean;
   onDecidido: (r: Reclamo) => void;
 }) {
   const [comentario, setComentario] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [devolver, setDevolver] = useState(false);
+  // Cuál de los dos botones está trabajando (para su ruedita); los demás solo se apagan.
+  const [busy, setBusy] = useState<'resuelto' | 'rechazado' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const avisos = useAvisos();
 
   const decidir = async (status: 'resuelto' | 'rechazado') => {
-    setBusy(true);
+    setBusy(status);
     setError(null);
     try {
       onDecidido(await apiReclamos.decidirReclamo(reclamo.Token, status, comentario));
+      avisos.ok(`Reclamo ${reclamo.Numero} ${status === 'resuelto' ? 'confirmado' : 'rechazado'}.`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo guardar la decisión.');
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   };
 
@@ -297,14 +366,21 @@ function DecisionReclamo({
       )}
       <Textarea rows={2} placeholder="Comentario (opcional)" value={comentario} maxLength={1000} onChange={(e) => setComentario(e.target.value)} />
       {error && <p className="text-sm text-danger">{error}</p>}
-      <div className="flex justify-end gap-2">
-        <Button variant="danger" disabled={busy || pendientes > 0} title={pendientes > 0 ? 'Primero decide todos los productos' : undefined} onClick={() => decidir('rechazado')}>
+      <div className="flex flex-wrap justify-end gap-2">
+        {puedeDevolver && (
+          // Amarillo y grande, para que se vea: si algo está mal, se devuelve con un comentario.
+          <Button variant="aviso" tamano="grande" className="sm:mr-auto" disabled={Boolean(busy)} onClick={() => setDevolver(true)} title="Algo está mal: devuélvelo con un comentario para que lo corrijan">
+            <Undo2 size={18} /> Devolver a {reclamo.CreatedByNombre || reclamo.CreatedBy}
+          </Button>
+        )}
+        <Button variant="danger" disabled={Boolean(busy) || pendientes > 0} estado={busy === 'rechazado' ? 'cargando' : null} title={pendientes > 0 ? 'Primero decide todos los productos' : undefined} onClick={() => decidir('rechazado')}>
           <XCircle size={15} /> Rechazar reclamo
         </Button>
-        <Button disabled={busy || pendientes > 0} title={pendientes > 0 ? 'Primero decide todos los productos' : undefined} onClick={() => decidir('resuelto')}>
+        <Button disabled={Boolean(busy) || pendientes > 0} estado={busy === 'resuelto' ? 'cargando' : null} title={pendientes > 0 ? 'Primero decide todos los productos' : undefined} onClick={() => decidir('resuelto')}>
           <CheckCircle2 size={15} /> Confirmar reclamo
         </Button>
       </div>
+      {devolver && <DevolverModal reclamo={reclamo} onClose={() => setDevolver(false)} onDevuelto={(r) => (onDecidido(r), setDevolver(false))} />}
     </GlassCard>
   );
 }
@@ -326,7 +402,9 @@ function rutaReclamo(r: Reclamo): PasoRuta[] {
           fecha: r.DecisionAt,
           quien: r.DecisionByNombre || r.DecisionBy,
         }
-      : {
+      : r.Status === 'devuelto'
+        ? { titulo: 'Con comentario de compradora', estado: 'actual', nota: `Esperando la corrección de ${r.CreatedByNombre || r.CreatedBy}` }
+        : {
           titulo: 'Decisión de la compradora',
           estado: 'actual',
           nota: r.LineasPendientes ? `Faltan ${r.LineasPendientes} producto${r.LineasPendientes === 1 ? '' : 's'}` : 'Lista para cerrar',

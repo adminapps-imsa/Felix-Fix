@@ -2,15 +2,9 @@ import React, { useId, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Plus } from 'lucide-react';
 import { cn } from '../../lib/cn';
 import { Input } from './Input';
+import { normalizarTexto } from '../../lib/texto';
 
 const MAX_VISIBLES = 50;
-
-const normalizar = (s: string) =>
-  s
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toUpperCase()
-    .trim();
 
 /**
  * Campo de texto con lista desplegable filtrada: se elige una opción o se
@@ -55,7 +49,7 @@ export function Combobox({
       [opciones, false],
     ] as const) {
       for (const valor of lista) {
-        const norm = normalizar(valor);
+        const norm = normalizarTexto(valor);
         if (vistos.has(norm)) continue;
         vistos.add(norm);
         todas.push({ valor, norm, sugerida });
@@ -64,7 +58,7 @@ export function Combobox({
     return todas;
   }, [opciones, sugeridas]);
 
-  const buscado = normalizar(value);
+  const buscado = normalizarTexto(value);
   const filtradas = useMemo(() => {
     const out = [];
     for (const o of indice) {

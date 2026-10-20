@@ -23,9 +23,28 @@ const SIZE_CLASS: Record<Size, string> = {
  * Escape cierra solo el modal de más arriba. `dismissible={false}` (formularios
  * largos o con texto escrito): ni el clic en el fondo ni Escape lo cierran, solo
  * sus botones. Al abrir, el foco entra al diálogo y al cerrar vuelve a donde estaba.
+ * Tab y Shift+Tab dan la vuelta dentro del diálogo de más arriba (no se escapan
+ * a la página de atrás).
  */
-// Pila de modales abiertos: Escape solo debe cerrar el de encima.
+// Pila de modales abiertos: Escape y la trampa de Tab solo actúan en el de encima.
 const pila: symbol[] = [];
+
+const ENFOCABLES =
+  'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), iframe, [contenteditable="true"], [tabindex]:not([tabindex="-1"])';
+
+/** Elementos a los que llega Tab dentro del diálogo, en orden. */
+function tabulables(raiz: HTMLElement): HTMLElement[] {
+  const todos = Array.from(raiz.querySelectorAll<HTMLElement>(ENFOCABLES)).filter(
+    // Fuera los ocultos (display:none, p. ej. el input de archivo con class="hidden") y los tabIndex negativos.
+    (el) => el.tabIndex >= 0 && el.getClientRects().length > 0
+  );
+  // De un grupo de radios Tab solo pasa por el marcado (o por uno si ninguno lo está).
+  return todos.filter((el) => {
+    if (!(el instanceof HTMLInputElement) || el.type !== 'radio' || !el.name) return true;
+    const grupo = todos.filter((x): x is HTMLInputElement => x instanceof HTMLInputElement && x.type === 'radio' && x.name === el.name);
+    return el.checked || (!grupo.some((x) => x.checked) && grupo[0] === el);
+  });
+}
 
 export function Modal({
   title,
@@ -63,10 +82,35 @@ export function Modal({
     // Foco inicial dentro del diálogo, salvo que un hijo ya lo tomara (autoFocus).
     if (!dialogo.current?.contains(document.activeElement)) dialogo.current?.focus();
     const tecla = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape' || e.defaultPrevented || pila[pila.length - 1] !== id) return;
-      if (!dismissibleRef.current) return;
+      if (e.defaultPrevented || pila[pila.length - 1] !== id) return;
+      if (e.key === 'Tab') return atraparTab(e);
+      if (e.key !== 'Escape' || !dismissibleRef.current) return;
       e.preventDefault();
       onCloseRef.current();
+    };
+    const atraparTab = (e: KeyboardEvent) => {
+      const raiz = dialogo.current;
+      if (!raiz) return;
+      const activo = document.activeElement;
+      // Si el foco está en otra capa fuera del diálogo (p. ej. la foto ampliada
+      // del visor de Excel, que va en su propio portal), no se toca.
+      if (activo && activo !== document.body && !raiz.contains(activo)) return;
+      const lista = tabulables(raiz);
+      if (!lista.length) {
+        e.preventDefault();
+        raiz.focus();
+        return;
+      }
+      const primero = lista[0];
+      const ultimo = lista[lista.length - 1];
+      const fuera = !activo || activo === document.body || activo === raiz;
+      if (e.shiftKey && (fuera || activo === primero)) {
+        e.preventDefault();
+        ultimo.focus();
+      } else if (!e.shiftKey && (fuera || activo === ultimo)) {
+        e.preventDefault();
+        primero.focus();
+      }
     };
     document.addEventListener('keydown', tecla);
     return () => {

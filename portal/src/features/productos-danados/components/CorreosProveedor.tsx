@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Mail, Plus, Save, Send, X } from 'lucide-react';
+import { Loader2, Mail, Plus, Save, Send, X } from 'lucide-react';
+import { useAvisos } from '../../../components/ui/Avisos';
 import { ApiError } from '../../../api/client';
 import { useAuth } from '../../../auth/useAuth';
 import { P } from '../../../auth/permisos';
@@ -33,9 +34,9 @@ export function CorreosProveedor({
   const [texto, setTexto] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
-  const [guardado, setGuardado] = useState(false);
   const [enviar, setEnviar] = useState(false);
   const { puede } = useAuth();
+  const avisos = useAvisos();
   // El envío (y reenvío) al proveedor solo se hace mientras el reporte está Pendiente (el backend responde 409 si no).
   const puedeEnviar = puede(P.pdEnviar) && reporte.Estado === 'Pendiente';
 
@@ -62,7 +63,6 @@ export function CorreosProveedor({
     setCorreos(lista);
     setTexto('');
     setError(null);
-    setGuardado(false);
   };
 
   const guardar = async () => {
@@ -70,7 +70,8 @@ export function CorreosProveedor({
     setError(null);
     try {
       onActualizado(await apiProductosDanados.guardarCorreos(reporte.ReporteId, correos));
-      setGuardado(true);
+      // La confirmación va en un aviso flotante (antes quedaba un texto pegado debajo).
+      avisos.ok('Correos del proveedor guardados.');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudieron guardar los correos.');
     } finally {
@@ -94,10 +95,7 @@ export function CorreosProveedor({
                   type="button"
                   aria-label={`Quitar ${c}`}
                   className="grid h-5 w-5 place-items-center rounded-full opacity-60 hover:bg-black/10 hover:opacity-100 dark:hover:bg-white/10"
-                  onClick={() => {
-                    setCorreos((l) => l.filter((x) => x !== c));
-                    setGuardado(false);
-                  }}
+                  onClick={() => setCorreos((l) => l.filter((x) => x !== c))}
                 >
                   <X size={12} />
                 </button>
@@ -135,12 +133,12 @@ export function CorreosProveedor({
               className={`${MINI_BOTON} bg-brand-500 text-white hover:bg-brand-600 dark:bg-brand-400 dark:text-slate-950 dark:hover:bg-brand-500`}
               onClick={guardar}
               disabled={!cambios || guardando}
+              aria-busy={guardando || undefined}
             >
-              <Save size={13} /> {guardando ? 'Guardando…' : 'Guardar correos'}
+              {guardando ? <Loader2 size={13} className="animate-spin" aria-hidden /> : <Save size={13} />} {guardando ? 'Guardando…' : 'Guardar correos'}
             </button>
           </div>
           {cambios && !guardando && <p className="text-xs text-warning">Hay cambios sin guardar.</p>}
-          {guardado && !cambios && <p className="text-xs text-success">Correos guardados.</p>}
         </>
       )}
       {error && <p className="text-xs text-danger">{error}</p>}

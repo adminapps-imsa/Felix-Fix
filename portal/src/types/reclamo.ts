@@ -4,10 +4,21 @@ export type TipoReclamo =
   | 'diferencias'
   | 'danos_textil'
   | 'danos_perfumeria_cliente'
-  | 'danos_perfumeria_gof';
+  | 'danos_perfumeria_gof'
+  | 'devolucion';
 
 export type OrigenReclamo = 'tienda' | 'cedi';
-export type StatusReclamo = 'pendiente' | 'resuelto' | 'rechazado' | 'notificado';
+export type StatusReclamo = 'pendiente' | 'resuelto' | 'rechazado' | 'notificado' | 'devuelto';
+
+/** Devolución de la compradora o respuesta de quien lo creó al reenviarlo. */
+export interface ComentarioReclamo {
+  ComentarioId: number;
+  Tipo: 'devuelto' | 'reenviado';
+  Texto: string | null;
+  Usuario: string;
+  UsuarioNombre: string;
+  Fecha: string;
+}
 export type DecStatus = 'pendiente' | 'aprobado' | 'rechazado';
 
 export interface ImagenExcel {
@@ -40,6 +51,7 @@ export interface Reclamo {
   Sucursal: string | null;
   NumeroEmbarqueFactura: string | null;
   FechaRegistro: string | null;
+  FechaLlegadaMercancia: string | null;
   Mundo: string | null;
   Departamento: string | null;
   Marca: string | null;
@@ -57,6 +69,16 @@ export interface Reclamo {
   ImagenesExcel: ImagenExcel[];
   AdjuntosExtra: AdjuntoExtra[];
   Status: StatusReclamo;
+  /** Productos con motivo «devolución» (para saber si lleva el retiro del proveedor). */
+  LineasDevolucion?: number;
+  /** Retiro del proveedor (reclamos de devolución): día, quién lo registró y cuándo. */
+  RetiroProveedorFecha?: string | null;
+  RetiroProveedorFoto?: string | null;
+  RetiroProveedorPor?: string | null;
+  RetiroProveedorPorNombre?: string | null;
+  RetiroProveedorRegistradoAt?: string | null;
+  /** Historial de devoluciones y reenvíos (viene en el detalle). */
+  Comentarios?: ComentarioReclamo[];
   Comentario: string | null;
   CreatedAt: string;
   CreatedBy: string;
@@ -104,6 +126,10 @@ export interface KpisReclamos {
   productosPorDecidir: number;
   /** Cerrados por la compradora que todavía no se envían a contabilidad. */
   porEnviarContabilidad: number;
+  /** Devueltos por la compradora a quien los creó. */
+  devueltos: number;
+  /** De esos, los que creó el usuario (le toca corregirlos). */
+  misDevueltos: number;
 }
 
 export interface PreviewExcel {
@@ -186,6 +212,12 @@ export interface PermisosReclamos {
   puedeAdjuntarCerrado: boolean;
   /** Enviar a contabilidad los reclamos cerrados (decidir o "Enviar reclamos a contabilidad"). */
   puedeEnviarContabilidad: boolean;
+  /** Devolver a quien lo creó, con comentario (quien decide). */
+  puedeDevolver: boolean;
+  /** Corregir y reenviar cualquier reclamo devuelto (super administrador); los demás, solo los que crearon. */
+  puedeCorregirCualquiera: boolean;
+  /** Reclamos de devolución: marcar que el proveedor retiró el producto (Gof). */
+  puedeRegistrarRetiro: boolean;
   /** Igual a puedeDecidir (compatibilidad). */
   esAdmin: boolean;
   username: string;

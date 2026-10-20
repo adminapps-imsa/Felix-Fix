@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { AlertTriangle, Image, Paperclip, Send } from 'lucide-react';
 import { Modal } from '../../../components/ui/Modal';
 import { Button } from '../../../components/ui/Button';
+import { useAvisos } from '../../../components/ui/Avisos';
+import { Esqueleto } from '../../../components/ui/Esqueleto';
 import { ApiError } from '../../../api/client';
 import * as apiProductosDanados from '../../../api/productosDanados';
 import type { ReporteDetalle, VistaPreviaCorreo } from '../../../types/productoDanado';
@@ -24,6 +26,7 @@ export function EnviarProveedorModal({
   const [enviando, setEnviando] = useState(false);
   // Direcciones que el servidor de correo rechazó: se avisa en vez de cerrar como si todo saliera bien.
   const [rechazados, setRechazados] = useState<string[] | null>(null);
+  const avisos = useAvisos();
 
   useEffect(() => {
     apiProductosDanados
@@ -40,8 +43,12 @@ export function EnviarProveedorModal({
     try {
       const { envio, ...reporte } = await apiProductosDanados.enviarAlProveedor(reporteId);
       onEnviado(reporte);
+      // Con direcciones rechazadas el aviso queda en el modal (hay que revisarlas); si no, se confirma con un aviso flotante.
       if (envio?.rechazados?.length) setRechazados(envio.rechazados);
-      else onClose();
+      else {
+        onClose();
+        avisos.ok(`Reporte #${reporteId} enviado al proveedor.`);
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo enviar el correo.');
     } finally {
@@ -60,13 +67,27 @@ export function EnviarProveedorModal({
           <Button variant="secondary" onClick={onClose} disabled={enviando}>
             {rechazados ? 'Cerrar' : 'Cancelar'}
           </Button>
-          <Button onClick={enviar} disabled={bloqueado || enviando || rechazados !== null}>
+          <Button onClick={enviar} disabled={bloqueado || rechazados !== null} estado={enviando ? 'cargando' : null}>
             <Send size={15} /> {enviando ? 'Enviando…' : `Enviar${vista ? ` a ${vista.para.length} correo${vista.para.length === 1 ? '' : 's'}` : ''}`}
           </Button>
         </>
       }
     >
-      {!vista && !error && <p className="text-sm opacity-60">Armando el correo…</p>}
+      {/* Mientras se arma el correo: la forma de los datos y de la vista previa. */}
+      {!vista && !error && (
+        <div role="status" aria-label="Armando el correo…" className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2 rounded-xl border border-black/10 p-3 dark:border-white/10">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <div key={i} className="flex gap-3">
+                <Esqueleto className="h-3.5 w-20 shrink-0" />
+                <Esqueleto className={i % 2 ? 'h-3.5 w-1/3' : 'h-3.5 w-1/2'} />
+              </div>
+            ))}
+          </div>
+          <Esqueleto className="h-3 w-40" />
+          <Esqueleto className="h-[40vh] w-full rounded-xl" />
+        </div>
+      )}
       {rechazados && (
         <div className="mb-3 flex gap-2 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-sm">
           <AlertTriangle size={16} className="mt-0.5 shrink-0 text-warning" />

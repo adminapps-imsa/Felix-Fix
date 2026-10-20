@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ChevronRight, FileText, Inbox, Landmark, Search } from 'lucide-react';
+import { ChevronRight, FileText, FileX2, Inbox, Landmark, Search, SearchX } from 'lucide-react';
 import { BandaPagina, TituloPagina } from '../../../components/ui/TituloPagina';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { Input } from '../../../components/ui/Input';
 import { Pagination } from '../../../components/ui/Pagination';
+import { EsqueletoFilas } from '../../../components/ui/Esqueleto';
+import { BotonReintentar, EstadoVacio } from '../../../components/ui/EstadoVacio';
+import { useTanda } from '../../productos-danados/hooks/useTanda';
 import { cn } from '../../../lib/cn';
 import { formatFecha } from '../../../lib/formatters';
 import * as apiContabilidad from '../../../api/contabilidad';
@@ -35,6 +38,10 @@ function DocumentosReclamos() {
   const [pagination, setPagination] = useState<PaginationMeta | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // «Reintentar» vuelve a pedir la misma página.
+  const [intento, setIntento] = useState(0);
+  // Las filas entran en cascada al cambiar de pestaña, búsqueda o página.
+  const tanda = useTanda(data, `${estado}|${qDebounced}|${page}`);
 
   useEffect(() => {
     const t = setTimeout(() => setQDebounced(q.trim()), 300);
@@ -57,7 +64,7 @@ function DocumentosReclamos() {
     return () => {
       cancelado = true;
     };
-  }, [estado, qDebounced, page]);
+  }, [estado, qDebounced, page, intento]);
 
   const abrir = (d: DocumentoContabilidad) => navigate(`/contabilidad/${d.DocumentoId}`);
 
@@ -101,22 +108,54 @@ function DocumentosReclamos() {
         </div>
       </GlassCard>
 
-      {error && <div className="anim-aparecer rounded-xl border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
-
+      {/* Primera carga, error o lista vacía: un solo bloque para celular y escritorio. */}
+      {loading && data.length === 0 ? (
+        <div className="glass-card overflow-hidden">
+          <EsqueletoFilas filas={6} />
+        </div>
+      ) : error ? (
+        <div className="glass-card">
+          <EstadoVacio icono={FileX2} tono="error" titulo="No se pudieron cargar los documentos" texto={error} accion={<BotonReintentar onClick={() => setIntento((n) => n + 1)} />} />
+        </div>
+      ) : data.length === 0 ? (
+        <div className="glass-card">
+          {qDebounced ? (
+            <EstadoVacio
+              icono={SearchX}
+              titulo={`No hay documentos que coincidan con «${qDebounced}»`}
+              accion={
+                <button type="button" onClick={() => {
+                    setQ('');
+                    setPage(1);
+                  }} className="rounded-full px-4 py-2 text-sm font-semibold text-brand-600 hover:bg-brand-500/10 dark:text-brand-400">
+                  Quitar búsqueda
+                </button>
+              }
+            />
+          ) : estado === 'pendiente' ? (
+            <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
+              <span className="anim-celebrar grid size-14 place-items-center rounded-2xl bg-success/15 text-success">
+                <Inbox size={26} aria-hidden />
+              </span>
+              <div className="flex max-w-sm flex-col gap-1">
+                <p className="font-semibold">¡Todo al día!</p>
+                <p className="text-sm opacity-65">No hay documentos pendientes. Cuando se envíe un reclamo a contabilidad, sus PDF aparecerán aquí.</p>
+              </div>
+            </div>
+          ) : (
+            <EstadoVacio icono={Inbox} titulo="Todavía no se ha enviado ningún documento a contabilidad" />
+          )}
+        </div>
+      ) : (
+        <>
       {/* Celular: una tarjeta por documento (la tabla de 10 columnas no cabe). */}
-      <ul className="flex flex-col gap-2 md:hidden" aria-label="Documentos">
-        {loading && data.length === 0 && <li className="glass-card px-4 py-8 text-center text-sm opacity-60">Cargando…</li>}
-        {!loading && !error && data.length === 0 && (
-          <li className="glass-card px-4 py-8 text-center text-sm opacity-70">
-            {qDebounced ? `No hay documentos que coincidan con «${qDebounced}».` : estado === 'pendiente' ? '¡Todo al día! No hay documentos pendientes.' : 'Todavía no se ha enviado ningún documento a contabilidad.'}
-          </li>
-        )}
-        {data.map((d) => (
-          <li key={d.DocumentoId}>
+      <ul key={tanda} className="flex flex-col gap-2 md:hidden" aria-label="Documentos">
+        {data.map((d, i) => (
+          <li key={d.DocumentoId} className="anim-fila" style={{ ['--i' as string]: i }}>
             <button
               type="button"
               onClick={() => abrir(d)}
-              className="glass-card flex w-full flex-col gap-2 px-4 py-3 text-left transition hover:bg-brand-500/5 active:scale-[0.99]"
+              className="glass-card flex w-full min-w-0 flex-col gap-2 px-4 py-3.5 text-left transition-[background-color,transform] duration-150 hover:bg-brand-500/[0.04] active:scale-[0.99]"
             >
               <span className="flex items-start justify-between gap-3">
                 <span className="min-w-0">
@@ -130,8 +169,8 @@ function DocumentosReclamos() {
                   <span className="block text-xs opacity-60 tabular-nums">{d.Productos} productos</span>
                 </span>
               </span>
-              <span className="text-sm font-medium">{d.Proveedor}</span>
-              <span className="text-xs opacity-70">
+              <span className="truncate text-sm font-medium">{d.Proveedor}</span>
+              <span className="break-words text-xs opacity-70">
                 {d.Movimiento || '—'} · {formatFechaCorta(d.FechaDocumento)}
               </span>
               <ValidacionBadges validacion={d.Validacion} />
@@ -145,7 +184,7 @@ function DocumentosReclamos() {
           <table className="tabla-lista w-full min-w-[720px] border-collapse text-sm">
             <thead className="sticky top-0 z-10 bg-[var(--glass-bg)] backdrop-blur-md">
               <tr className="border-b border-black/10 text-left text-xs opacity-70 dark:border-white/10">
-                <th className="px-3 py-3">Documento</th>
+                <th className="px-4 py-3">Documento</th>
                 <th className="px-3 py-3">Reclamo</th>
                 <th className="px-3 py-3">Proveedor</th>
                 <th className="hidden xl:table-cell px-3 py-3">Fecha doc.</th>
@@ -156,35 +195,7 @@ function DocumentosReclamos() {
                 <th className="w-10 px-3 py-3" />
               </tr>
             </thead>
-            <tbody>
-              {loading && data.length === 0 && (
-                <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center opacity-60">
-                    Cargando…
-                  </td>
-                </tr>
-              )}
-              {!loading && !error && data.length === 0 && (
-                <tr>
-                  <td colSpan={9} className="px-4 py-10 text-center">
-                    <div className="flex flex-col items-center gap-2">
-                      <span className="anim-celebrar grid size-12 place-items-center rounded-2xl bg-success/15 text-success">
-                        <Inbox size={24} />
-                      </span>
-                      {qDebounced ? (
-                        <p>No hay documentos que coincidan con «{qDebounced}».</p>
-                      ) : estado === 'pendiente' ? (
-                        <>
-                          <p className="font-semibold">¡Todo al día!</p>
-                          <p className="text-xs">No hay documentos pendientes. Cuando se envíe un reclamo a contabilidad, sus PDF aparecerán aquí.</p>
-                        </>
-                      ) : (
-                        <p>Todavía no se ha enviado ningún documento a contabilidad.</p>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              )}
+            <tbody key={tanda}>
               {data.map((d, i) => {
                 const titulo = d.NumeroDocumento || d.AdjuntoNombre;
                 return (
@@ -199,11 +210,12 @@ function DocumentosReclamos() {
                       e.preventDefault();
                       abrir(d);
                     }}
-                    className={`cursor-pointer border-b outline-none focus-visible:bg-brand-500/10 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500/50 border-black/5 last:border-0 hover:bg-brand-500/5 dark:border-white/5 ${
+                    style={{ ['--i' as string]: i }}
+                    className={`anim-fila group cursor-pointer border-b outline-none transition-colors duration-150 focus-visible:bg-brand-500/10 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500/50 border-black/5 last:border-0 hover:bg-brand-500/[0.04] dark:border-white/5 ${
                       i % 2 === 1 ? 'bg-black/[0.02] dark:bg-white/[0.02]' : ''
                     }`}
                   >
-                    <td className="max-w-[14rem] px-3 py-3">
+                    <td className="max-w-[14rem] px-4 py-3.5">
                       {d.NumeroDocumento ? (
                         <span className="numero-caso block text-base leading-tight">{d.NumeroDocumento}</span>
                       ) : (
@@ -216,8 +228,8 @@ function DocumentosReclamos() {
                         {tipoCorto(d.TipoDocumento)}
                       </span>
                     </td>
-                    <td className="numero-caso px-3 py-3 text-base">{d.ReclamoNumero}</td>
-                    <td className="max-w-[13rem] px-3 py-3 xl:max-w-[18rem]">
+                    <td className="numero-caso px-3 py-3.5 text-base">{d.ReclamoNumero}</td>
+                    <td className="max-w-[13rem] px-3 py-3.5 xl:max-w-[18rem]">
                       <span className="celda-larga font-medium" title={d.Proveedor ?? undefined}>
                         {d.Proveedor || <span className="opacity-40">—</span>}
                       </span>
@@ -227,18 +239,19 @@ function DocumentosReclamos() {
                         </span>
                       )}
                     </td>
-                    <td className="hidden xl:table-cell px-3 py-3">{formatFechaCorta(d.FechaDocumento)}</td>
-                    <td className="hidden xl:table-cell px-3 py-3 text-right font-semibold tabular-nums">{d.Productos}</td>
-                    <td className="px-3 py-3 text-right font-semibold tabular-nums">{formatPrecio(d.Total)}</td>
-                    <td className="px-3 py-3">
+                    <td className="hidden xl:table-cell px-3 py-3.5">{formatFechaCorta(d.FechaDocumento)}</td>
+                    <td className="hidden xl:table-cell px-3 py-3.5 text-right font-semibold tabular-nums">{d.Productos}</td>
+                    <td className="px-3 py-3.5 text-right font-semibold tabular-nums">{formatPrecio(d.Total)}</td>
+                    <td className="px-3 py-3.5">
                       <ValidacionBadges validacion={d.Validacion} compacto className="flex-nowrap" />
                     </td>
-                    <td className="max-w-[14rem] px-3 py-3">
+                    <td className="max-w-[14rem] px-3 py-3.5">
                       <span className="block">{formatFecha(d.EnviadoAt)}</span>
                       {(d.EnviadoPorNombre || d.EnviadoPor) && <span className="sub celda-larga">{d.EnviadoPorNombre || d.EnviadoPor}</span>}
                     </td>
-                    <td className="px-3 py-3 text-right">
-                      <ChevronRight size={16} className="opacity-50" />
+                    <td className="px-3 py-3.5 text-right">
+                      {/* La flecha se aviva y avanza un poco al pasar por la fila: se abre el documento. */}
+                      <ChevronRight size={16} className="opacity-40 transition-[opacity,color,transform] duration-150 group-hover:translate-x-0.5 group-hover:text-brand-500 group-hover:opacity-90" />
                     </td>
                   </tr>
                 );
@@ -247,6 +260,8 @@ function DocumentosReclamos() {
           </table>
         </div>
       </div>
+        </>
+      )}
 
       {pagination && pagination.total > 0 && <Pagination meta={pagination} onPageChange={setPage} />}
     </div>
@@ -297,7 +312,8 @@ export function ContabilidadPage() {
         </div>
       )}
 
-      {actual?.id === 'productos' ? <PagosProductosDanados /> : <DocumentosReclamos />}
+      {/* Solo se piden los documentos de reclamos con reclamos.contabilidad (visibles ya lo filtra). */}
+      {actual?.id === 'productos' ? <PagosProductosDanados /> : actual?.id === 'reclamos' ? <DocumentosReclamos /> : null}
     </div>
   );
 }

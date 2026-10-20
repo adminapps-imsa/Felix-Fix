@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Loader2, Search, ShieldCheck } from 'lucide-react';
+import { Loader2, Search, ShieldCheck, UserX } from 'lucide-react';
 import { GlassCard } from '../../../components/ui/GlassCard';
+import { Esqueleto } from '../../../components/ui/Esqueleto';
+import { BotonReintentar, EstadoVacio } from '../../../components/ui/EstadoVacio';
+import { useAvisos } from '../../../components/ui/Avisos';
 import { Input } from '../../../components/ui/Input';
 import { Pagination } from '../../../components/ui/Pagination';
 import { ApiError } from '../../../api/client';
@@ -27,6 +30,12 @@ export function UsuariosTab() {
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState<string | null>(null); // `${userId}|${rol}`
+  // Error al traer la lista (con «Reintentar»); el de guardar un rol va en el aviso de arriba.
+  const [errorLista, setErrorLista] = useState<string | null>(null);
+  const [intento, setIntento] = useState(0);
+  // Sube con cada lista que llega: las filas entran en cascada solo entonces (no al marcar una casilla).
+  const [tanda, setTanda] = useState(0);
+  const avisos = useAvisos();
 
   useEffect(() => {
     apiConfig
@@ -49,14 +58,15 @@ export function UsuariosTab() {
         if (!vivo) return;
         setUsuarios(r.data);
         setMeta(r.pagination);
-        setError(null);
+        setErrorLista(null);
+        setTanda((n) => n + 1);
       })
-      .catch((e) => vivo && setError(e instanceof ApiError ? e.message : 'No se pudieron cargar los usuarios.'))
+      .catch((e) => vivo && setErrorLista(e instanceof ApiError ? e.message : 'No se pudieron cargar los usuarios.'))
       .finally(() => vivo && setCargando(false));
     return () => {
       vivo = false;
     };
-  }, [qDebounced, page, soloConRol]);
+  }, [qDebounced, page, soloConRol, intento]);
 
   const cambiarRol = async (u: UsuarioConfig, rol: string, asignar: boolean) => {
     const clave = `${u.id}|${rol}`;
@@ -70,6 +80,7 @@ export function UsuariosTab() {
           x.id === u.id ? { ...x, roles: asignar ? [...x.roles, rol].sort() : x.roles.filter((r) => r !== rol) } : x
         )
       );
+      avisos.ok(asignar ? `Rol ${nombreRol(rol)} asignado a ${u.nombre}.` : `Rol ${nombreRol(rol)} quitado a ${u.nombre}.`);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'No se pudo guardar el cambio.');
     } finally {
@@ -106,7 +117,9 @@ export function UsuariosTab() {
         </label>
       </GlassCard>
 
-      {error && <div className="anim-aparecer rounded-xl border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
+      {(error || (errorLista && usuarios.length > 0)) && (
+        <div className="anim-aparecer rounded-xl border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{error ?? errorLista}</div>
+      )}
 
       <GlassCard className="overflow-x-auto p-0">
         <table className="w-full min-w-[40rem] text-sm">
@@ -123,23 +136,53 @@ export function UsuariosTab() {
               ))}
             </tr>
           </thead>
-          <tbody>
-            {cargando && usuarios.length === 0 ? (
+          {/* Mientras llega otra página, la actual se atenúa entera (no fila por fila: chocaría con la cascada). */}
+          <tbody key={tanda} className={cn('transition-opacity', cargando && usuarios.length > 0 && 'opacity-60')}>
+            {errorLista && usuarios.length === 0 ? (
               <tr>
-                <td colSpan={roles.length + 1} className="px-4 py-8 text-center opacity-60">
-                  Cargando usuarios…
+                <td colSpan={roles.length + 1}>
+                  <EstadoVacio
+                    icono={UserX}
+                    tono="error"
+                    titulo="No se pudieron cargar los usuarios"
+                    texto={errorLista}
+                    accion={<BotonReintentar onClick={() => setIntento((n) => n + 1)} />}
+                  />
                 </td>
               </tr>
+            ) : cargando && usuarios.length === 0 ? (
+              // Primera carga: filas con la forma de la tabla (nombre y correo, casillas).
+              Array.from({ length: 6 }, (_, i) => (
+                <tr key={i} aria-hidden className="border-b border-black/5 last:border-0 dark:border-white/5">
+                  <td className="px-4 py-3.5">
+                    <Esqueleto className={cn('h-3.5', i % 2 ? 'w-32' : 'w-44')} />
+                    <Esqueleto className="mt-2 h-3 w-28" />
+                  </td>
+                  {(roles.length ? roles : [0, 1, 2, 3]).map((_, c) => (
+                    <td key={c} className="px-3 py-3.5">
+                      <Esqueleto className="mx-auto size-4 rounded" />
+                    </td>
+                  ))}
+                </tr>
+              ))
             ) : usuarios.length === 0 ? (
               <tr>
-                <td colSpan={roles.length + 1} className="px-4 py-8 text-center opacity-60">
-                  {soloConRol ? 'Nadie tiene roles del portal todavía.' : 'No se encontraron usuarios.'}
+                <td colSpan={roles.length + 1}>
+                  <EstadoVacio
+                    icono={Search}
+                    titulo={soloConRol ? 'Nadie tiene roles del portal todavía.' : 'No se encontraron usuarios.'}
+                    texto={qDebounced ? `Nada coincide con «${qDebounced}». Prueba con otra parte del nombre o del correo.` : undefined}
+                  />
                 </td>
               </tr>
             ) : (
-              usuarios.map((u) => (
-                <tr key={u.id} className={cn('border-b border-black/5 last:border-0 dark:border-white/5', cargando && 'opacity-60')}>
-                  <td className="px-4 py-2.5">
+              usuarios.map((u, i) => (
+                <tr
+                  key={u.id}
+                  className="anim-fila border-b border-black/5 transition-colors last:border-0 hover:bg-brand-500/5 dark:border-white/5"
+                  style={{ ['--i' as string]: i }}
+                >
+                  <td className="px-4 py-3">
                     <div className="font-semibold">
                       {u.nombre}
                       {!u.activo && (
@@ -148,7 +191,7 @@ export function UsuariosTab() {
                         </span>
                       )}
                     </div>
-                    <div className="text-xs opacity-60">
+                    <div className="mt-0.5 break-all text-xs opacity-60">
                       {u.username}
                       {u.email && u.email !== u.username && ` · ${u.email}`}
                     </div>
@@ -157,7 +200,7 @@ export function UsuariosTab() {
                     const tiene = u.roles.includes(r.nombre);
                     const ocupado = guardando === `${u.id}|${r.nombre}`;
                     return (
-                      <td key={r.nombre} className="px-3 py-2.5 text-center">
+                      <td key={r.nombre} className="px-3 py-3 text-center">
                         {ocupado ? (
                           <Loader2 size={16} className="mx-auto animate-spin opacity-60" />
                         ) : (

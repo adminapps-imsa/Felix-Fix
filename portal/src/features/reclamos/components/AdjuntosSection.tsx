@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import type React from 'react';
-import { AlertTriangle, Download, Eye, FileSpreadsheet, FileText, Image as ImageIcon, Paperclip, Trash2 } from 'lucide-react';
+import { AlertTriangle, Download, Eye, FileSpreadsheet, FileText, Image as ImageIcon, Loader2, Paperclip, Trash2 } from 'lucide-react';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { Button } from '../../../components/ui/Button';
+import { EstadoVacio } from '../../../components/ui/EstadoVacio';
+import { useAvisos } from '../../../components/ui/Avisos';
 import { ApiError, guardarBlob } from '../../../api/client';
 import * as apiReclamos from '../../../api/reclamos';
 import { formatFecha } from '../../../lib/formatters';
@@ -46,6 +48,7 @@ export function AdjuntosSection({
   // Archivos que no se pudieron subir (p. ej. una nota de débito con productos rechazados): se avisan en un popup.
   const [rechazos, setRechazos] = useState<{ nombre: string; titulo: string; detalle: string | null }[]>([]);
   const { adjuntoMb: ADJUNTO_MAX_MB } = useLimites();
+  const avisos = useAvisos();
   const token = reclamo.Token;
 
   const fotosDe = (origen: string): FotoDeHoja[] =>
@@ -61,7 +64,7 @@ export function AdjuntosSection({
     descargarPrincipal().catch((err) => setError(err instanceof Error ? err.message : 'No se pudo descargar el archivo.'));
   };
   const descargarAdjunto = async (idx: number, adj: AdjuntoExtra) =>
-    guardarBlob(await apiReclamos.descargarAdjunto(token, idx), adj.originalname);
+    guardarBlob(await apiReclamos.descargarAdjunto(token, idx, adj.filename), adj.originalname);
 
   const handleSubir = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -72,16 +75,20 @@ export function AdjuntosSection({
     const grandes = files.filter((f) => f.size > ADJUNTO_MAX_MB * 1024 * 1024);
     for (const f of grandes) fallidos.push({ nombre: f.name, titulo: `Pesa ${(f.size / 1024 / 1024).toFixed(1)} MB (máximo ${ADJUNTO_MAX_MB} MB).`, detalle: null });
     const aSubir = files.filter((f) => !grandes.includes(f));
+    let subidos = 0;
     for (const [i, f] of aSubir.entries()) {
       setSubiendo(`Subiendo ${i + 1} de ${aSubir.length}…`);
       try {
         onActualizado(await apiReclamos.subirAdjunto(token, f));
+        subidos += 1;
       } catch (err) {
         fallidos.push({ nombre: f.name, ...separarMotivo(err instanceof ApiError ? err.message : 'No se pudo subir el archivo.') });
       }
     }
     setSubiendo(null);
     setRechazos(fallidos);
+    // Los que no se subieron ya se explican en la lista; el aviso confirma los que sí.
+    if (subidos) avisos.ok(subidos === 1 ? (aSubir.length === 1 ? `«${aSubir[0].name}» adjuntado.` : '1 archivo adjuntado.') : `${subidos} archivos adjuntados.`);
   };
 
   const fotosPrincipal = fotosDe(ORIGEN_PRINCIPAL).length;
@@ -111,11 +118,22 @@ export function AdjuntosSection({
 
       <div className="flex flex-col gap-1.5">
         <span className="etiqueta">Fotos y adjuntos del reclamo (fotos, PDF o Excel)</span>
-        {reclamo.AdjuntosExtra.length === 0 && <p className="text-sm opacity-60">Sin archivos adicionales.</p>}
+        {reclamo.AdjuntosExtra.length === 0 && !rechazos.length && (
+          <EstadoVacio
+            icono={Paperclip}
+            className="rounded-xl border border-dashed border-black/10 py-6 dark:border-white/10"
+            titulo="Sin archivos adicionales."
+            texto={puedeAdjuntar ? 'Agrega aquí las fotos, el PDF de SAP o un Excel.' : undefined}
+          />
+        )}
         {reclamo.AdjuntosExtra.map((adj, idx) => {
           const nFotos = fotosDe(adj.filename).length;
           return (
-            <div key={adj.filename} className="flex items-center gap-2 rounded-xl border border-black/10 px-3 py-2 text-sm dark:border-white/10">
+            <div
+              key={adj.filename}
+              className="anim-fila flex items-center gap-2 rounded-xl border border-black/10 px-3 py-2 text-sm transition-colors hover:bg-brand-500/5 dark:border-white/10"
+              style={{ ['--i' as string]: idx }}
+            >
               {adj.tipo === 'imagen' ? (
                 <ImageIcon size={16} className="shrink-0 text-brand-600 dark:text-brand-400" />
               ) : adj.tipo === 'pdf' ? (
@@ -176,10 +194,13 @@ export function AdjuntosSection({
             </button>
           </div>
         ))}
-        {error && <p className="text-xs text-danger">{error}</p>}
+        {error && <p className="anim-aparecer text-xs text-danger">{error}</p>}
         {puedeAdjuntar && (
-          <label className="flex w-fit cursor-pointer items-center gap-2 rounded-full border border-dashed border-black/20 px-4 py-2 text-sm hover:border-brand-500/50 dark:border-white/20">
-            <Paperclip size={15} className="opacity-60" />
+          <label
+            aria-busy={Boolean(subiendo) || undefined}
+            className="flex w-fit cursor-pointer items-center gap-2 rounded-full border border-dashed border-black/20 px-4 py-2 text-sm transition-colors hover:border-brand-500/50 hover:bg-brand-500/5 dark:border-white/20"
+          >
+            {subiendo ? <Loader2 size={15} className="shrink-0 animate-spin opacity-60" aria-hidden /> : <Paperclip size={15} className="shrink-0 opacity-60" />}
             {subiendo || 'Agregar fotos o archivos (fotos, Excel o PDF)'}
             <input type="file" multiple accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp,.xlsx,.xls,.pdf,application/pdf" className="hidden" disabled={Boolean(subiendo)} onChange={handleSubir} />
           </label>
@@ -199,21 +220,21 @@ export function AdjuntosSection({
         (vista.adj.tipo === 'imagen' ? (
           <ImagenPreviewModal
             titulo={vista.adj.originalname}
-            cargar={() => apiReclamos.descargarAdjunto(token, vista.idx)}
+            cargar={() => apiReclamos.descargarAdjunto(token, vista.idx, vista.adj.filename)}
             onDescargar={() => descargarAdjunto(vista.idx, vista.adj)}
             onClose={() => setVista(null)}
           />
         ) : vista.adj.tipo === 'pdf' ? (
           <PdfPreviewModal
             titulo={vista.adj.originalname}
-            cargar={() => apiReclamos.descargarAdjunto(token, vista.idx)}
+            cargar={() => apiReclamos.descargarAdjunto(token, vista.idx, vista.adj.filename)}
             onDescargar={() => descargarAdjunto(vista.idx, vista.adj)}
             onClose={() => setVista(null)}
           />
         ) : (
           <ExcelPreviewModal
             titulo={vista.adj.originalname}
-            cargar={async () => (await apiReclamos.descargarAdjunto(token, vista.idx)).arrayBuffer()}
+            cargar={async () => (await apiReclamos.descargarAdjunto(token, vista.idx, vista.adj.filename)).arrayBuffer()}
             fotos={fotosDe(vista.adj.filename)}
             onDescargar={() => descargarAdjunto(vista.idx, vista.adj)}
             onClose={() => setVista(null)}
@@ -226,7 +247,8 @@ export function AdjuntosSection({
           textoConfirmar="Eliminar"
           onClose={() => setAEliminar(null)}
           onConfirm={async () => {
-            onActualizado(await apiReclamos.eliminarAdjunto(token, aEliminar.idx));
+            onActualizado(await apiReclamos.eliminarAdjunto(token, aEliminar.idx, aEliminar.adj.filename));
+            avisos.ok(`«${aEliminar.adj.originalname}» eliminado.`);
             setAEliminar(null);
           }}
         >

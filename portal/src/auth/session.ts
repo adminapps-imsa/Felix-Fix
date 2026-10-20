@@ -29,6 +29,8 @@ interface StoredSession {
   token: string;
   user: StoredUser;
   exp: number;
+  /** id_token de Keycloak: solo para el id_token_hint al cerrar sesión. */
+  idToken?: string | null;
 }
 
 const STORAGE_KEY = 'felix-portal-session';
@@ -60,9 +62,19 @@ export function loadSession(): { token: string; user: AuthUser } | null {
   }
 }
 
-export function saveSession(token: string, user: StoredUser): void {
-  const stored: StoredSession = { token, user, exp: decodeExpMs(token) };
+export function saveSession(token: string, user: StoredUser, idToken?: string | null): void {
+  const stored: StoredSession = { token, user, exp: decodeExpMs(token), idToken: idToken || null };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
+}
+
+/** id_token de Keycloak de la sesión guardada (aunque el JWT del portal ya haya vencido). */
+export function getIdToken(): string | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as StoredSession).idToken || null : null;
+  } catch {
+    return null;
+  }
 }
 
 export function clearSession(): void {

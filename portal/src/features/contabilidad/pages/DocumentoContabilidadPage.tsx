@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { AlertTriangle, ArrowLeft, Building2, Check, ClipboardList, Download, Eye, FileText, Landmark, ListChecks, PackageSearch } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, FileX2, Building2, Check, ClipboardList, Download, Eye, FileText, Landmark, ListChecks, PackageSearch } from 'lucide-react';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { BandaPagina } from '../../../components/ui/TituloPagina';
 import { Dato, SeccionDatos } from '../../../components/ui/DatosDetalle';
 import { Button } from '../../../components/ui/Button';
+import { Esqueleto } from '../../../components/ui/Esqueleto';
+import { Cifra } from '../../../components/ui/Cifra';
+import { BotonReintentar, EstadoVacio } from '../../../components/ui/EstadoVacio';
 import { ApiError, guardarBlob } from '../../../api/client';
 import * as apiContabilidad from '../../../api/contabilidad';
 import * as apiReclamos from '../../../api/reclamos';
@@ -29,6 +32,8 @@ export function DocumentoContabilidadPage() {
   const [error, setError] = useState<string | null>(null);
   const [verPdf, setVerPdf] = useState(false);
   const [errorDescarga, setErrorDescarga] = useState<string | null>(null);
+  // «Reintentar» vuelve a pedir el documento.
+  const [intento, setIntento] = useState(0);
 
   useEffect(() => {
     let cancelado = false;
@@ -45,7 +50,7 @@ export function DocumentoContabilidadPage() {
     return () => {
       cancelado = true;
     };
-  }, [id]);
+  }, [id, intento]);
 
   if (error) {
     return (
@@ -53,11 +58,19 @@ export function DocumentoContabilidadPage() {
         <BandaPagina>
           <BackLink />
         </BandaPagina>
-        <div className="anim-aparecer rounded-xl border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>
+        <GlassCard>
+          <EstadoVacio
+            icono={FileX2}
+            tono="error"
+            titulo={error}
+            // Si no existe no tiene sentido reintentar; solo cuando falló la carga.
+            accion={error.startsWith('No se pudo') ? <BotonReintentar onClick={() => setIntento((n) => n + 1)} /> : undefined}
+          />
+        </GlassCard>
       </div>
     );
   }
-  if (!doc) return <p className="text-sm opacity-60">Cargando…</p>;
+  if (!doc) return <EsqueletoDocumento />;
 
   const idx = doc.AdjuntoIdx;
   const cargarPdf = () => apiReclamos.descargarAdjunto(doc.ReclamoToken, idx as number);
@@ -67,7 +80,7 @@ export function DocumentoContabilidadPage() {
     descargar().catch((err) => setErrorDescarga(err instanceof Error ? err.message : 'No se pudo descargar el archivo.'));
   };
   const v = doc.Validacion;
-  const statusConocido = doc.ReclamoStatus in STATUS_LABEL;
+  const statusConocido = Object.hasOwn(STATUS_LABEL, doc.ReclamoStatus);
 
   return (
     <div className="flex flex-col gap-6">
@@ -313,8 +326,44 @@ function Resultado({ linea }: { linea: LineaDocumento }) {
 function Contador({ valor, label, clase }: { valor: number; label: string; clase?: string }) {
   return (
     <div className="flex flex-col gap-1 rounded-xl border border-black/10 px-4 py-3 dark:border-white/10">
-      <span className={cn('cifra-kpi', clase)}>{valor}</span>
+      <Cifra valor={valor} className={cn('cifra-kpi', clase)} />
       <span className="text-xs opacity-70">{label}</span>
+    </div>
+  );
+}
+
+/** La forma de esta pantalla mientras carga: número del documento, datos y contadores. */
+function EsqueletoDocumento() {
+  return (
+    <div role="status" aria-label="Cargando" className="flex flex-col gap-6">
+      <BandaPagina detalle>
+        <BackLink />
+      </BandaPagina>
+      <GlassCard className="flex flex-col items-center gap-3 py-8">
+        <Esqueleto className="h-3 w-28" />
+        <Esqueleto className="h-11 w-64 max-w-full" />
+        <Esqueleto className="h-6 w-40 rounded-full" />
+        <Esqueleto className="h-3 w-56 max-w-full" />
+        <div className="mt-2 flex gap-2">
+          <Esqueleto className="h-9 w-28 rounded-full" />
+          <Esqueleto className="h-9 w-28 rounded-full" />
+        </div>
+      </GlassCard>
+      <GlassCard className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
+        {[0, 1, 2].map((c) => (
+          <div key={c} className="flex flex-col gap-3">
+            <Esqueleto className="h-4 w-28" />
+            {[0, 1, 2, 3].map((f) => (
+              <Esqueleto key={f} className="h-3.5 w-full" />
+            ))}
+          </div>
+        ))}
+      </GlassCard>
+      <GlassCard className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        {[0, 1, 2, 3, 4].map((i) => (
+          <Esqueleto key={i} className="h-[4.5rem] rounded-xl" />
+        ))}
+      </GlassCard>
     </div>
   );
 }

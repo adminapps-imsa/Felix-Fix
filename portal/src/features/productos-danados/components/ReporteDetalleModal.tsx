@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
-import { ArrowRight, ClipboardList, FileCheck2, Package, Send, Trash2 } from 'lucide-react';
+import { ArrowRight, ClipboardList, FileCheck2, FileX2, Package, Send, Trash2 } from 'lucide-react';
 import { Modal } from '../../../components/ui/Modal';
 import { Button } from '../../../components/ui/Button';
+import { useAvisos } from '../../../components/ui/Avisos';
+import { Esqueleto } from '../../../components/ui/Esqueleto';
+import { BotonReintentar, EstadoVacio } from '../../../components/ui/EstadoVacio';
 import { Dato, SeccionDatos } from '../../../components/ui/DatosDetalle';
 import { RutaCaso, type PasoRuta } from '../../../components/ui/RutaCaso';
 import { EstadoBadge, MotivoBadge } from '../../../components/ui/Badge';
@@ -116,13 +119,16 @@ export function ReporteDetalleModal({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Qué acción está trabajando, para que solo su botón muestre la ruedita.
+  const [accion, setAccion] = useState<'aprobar' | 'documento1700' | 'contabilidad' | null>(null);
+  const avisos = useAvisos();
   const [showRechazar, setShowRechazar] = useState(false);
   const [confirmarEliminar, setConfirmarEliminar] = useState(false);
   const [cierre, setCierre] = useState<'nf' | 'pago' | null>(null);
   const { puede, user } = useAuth();
   // Igual que el backend: quien trabaja con el proveedor edita cualquier reporte; quien solo crea, los suyos.
   const puedeEditar =
-    puede(P.pdAprobar, P.pdEnviar, P.pdProcesar) || (puede(P.pdCrear) && Boolean(reporte) && reporte?.EmpleadoReportaUsuario === user?.username);
+    puede(P.pdAprobar, P.pdProcesar) || (puede(P.pdCrear) && Boolean(reporte) && reporte?.EmpleadoReportaUsuario === user?.username);
 
   const cargar = () => {
     setLoading(true);
@@ -136,13 +142,15 @@ export function ReporteDetalleModal({
 
   useEffect(cargar, [reporteId]);
 
-  const runAction = async (fn: () => Promise<ReporteDetalle>) => {
+  const runAction = async (cual: NonNullable<typeof accion>, fn: () => Promise<ReporteDetalle>, exito: string) => {
     setBusy(true);
+    setAccion(cual);
     setActionError(null);
     try {
       const actualizado = await fn();
       setReporte(actualizado);
       onChanged();
+      avisos.ok(exito);
     } catch (err) {
       if (err instanceof ApiError && err.status === 502) {
         // La baja en SAP falló: el backend revierte a Aprobado y permite reintentar.
@@ -154,20 +162,16 @@ export function ReporteDetalleModal({
       }
     } finally {
       setBusy(false);
+      setAccion(null);
     }
   };
 
   return (
     <Modal title={reporte ? `Reporte #${reporte.ReporteId}` : 'Cargando…'} onClose={onClose} wide>
-      {loadError && !reporte ? (
-        <div className="flex flex-col items-start gap-3">
-          <div className="w-full rounded-xl border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{loadError}</div>
-          <Button variant="secondary" disabled={loading} onClick={cargar}>
-            {loading ? 'Cargando…' : 'Reintentar'}
-          </Button>
-        </div>
-      ) : loading || !reporte ? (
-        <p className="text-sm opacity-60">Cargando…</p>
+      {loadError && !reporte && !loading ? (
+        <EstadoVacio icono={FileX2} tono="error" titulo="No se pudo cargar el reporte" texto={loadError} accion={<BotonReintentar onClick={cargar} />} />
+      ) : !reporte ? (
+        <EsqueletoReporte />
       ) : (
         <div className="flex flex-col gap-5">
           <div className="flex flex-wrap items-center gap-2">
@@ -255,7 +259,13 @@ export function ReporteDetalleModal({
 
           {/* NF con Gof: marca el check «Documento 1700» y lo pasa al supervisor GOF. */}
           {reporte.Estado === 'Rechazado' && puede(P.pdNfDocumento) && (
-            <Documento1700Form busy={busy} onEnviar={() => runAction(() => apiProductosDanados.registrarDocumento1700(reporte.ReporteId))} />
+            <Documento1700Form
+              busy={busy}
+              enviando={accion === 'documento1700'}
+              onEnviar={() =>
+                runAction('documento1700', () => apiProductosDanados.registrarDocumento1700(reporte.ReporteId), `Reporte #${reporte.ReporteId} enviado al supervisor GOF.`)
+              }
+            />
           )}
 
           <div>
@@ -275,7 +285,11 @@ export function ReporteDetalleModal({
                 <Button variant="danger" disabled={busy} onClick={() => setShowRechazar(true)}>
                   NF
                 </Button>
-                <Button disabled={busy} onClick={() => runAction(() => apiProductosDanados.aprobarReporte(reporte.ReporteId))}>
+                <Button
+                  disabled={busy}
+                  estado={accion === 'aprobar' ? 'cargando' : null}
+                  onClick={() => runAction('aprobar', () => apiProductosDanados.aprobarReporte(reporte.ReporteId), `Reporte #${reporte.ReporteId}: devolución aprobada.`)}
+                >
                   Devolución aprobada
                 </Button>
               </RequirePermiso>
@@ -292,7 +306,8 @@ export function ReporteDetalleModal({
                 <Button
                   disabled={busy || !reporte.Adjuntos.some((a) => a.etapa === 'gof')}
                   title={reporte.Adjuntos.some((a) => a.etapa === 'gof') ? undefined : 'Primero sube el documento (PDF o Excel)'}
-                  onClick={() => runAction(() => apiProductosDanados.enviarAContabilidad(reporte.ReporteId))}
+                  estado={accion === 'contabilidad' ? 'cargando' : null}
+                  onClick={() => runAction('contabilidad', () => apiProductosDanados.enviarAContabilidad(reporte.ReporteId), `Reporte #${reporte.ReporteId} enviado a contabilidad.`)}
                 >
                   Enviar a contabilidad
                 </Button>
@@ -318,6 +333,7 @@ export function ReporteDetalleModal({
             await apiProductosDanados.eliminarReporte(reporte.ReporteId);
             onChanged();
             onClose();
+            avisos.ok(`Reporte #${reporte.ReporteId} eliminado.`);
           }}
         >
           Se eliminará el <strong>reporte #{reporte.ReporteId}</strong> ({reporte.NombreProducto}) con su foto, los adjuntos y el historial. Esta
@@ -353,6 +369,7 @@ export function ReporteDetalleModal({
                 : await apiProductosDanados.registrarPago(reporte.ReporteId, referencia, comentario);
             setReporte(actualizado);
             onChanged();
+            avisos.ok(cierre === 'nf' ? `Reporte #${reporte.ReporteId} validado y cerrado como NF.` : `Pago registrado: reporte #${reporte.ReporteId} cerrado.`);
           }}
         />
       )}
@@ -365,6 +382,7 @@ export function ReporteDetalleModal({
             setReporte(await apiProductosDanados.rechazarReporte(reporteId, motivo));
             setActionError(null);
             onChanged();
+            avisos.ok(`Reporte #${reporteId} marcado como NF.`);
           }}
         />
       )}
@@ -372,8 +390,40 @@ export function ReporteDetalleModal({
   );
 }
 
+/** La forma del detalle mientras carga: estado, ruta, datos del producto y del reporte. */
+function EsqueletoReporte() {
+  return (
+    <div role="status" aria-label="Cargando" className="flex flex-col gap-5">
+      <div className="flex gap-2">
+        <Esqueleto className="h-6 w-28 rounded-full" />
+        <Esqueleto className="h-6 w-24 rounded-full" />
+      </div>
+      <div className="grid grid-cols-3 gap-4 rounded-xl bg-black/[0.025] p-4 sm:grid-cols-5 dark:bg-white/[0.04]">
+        {[0, 1, 2, 3, 4].map((i) => (
+          <div key={i} className={i > 2 ? 'hidden flex-col items-center gap-2 sm:flex' : 'flex flex-col items-center gap-2'}>
+            <Esqueleto className="size-6 rounded-full" />
+            <Esqueleto className="h-3 w-full max-w-24" />
+          </div>
+        ))}
+      </div>
+      <Esqueleto className="h-9 w-full rounded-xl" />
+      <Esqueleto className="h-5 w-2/3" />
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        {[0, 1].map((c) => (
+          <div key={c} className="flex flex-col gap-3">
+            <Esqueleto className="h-4 w-24" />
+            {[0, 1, 2, 3].map((f) => (
+              <Esqueleto key={f} className="h-3.5 w-full" />
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /** NF con Gof: check «Documento 1700»; al enviar pasa al supervisor GOF (él escribe el documento salida de NF). */
-function Documento1700Form({ busy, onEnviar }: { busy: boolean; onEnviar: () => void }) {
+function Documento1700Form({ busy, enviando, onEnviar }: { busy: boolean; enviando: boolean; onEnviar: () => void }) {
   const [hecho, setHecho] = useState(false);
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-danger/25 bg-danger/[0.04] p-4">
@@ -385,7 +435,7 @@ function Documento1700Form({ busy, onEnviar }: { busy: boolean; onEnviar: () => 
         Documento 1700 hecho en SAP
       </label>
       <div className="flex justify-end">
-        <Button disabled={busy || !hecho} title={hecho ? undefined : 'Marca el check «Documento 1700»'} onClick={onEnviar}>
+        <Button disabled={busy || !hecho} estado={enviando ? 'cargando' : null} title={hecho ? undefined : 'Marca el check «Documento 1700»'} onClick={onEnviar}>
           <Send size={15} /> Enviar al supervisor GOF
         </Button>
       </div>

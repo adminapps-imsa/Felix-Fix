@@ -1,18 +1,38 @@
 import React, { useEffect, useState } from 'react';
-import { PackageX, Moon, Sun, Eye, Landmark, PackageSearch, ClipboardList, House } from 'lucide-react';
-import { NavLink } from 'react-router-dom';
+import { PackageX, Moon, Sun, Eye, Landmark, PackageSearch, ClipboardList, House, LayoutDashboard } from 'lucide-react';
+import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../auth/useAuth';
 import { ACCESO_CONTABILIDAD, ACCESO_PRODUCTOS, ACCESO_RECLAMOS } from '../../auth/permisos';
 import { cn } from '../../lib/cn';
 import { UserMenu } from './UserMenu';
 import { VistaPor } from './VistaPor';
 import { nombreRol } from '../../lib/roles';
+import { useIndicador } from '../../lib/useIndicador';
 
 const navClass = ({ isActive }: { isActive: boolean }) =>
   cn(
-    'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-semibold transition',
-    isActive ? 'bg-brand-500/15 text-brand-600 dark:text-brand-400' : 'opacity-70 hover:opacity-100'
+    // El fondo del activo lo dibuja el indicador que se desliza (MenuDeslizante); aquí solo el color.
+    'relative z-[1] inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-semibold transition-[color,opacity] duration-200',
+    isActive ? 'text-brand-600 dark:text-brand-400' : 'opacity-70 hover:opacity-100'
   );
+
+/** Menú con un fondo que se desliza hasta la página activa al cambiar de página. */
+function MenuDeslizante({ className, children }: { className: string; children: React.ReactNode }) {
+  const { pathname } = useLocation();
+  const { ref, pos, listo } = useIndicador<HTMLElement>('[aria-current="page"]', pathname);
+  return (
+    <nav ref={ref} className={cn('relative', className)}>
+      {pos && (
+        <span
+          aria-hidden
+          className={cn('absolute rounded-full bg-brand-500/15', listo && 'transition-[left,width,top] duration-300 ease-[var(--ease-out)]')}
+          style={{ left: pos.left, top: pos.top, width: pos.width, height: pos.height }}
+        />
+      )}
+      {children}
+    </nav>
+  );
+}
 
 function useDarkMode() {
   // Se lee la preferencia guardada al iniciar; si se leyera en un efecto, el
@@ -40,6 +60,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {puede(...ACCESO_PRODUCTOS, ...ACCESO_RECLAMOS, ...ACCESO_CONTABILIDAD) && (
         <NavLink to="/inicio" className={navClass}>
           <House size={15} aria-hidden /> Inicio
+        </NavLink>
+      )}
+      {puede(...ACCESO_PRODUCTOS, ...ACCESO_RECLAMOS, ...ACCESO_CONTABILIDAD) && (
+        <NavLink to="/tablero" className={navClass}>
+          <LayoutDashboard size={15} aria-hidden /> Tablero
         </NavLink>
       )}
       {puede(...ACCESO_PRODUCTOS) && (
@@ -73,7 +98,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </span>
             {/* En celulares angostos solo el logo: con "Vista por" y el nombre no cabe en una línea. */}
             <span className="numero-caso hidden whitespace-nowrap text-xl sm:inline">Felix Fix</span>
-            <nav className="ml-4 hidden items-center gap-1 font-normal md:flex">{enlaces}</nav>
+            <MenuDeslizante className="ml-4 hidden items-center gap-1 font-normal md:flex">{enlaces}</MenuDeslizante>
           </div>
           <div className="flex items-center gap-3">
             <button
@@ -88,7 +113,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <UserMenu />
           </div>
         </div>
-        <nav className="flex items-center gap-1 overflow-x-auto px-4 pb-2 md:hidden">{enlaces}</nav>
+        <MenuDeslizante className="flex items-center gap-1 overflow-x-auto px-4 pb-2 md:hidden">{enlaces}</MenuDeslizante>
         {user?.vista && (
           <div role="status" className="border-t border-warning/30 bg-warning/15">
             <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 text-sm sm:px-6">

@@ -71,7 +71,7 @@ export function CierreModal({
           <Button type="button" variant="secondary" onClick={onClose} disabled={saving}>
             Cancelar
           </Button>
-          <Button type="submit" disabled={saving}>
+          <Button type="submit" estado={saving ? 'cargando' : null}>
             {saving ? 'Guardando…' : textoConfirmar}
           </Button>
         </div>

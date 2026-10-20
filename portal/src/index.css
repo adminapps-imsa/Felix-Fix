@@ -48,6 +48,16 @@
   --glass-shadow-hover: 0 2px 4px rgba(30, 27, 58, 0.05), 0 14px 36px -8px rgba(79, 70, 229, 0.18);
   --page-bg: #f4f5fb;
   --page-fg: #1e1b3a;
+
+  /* Gráficos del Tablero. Dos series (validadas para daltonismo sobre --glass-bg) y la escala
+     de antigüedad: un solo tono, de claro (recién llegado) a oscuro (lleva más tiempo). */
+  --viz-1: #6366f1;
+  --viz-2: #12996b;
+  --viz-reja: rgba(30, 27, 58, 0.08);
+  --viz-edad-0: #c7d2fe;
+  --viz-edad-1: #a5b4fc;
+  --viz-edad-2: #6366f1;
+  --viz-edad-3: #3730a3;
 }
 
 .dark {
@@ -58,6 +68,13 @@
   --glass-shadow-hover: 0 2px 4px rgba(0, 0, 0, 0.35), 0 14px 36px -8px rgba(99, 102, 241, 0.28);
   --page-bg: #0b0b13;
   --page-fg: #ede9fe;
+  --viz-1: #7c7ff5;
+  --viz-2: #199e70;
+  --viz-reja: rgba(237, 233, 254, 0.08);
+  --viz-edad-0: #312e81;
+  --viz-edad-1: #4f46e5;
+  --viz-edad-2: #818cf8;
+  --viz-edad-3: #c7d2fe;
   /* Controles nativos (lista del <select>, calendario de fecha) también en oscuro. */
   color-scheme: dark;
 }
@@ -357,6 +374,141 @@ body {
     background-color: color-mix(in oklab, var(--color-brand-500) 12%, transparent);
     border-color: color-mix(in oklab, var(--color-brand-500) 60%, transparent);
     box-shadow: 0 0 0 4px color-mix(in oklab, var(--color-brand-500) 18%, transparent);
+  }
+}
+
+/* ---------- Movimiento del portal (corto y con propósito; todo se apaga con «reducir movimiento») ---------- */
+
+/* Al cambiar de página: la nueva entra apenas desde abajo. */
+.anim-pagina {
+  animation: entrar-pagina 200ms var(--ease-out) both;
+}
+@keyframes entrar-pagina {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+/* Filas de una lista que acaba de cargar: entran en cascada (máximo ~0,2 s de retraso total). */
+.anim-fila {
+  animation: entrar-fila 240ms var(--ease-out) both;
+  animation-delay: calc(min(var(--i, 0), 10) * 20ms);
+}
+@keyframes entrar-fila {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+/* Columnas de un gráfico: crecen desde su base. */
+.anim-crecer {
+  transform-box: fill-box;
+  transform-origin: bottom;
+  animation: crecer-alto 420ms var(--ease-out) both;
+  animation-delay: calc(min(var(--i, 0), 30) * 6ms);
+}
+@keyframes crecer-alto {
+  from {
+    transform: scaleY(0);
+  }
+}
+
+/* Barras horizontales (rankings, proporciones): se llenan de izquierda a derecha. */
+.anim-ancho {
+  transform-origin: left;
+  animation: crecer-ancho 520ms var(--ease-out) both;
+  animation-delay: calc(min(var(--i, 0), 12) * 30ms);
+}
+@keyframes crecer-ancho {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+/* Esqueleto de carga: la forma de la página mientras llegan los datos, con un brillo que pasa. */
+.esqueleto {
+  position: relative;
+  overflow: hidden;
+  border-radius: 0.75rem;
+  background: color-mix(in oklab, currentColor 7%, transparent);
+}
+.esqueleto::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--glass-bg) 70%, transparent), transparent);
+  animation: brillo-esqueleto 1.4s ease-in-out infinite;
+}
+@keyframes brillo-esqueleto {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* Avisos flotantes (toasts): bajan desde el menú y salen apagándose. */
+.anim-aviso {
+  transition:
+    opacity 200ms var(--ease-out),
+    transform 240ms var(--ease-out);
+  @starting-style {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.98);
+  }
+}
+.anim-aviso[data-saliendo='true'] {
+  opacity: 0;
+  transform: translateY(-6px) scale(0.98);
+  transition-duration: 160ms;
+}
+
+/* Etapa actual de la ruta de un caso: un halo suave que late despacio. */
+.anim-halo {
+  animation: halo 2.4s var(--ease-out) infinite;
+}
+@keyframes halo {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--color-brand-500) 35%, transparent);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 8px transparent;
+  }
+}
+
+/* Tramo de la ruta ya recorrido: se dibuja hacia el paso siguiente. */
+.anim-tramo {
+  animation: crecer-ancho 500ms var(--ease-out) both;
+  transform-origin: left;
+}
+@media (width < 40rem) {
+  .anim-tramo {
+    animation-name: crecer-alto-arriba;
+    transform-origin: top;
+  }
+}
+@keyframes crecer-alto-arriba {
+  from {
+    transform: scaleY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anim-pagina,
+  .anim-fila,
+  .anim-crecer,
+  .anim-ancho,
+  .anim-halo,
+  .anim-tramo,
+  .esqueleto::after {
+    animation: none;
+  }
+  .anim-aviso {
+    @starting-style {
+      transform: none;
+    }
   }
 }
 

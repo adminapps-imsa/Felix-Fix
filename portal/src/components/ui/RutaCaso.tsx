@@ -33,22 +33,23 @@ export function RutaCaso({ pasos, className }: { pasos: PasoRuta[]; className?: 
             {!ultimo && (
               <span
                 aria-hidden
-                className={cn(
-                  'absolute left-[11px] top-7 bottom-1 w-0.5 rounded-full sm:left-[calc(50%+18px)] sm:right-[calc(-50%+10px)] sm:top-[11px] sm:bottom-auto sm:h-0.5 sm:w-auto',
-                  tramoHecho ? 'bg-brand-500/70' : 'bg-black/10 dark:bg-white/15'
-                )}
-              />
+                className="absolute left-[11px] top-7 bottom-1 w-0.5 overflow-hidden rounded-full bg-black/10 sm:left-[calc(50%+18px)] sm:right-[calc(-50%+10px)] sm:top-[11px] sm:bottom-auto sm:h-0.5 sm:w-auto dark:bg-white/15"
+              >
+                {/* Tramo recorrido: se dibuja hacia el paso siguiente, uno después del otro. */}
+                {tramoHecho && <span className="anim-tramo absolute inset-0 rounded-full bg-brand-500/70" style={{ animationDelay: `${i * 140}ms` }} />}
+              </span>
             )}
             <span
               aria-hidden
               className={cn(
                 'relative z-[1] grid size-6 shrink-0 place-items-center rounded-full',
                 p.estado === 'hecho' && (p.tono === 'mal' ? 'bg-danger text-white' : p.tono === 'ok' ? 'bg-success text-white' : 'bg-brand-500 text-white'),
-                p.estado === 'actual' && 'bg-[var(--glass-bg)] ring-2 ring-brand-500',
+                // La etapa actual late despacio: es donde está el caso ahora.
+                p.estado === 'actual' && 'anim-halo bg-[var(--glass-bg)] ring-2 ring-brand-500',
                 p.estado === 'pendiente' && 'bg-[var(--glass-bg)] ring-2 ring-black/10 dark:ring-white/15'
               )}
             >
-              {p.estado === 'hecho' && (p.tono === 'mal' ? <X size={14} strokeWidth={3} /> : <Check size={14} strokeWidth={3} />)}
+              {p.estado === 'hecho' && (p.tono === 'mal' ? <X size={14} strokeWidth={3} className="anim-check" /> : <Check size={14} strokeWidth={3} className="anim-check" />)}
               {p.estado === 'actual' && <span className="size-2.5 rounded-full bg-brand-500" />}
             </span>
             <span className="min-w-0 sm:px-1">

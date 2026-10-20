@@ -7,6 +7,7 @@ export const TIPOS: TipoReclamo[] = [
   'danos_textil',
   'danos_perfumeria_cliente',
   'danos_perfumeria_gof',
+  'devolucion',
 ];
 
 export const TIPO_LABEL: Record<TipoReclamo, string> = {
@@ -16,6 +17,7 @@ export const TIPO_LABEL: Record<TipoReclamo, string> = {
   danos_textil: 'Daños y Averías — Textil',
   danos_perfumeria_cliente: 'Daños y Averías — Perfumería (cliente devuelve)',
   danos_perfumeria_gof: 'Daños y Averías — Perfumería (detectado en GOF)',
+  devolucion: 'Devolución al proveedor',
 };
 
 export const TIPO_LABEL_CORTO: Record<TipoReclamo, string> = {
@@ -25,7 +27,11 @@ export const TIPO_LABEL_CORTO: Record<TipoReclamo, string> = {
   danos_textil: 'Daños Textil',
   danos_perfumeria_cliente: 'Daños Perfumería (cliente)',
   danos_perfumeria_gof: 'Daños Perfumería (GOF)',
+  devolucion: 'Devolución',
 };
+
+/** Reclamo de devolución: del tipo, o con algún producto de ese motivo (lleva el retiro del proveedor). */
+export const esDevolucion = (r: { Tipo: TipoReclamo; LineasDevolucion?: number }) => r.Tipo === 'devolucion' || Number(r.LineasDevolucion) > 0;
 
 export const STATUS_LABEL: Record<StatusReclamo, string> = {
   pendiente: 'Pendiente',
@@ -33,6 +39,7 @@ export const STATUS_LABEL: Record<StatusReclamo, string> = {
   resuelto: 'Confirmado por compradora',
   rechazado: 'Rechazado',
   notificado: 'Notificado',
+  devuelto: 'Con comentario de compradora',
 };
 
 /** Deben coincidir con TIPOS_AUTO_APROBADOS del backend (src/services/reclamos/tipos.js). */
