@@ -6,10 +6,12 @@ export const TIPOS = [
   'danos_textil',
   'danos_perfumeria_cliente',
   'danos_perfumeria_gof',
+  // El producto vuelve al proveedor: la compradora decide sus productos y Gof marca cuándo lo retiró.
+  'devolucion',
 ];
 
 export const ORIGENES = ['tienda', 'cedi'];
-export const STATUS = ['pendiente', 'resuelto', 'rechazado', 'notificado'];
+export const STATUS = ['pendiente', 'resuelto', 'rechazado', 'notificado', 'devuelto'];
 
 /**
  * Productos (líneas) de estos tipos son evidencia directa: se auto-aprueban

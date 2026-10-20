@@ -139,7 +139,10 @@ export const motivoNoEliminar = (estado) => NO_ELIMINABLE[estado] || null;
 
 export const MSG_NO_ENVIABLE = 'El reporte solo se puede enviar al proveedor mientras está Pendiente.';
 
-export const motivoNoEnviarProveedor = (estado) => (estado === 'Pendiente' ? null : MSG_NO_ENVIABLE);
+/** Único estado desde el que se envía al proveedor (lo usa también la reserva atómica del repositorio). */
+export const ESTADO_ENVIO_PROVEEDOR = 'Pendiente';
+
+export const motivoNoEnviarProveedor = (estado) => (estado === ESTADO_ENVIO_PROVEEDOR ? null : MSG_NO_ENVIABLE);
 
 /*
  * Topes de reenvío al proveedor: el correo sale del buzón de la empresa a

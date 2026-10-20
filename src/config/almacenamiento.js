@@ -30,6 +30,4 @@ export const reclamoArchivoPath = (filename) => rutaSegura(reclamosDir, filename
 
 export const reporteAdjuntoPath = (filename) => rutaSegura(adjuntosReporteDir, filename);
 
-export function evidenciaAbsolutePath(filename) {
-  return path.join(evidenciaDir, filename);
-}
+export const evidenciaAbsolutePath = (filename) => rutaSegura(evidenciaDir, filename);

@@ -79,8 +79,9 @@ export async function lineasDeReclamo(reclamoId) {
 
 /**
  * Guarda el documento de un adjunto. Si no existe se inserta; si existe y
- * sigue 'pendiente', se actualizan datos, validación y fecha de envío (el
- * reclamo se reenvió). MERGE con HOLDLOCK: dos envíos en paralelo no chocan
+ * sigue 'pendiente', se actualizan datos y validación (el reclamo se
+ * reenvió); EnviadoAt conserva la PRIMERA fecha de envío (de ahí se cuenta
+ * cuánto lleva esperando en contabilidad, también en el Tablero). MERGE con HOLDLOCK: dos envíos en paralelo no chocan
  * con la UNIQUE (ReclamoId, AdjuntoFilename).
  * @returns 'insertado' | 'actualizado' | 'sin_cambios' (ya no está pendiente)
  */
@@ -105,7 +106,7 @@ export async function guardarDocumento(doc) {
       WHEN MATCHED AND t.Estado = 'pendiente' THEN
         UPDATE SET AdjuntoNombre = @nombre, NumeroDocumento = @numero, TipoDocumento = @tipo, Movimiento = @movimiento,
                    FechaDocumento = @fecha, Total = @total, Lineas = @lineas, Validacion = @validacion,
-                   EnviadoAt = SYSUTCDATETIME(), EnviadoPor = @usuario, UpdatedAt = SYSUTCDATETIME()
+                   EnviadoPor = @usuario, UpdatedAt = SYSUTCDATETIME()
       WHEN NOT MATCHED THEN
         INSERT (ReclamoId, AdjuntoFilename, AdjuntoNombre, NumeroDocumento, TipoDocumento, Movimiento,
                 FechaDocumento, Total, Lineas, Validacion, EnviadoPor)

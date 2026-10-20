@@ -6,9 +6,10 @@ import { vistasDisponibles } from '../services/acceso/configuracionService.js';
 
 export const keycloakCode = asyncHandler(async (req, res) => {
   const { code, redirectUri, codeVerifier } = req.body;
-  const { token, user } = await iniciarSesionConCodigo(code, redirectUri, codeVerifier);
+  const { token, user, idToken } = await iniciarSesionConCodigo(code, redirectUri, codeVerifier);
   res.json({
     token,
+    idToken,
     user: { username: user.username, name: user.name, roles: user.roles },
   });
 });

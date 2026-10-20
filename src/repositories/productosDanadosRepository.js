@@ -250,14 +250,17 @@ async function transicionEstado({ reporteId, estadoDesde, estadoHacia, camposExt
  * o ninguno. `evento` lleva lo del historial (accion, usuario, detalle); los
  * estados se toman de la transición. `verificar` (opcional) recibe la fila
  * (Estado, Adjuntos) leída con UPDLOCK antes del cambio y puede lanzar o
- * devolver campos extra para el evento. Devuelve false si el reporte ya no
- * estaba en estadoDesde (o no existe).
+ * devolver campos extra para el evento. `antesDeCambiar(transaction)`
+ * (opcional, async) corre primero, dentro de la misma transacción, y puede
+ * lanzar. Devuelve false si el reporte ya no estaba en estadoDesde (o no existe).
  */
-async function transicionConHistorial({ reporteId, estadoDesde, estadoHacia, camposExtra, evento, verificar }) {
+async function transicionConHistorial({ reporteId, estadoDesde, estadoHacia, camposExtra, evento, verificar, antesDeCambiar }) {
   const pool = await getPool();
   const transaction = new sql.Transaction(pool);
   await transaction.begin();
   try {
+    // Revisión extra dentro de la transacción (puede lanzar para abortar).
+    if (antesDeCambiar) await antesDeCambiar(transaction);
     let extraEvento = {};
     if (verificar) {
       const { recordset } = await new sql.Request(transaction)
@@ -299,20 +302,41 @@ export const rechazar = (reporteId, motivoRechazo, evento) =>
 // NF con Gof: check «Documento 1700» → pasa al supervisor GOF.
 export const registrarDocumento1700 = (reporteId, evento) => transicion('registrarDocumento1700', { reporteId, evento });
 
-/** Otros reportes cerrados con ese «Documento salida de NF» (para no repetirlo en el mismo producto). */
-export async function reportesConDocumentoSalidaNf(numero, excluirReporteId) {
-  const pool = await getPool();
-  const { recordset } = await pool
-    .request()
+/**
+ * Otros reportes cerrados con ese «Documento salida de NF» (para no repetirlo
+ * en el mismo producto). `request` (opcional): para leer dentro de una transacción.
+ */
+export async function reportesConDocumentoSalidaNf(numero, excluirReporteId, request) {
+  const req = request || (await getPool()).request();
+  const { recordset } = await req
     .input('numero', sql.NVarChar(50), numero)
-    .input('reporteId', sql.BigInt, excluirReporteId)
-    .query(`SELECT ReporteId, CodigoBarras FROM ${S}.ReportesProductoDanado WHERE DocumentoSalidaNf = @numero AND ReporteId <> @reporteId`);
+    .input('excluirId', sql.BigInt, excluirReporteId)
+    .query(`SELECT ReporteId, CodigoBarras FROM ${S}.ReportesProductoDanado WHERE DocumentoSalidaNf = @numero AND ReporteId <> @excluirId`);
   return recordset;
 }
 
-// Supervisor GOF: «Documento salida de NF» y cierra.
-export const cerrarNf = (reporteId, documentoSalidaNf, evento) =>
-  transicion('cerrarNf', { reporteId, camposExtra: { documentoSalidaNf }, evento });
+/**
+ * Supervisor GOF: «Documento salida de NF» y cierra. `verificarRepetido(otros)`
+ * recibe los otros reportes con ese número, leídos dentro de la transacción
+ * del cierre bajo un candado por número (sp_getapplock): dos cierres a la vez
+ * con el mismo documento no se cuelan. Lanza si el documento ya se usó.
+ */
+export const cerrarNf = (reporteId, documentoSalidaNf, evento, verificarRepetido) =>
+  transicion('cerrarNf', {
+    reporteId,
+    camposExtra: { documentoSalidaNf },
+    evento,
+    antesDeCambiar: async (transaction) => {
+      await new sql.Request(transaction)
+        .input('recurso', sql.NVarChar(255), `FelixFix:${S}:doc-salida-nf:${documentoSalidaNf}`)
+        .query(`
+          DECLARE @r INT;
+          EXEC @r = sp_getapplock @Resource = @recurso, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 15000;
+          IF @r < 0 THROW 50001, 'Otro reporte se está cerrando con este documento; intenta de nuevo.', 1;
+        `);
+      verificarRepetido?.(await reportesConDocumentoSalidaNf(documentoSalidaNf, reporteId, new sql.Request(transaction)));
+    },
+  });
 
 // `verificar` revisa los documentos de Gof con la fila bloqueada (nadie los quita a la vez).
 export const enviarAContabilidad = (reporteId, evento, verificar) => transicion('enviarAContabilidad', { reporteId, evento, verificar });
@@ -451,24 +475,47 @@ export function parseJsonArray(valor) {
   }
 }
 
-/** Marca el envío al proveedor y su evento de historial en una transacción. */
-export async function registrarEnvioProveedor(reporteId, usuario, evento) {
+/**
+ * Reserva el envío al proveedor ANTES de mandar el correo, con un UPDATE
+ * condicional atómico: solo si sigue en `estado`, con menos de `maxEnvios` y
+ * pasada la espera de `esperaMin` minutos desde el último (las mismas reglas
+ * del dominio: motivoNoEnviarProveedor y bloqueoReenvio). Así dos envíos a la
+ * vez no mandan dos correos. Devuelve lo anterior (para revertir si el correo
+ * falla) o null si no se pudo reservar.
+ */
+export async function reservarEnvioProveedor(reporteId, usuario, { estado, maxEnvios, esperaMin }) {
   const pool = await getPool();
-  const transaction = new sql.Transaction(pool);
-  await transaction.begin();
-  try {
-    await new sql.Request(transaction)
-      .input('reporteId', sql.BigInt, reporteId)
-      .input('usuario', sql.NVarChar(150), usuario).query(`
-        UPDATE ${S}.ReportesProductoDanado
-        SET EnviadoProveedorAt = SYSUTCDATETIME(), EnviadoProveedorPor = @usuario,
-            EnviosProveedor = EnviosProveedor + 1, FechaActualizacion = SYSUTCDATETIME()
-        WHERE ReporteId = @reporteId
-      `);
-    if (evento) await registrarEvento({ reporteId, ...evento }, new sql.Request(transaction));
-    await transaction.commit();
-  } catch (err) {
-    await transaction.rollback().catch(() => {});
-    throw err;
-  }
+  const { recordset } = await pool
+    .request()
+    .input('reporteId', sql.BigInt, reporteId)
+    .input('usuario', sql.NVarChar(150), usuario)
+    .input('estado', sql.VarChar(20), estado)
+    .input('maxEnvios', sql.Int, maxEnvios)
+    .input('esperaMin', sql.Int, esperaMin).query(`
+      UPDATE ${S}.ReportesProductoDanado
+      SET EnviadoProveedorAt = SYSUTCDATETIME(), EnviadoProveedorPor = @usuario,
+          EnviosProveedor = EnviosProveedor + 1, FechaActualizacion = SYSUTCDATETIME()
+      OUTPUT DELETED.EnviosProveedor, DELETED.EnviadoProveedorAt, DELETED.EnviadoProveedorPor
+      WHERE ReporteId = @reporteId AND Estado = @estado AND EnviosProveedor < @maxEnvios
+        AND (EnviadoProveedorAt IS NULL OR EnviadoProveedorAt <= DATEADD(MINUTE, -@esperaMin, SYSUTCDATETIME()))
+    `);
+  return recordset[0] || null;
 }
+
+/** El correo no salió: devuelve contador, fecha y autor de antes (solo si nadie más reservó después). */
+export async function revertirReservaEnvioProveedor(reporteId, antes) {
+  const pool = await getPool();
+  await pool
+    .request()
+    .input('reporteId', sql.BigInt, reporteId)
+    .input('envios', sql.Int, antes.EnviosProveedor)
+    .input('at', sql.DateTime2, antes.EnviadoProveedorAt)
+    .input('por', sql.NVarChar(150), antes.EnviadoProveedorPor).query(`
+      UPDATE ${S}.ReportesProductoDanado
+      SET EnviosProveedor = @envios, EnviadoProveedorAt = @at, EnviadoProveedorPor = @por, FechaActualizacion = SYSUTCDATETIME()
+      WHERE ReporteId = @reporteId AND EnviosProveedor = @envios + 1
+    `);
+}
+
+/** Evento de historial del envío ya reservado y enviado. */
+export const registrarEventoEnvioProveedor = (reporteId, evento) => registrarEvento({ reporteId, ...evento });

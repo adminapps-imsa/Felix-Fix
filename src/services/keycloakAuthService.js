@@ -91,5 +91,7 @@ export async function iniciarSesionConCodigo(code, redirectUri, codeVerifier) {
     .setExpirationTime(env.session.expiresIn)
     .sign(new TextEncoder().encode(env.session.jwtSecret));
 
-  return { token: sessionToken, user };
+  // El id_token solo sirve como id_token_hint al cerrar sesión: sin él, Keycloak
+  // muestra su pantalla «¿Quieres cerrar sesión?» y hay que confirmar otra vez.
+  return { token: sessionToken, user, idToken: tokenResponse.id_token || null };
 }

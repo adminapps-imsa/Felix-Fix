@@ -13,9 +13,19 @@ const adminBase = () => env.keycloak.issuerUrl.replace('/realms/', '/admin/realm
 let tokenCache = null; // { token, exp }
 let clientUuid = null;
 
-async function tokenServicio() {
-  if (tokenCache && Date.now() < tokenCache.exp) return tokenCache.token;
-  if (!env.keycloak.clientId || !env.keycloak.clientSecret) throw serviceUnavailable('Keycloak no está configurado.');
+// Keycloak a veces falla por un momento (500, sin respuesta, o rechaza la cuenta
+// de servicio y al segundo la acepta). Se reintenta antes de dar el error:
+// todo lo que se le pide desde aquí se puede repetir sin efectos dobles (leer
+// usuarios/roles, asignar o quitar un rol que ya está o ya no está).
+const INTENTOS = 3;
+const PAUSA_MS = [300, 900];
+const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
+const MSG_KEYCLOAK = 'Keycloak (el servidor de usuarios) no respondió bien. Intenta de nuevo en un momento.';
+
+/** Fallo pasajero: error del servidor, demasiadas peticiones o sin respuesta. */
+const pasajero = (status) => status === undefined || status === 429 || status >= 500;
+
+async function pedirToken() {
   let res;
   try {
     res = await fetch(`${env.keycloak.issuerUrl}/protocol/openid-connect/token`, {
@@ -29,34 +39,70 @@ async function tokenServicio() {
       signal: AbortSignal.timeout(10000),
     });
   } catch (err) {
-    logger.error({ err: err.message }, 'No se pudo contactar a Keycloak (cuenta de servicio)');
-    throw badGateway('No se pudo contactar a Keycloak.');
+    return { error: err.message };
   }
-  if (!res.ok) {
-    logger.error({ status: res.status }, 'Keycloak rechazó la cuenta de servicio');
-    throw badGateway('Keycloak rechazó la cuenta de servicio del portal.');
+  if (!res.ok) return { status: res.status };
+  return { json: await res.json() };
+}
+
+async function tokenServicio() {
+  if (tokenCache && Date.now() < tokenCache.exp) return tokenCache.token;
+  if (!env.keycloak.clientId || !env.keycloak.clientSecret) throw serviceUnavailable('Keycloak no está configurado.');
+  let ultimo;
+  for (let i = 0; i < INTENTOS; i++) {
+    if (i) await esperar(PAUSA_MS[i - 1]);
+    ultimo = await pedirToken();
+    if (ultimo.json) {
+      // Se renueva 30 s antes de que venza.
+      tokenCache = { token: ultimo.json.access_token, exp: Date.now() + Math.max(0, (ultimo.json.expires_in - 30) * 1000) };
+      return tokenCache.token;
+    }
+    // Credenciales malas (400/401 de verdad) no se arreglan reintentando… salvo que Keycloak
+    // esté a medio reiniciar: se reintenta igual, son pocas veces y con pausa corta.
   }
-  const json = await res.json();
-  // Se renueva 30 s antes de que venza.
-  tokenCache = { token: json.access_token, exp: Date.now() + Math.max(0, (json.expires_in - 30) * 1000) };
-  return tokenCache.token;
+  if (ultimo.error) {
+    logger.error({ err: ultimo.error }, 'No se pudo contactar a Keycloak (cuenta de servicio)');
+    throw badGateway(MSG_KEYCLOAK);
+  }
+  logger.error({ status: ultimo.status }, 'Keycloak rechazó la cuenta de servicio');
+  throw badGateway('Keycloak rechazó la cuenta de servicio del portal. Si sigue pasando, avísale a TI.');
 }
 
 async function kc(path, { method = 'GET', body } = {}) {
-  const res = await fetch(`${adminBase()}${path}`, {
-    method,
-    headers: { Authorization: `Bearer ${await tokenServicio()}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
-    body: body ? JSON.stringify(body) : undefined,
-    signal: AbortSignal.timeout(10000),
-  }).catch((err) => {
-    logger.error({ err: err.message, path }, 'Error de red con la API de Keycloak');
-    throw badGateway('No se pudo contactar a Keycloak.');
-  });
-  if (!res.ok) {
-    logger.error({ status: res.status, path, method }, 'La API de Keycloak respondió con error');
-    throw badGateway(`Keycloak respondió ${res.status}.`);
+  let ultimo = null;
+  for (let i = 0; i < INTENTOS; i++) {
+    if (i) await esperar(PAUSA_MS[i - 1]);
+    let res;
+    try {
+      res = await fetch(`${adminBase()}${path}`, {
+        method,
+        headers: { Authorization: `Bearer ${await tokenServicio()}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+        body: body ? JSON.stringify(body) : undefined,
+        signal: AbortSignal.timeout(10000),
+      });
+    } catch (err) {
+      if (err.status) throw err; // error ya traducido de tokenServicio
+      ultimo = { error: err.message };
+      continue;
+    }
+    if (res.ok) {
+      if (i) logger.info({ path, method, intentos: i + 1 }, 'Keycloak respondió después de reintentar');
+      return res.status === 204 ? null : res.json();
+    }
+    ultimo = { status: res.status };
+    // 401: el token de la cuenta de servicio se invalidó antes de tiempo; se pide otro.
+    if (res.status === 401) {
+      tokenCache = null;
+      continue;
+    }
+    if (!pasajero(res.status)) break;
   }
-  return res.status === 204 ? null : res.json();
+  if (ultimo?.error) {
+    logger.error({ err: ultimo.error, path }, 'Error de red con la API de Keycloak');
+    throw badGateway(MSG_KEYCLOAK);
+  }
+  logger.error({ status: ultimo?.status, path, method }, 'La API de Keycloak respondió con error');
+  throw badGateway(pasajero(ultimo?.status) || ultimo?.status === 401 ? MSG_KEYCLOAK : `Keycloak no aceptó la operación (${ultimo?.status}).`);
 }
 
 async function uuidCliente() {
@@ -164,11 +210,31 @@ export async function buscarUsuarios({ q = '', first = 0, max = 20 }) {
   };
 }
 
+/**
+ * Todos los usuarios del realm en pocas consultas (de 500 en 500), por id.
+ * Más rápido y confiable que pedir cada usuario por separado: si una consulta
+ * suelta fallaba (o tardaba los 10 s del timeout), esa persona se perdía.
+ */
+async function usuariosDelRealm() {
+  const porId = new Map();
+  for (let desde = 0; ; desde += 500) {
+    const pagina = await kc(`/users?first=${desde}&max=500&briefRepresentation=true`);
+    for (const u of pagina) porId.set(u.id, u);
+    if (pagina.length < 500) break;
+  }
+  return porId;
+}
+
+/** Los usuarios de esos ids: de la lista del realm, o pedidos aparte si alguno no vino (raro). */
+async function usuariosPorId(ids) {
+  const delRealm = await usuariosDelRealm();
+  return Promise.all(ids.map((id) => delRealm.get(id) || kc(`/users/${encodeURIComponent(id)}`).catch(() => null)));
+}
+
 /** Solo usuarios con algún rol del cliente (salen del mapa, no de la búsqueda del realm). */
 export async function usuariosConAlgunRol({ q = '', first = 0, max = 20 }) {
   const m = await mapaRoles();
-  const ids = [...m.porUsuario.keys()];
-  const detalles = await Promise.all(ids.map((id) => kc(`/users/${encodeURIComponent(id)}`).catch(() => null)));
+  const detalles = await usuariosPorId([...m.porUsuario.keys()]);
   const texto = q.trim().toLowerCase();
   const todos = detalles
     .filter(Boolean)
@@ -193,7 +259,7 @@ export async function correosDeRoles(roles) {
   const ids = [...m.porUsuario.entries()]
     .filter(([id, rs]) => !m.deshabilitados.has(id) && [...rs].some((r) => buscados.has(r)))
     .map(([id]) => id);
-  const usuarios = await Promise.all(ids.map((id) => kc(`/users/${encodeURIComponent(id)}`).catch(() => null)));
+  const usuarios = await usuariosPorId(ids);
   return [...new Set(usuarios.filter((u) => u && u.enabled !== false && u.email).map((u) => u.email.toLowerCase()))];
 }
 

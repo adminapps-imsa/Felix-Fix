@@ -17,6 +17,7 @@ import { documentoMaterialSap } from './sapProductosService.js';
 import { parsePagination, buildPaginationMeta } from '../utils/pagination.js';
 import { badRequest, conflict, notFound, badGateway, forbidden, serviceUnavailable } from '../utils/httpError.js';
 import { tienePermiso } from './acceso/permisos.js';
+import { exigirDivision } from './divisiones.js';
 import {
   esDocGof,
   motivoNoEditable,
@@ -26,6 +27,9 @@ import {
   motivoNoEliminar,
   motivoNoEnviarProveedor,
   bloqueoReenvio,
+  ESTADO_ENVIO_PROVEEDOR,
+  MAX_ENVIOS_PROVEEDOR,
+  ESPERA_REENVIO_MIN,
   alcanceVista,
   puedeVerReporte,
   motivoNoDocumento1700,
@@ -114,7 +118,9 @@ export async function obtenerEvidencia(reporteId, usuario) {
   if (!reporte || !reporte.EvidenciaKey) throw notFound('Este reporte no tiene evidencia adjunta.');
   const stream = await getEvidenceStream(reporte.EvidenciaProveedor, reporte.EvidenciaKey);
   if (!stream) throw notFound('El archivo de evidencia ya no está disponible.');
-  return stream;
+  // Content-Type por la extensión guardada (solo se aceptan JPG, PNG y WebP).
+  const ext = path.extname(reporte.EvidenciaKey).slice(1).toLowerCase();
+  return { stream, contentType: MIME_FOTO[ext] || 'application/octet-stream' };
 }
 
 async function validarArchivoEvidencia(multerFile) {
@@ -126,19 +132,22 @@ async function validarArchivoEvidencia(multerFile) {
 }
 
 export async function crearReporte(data, multerFile, usuario) {
+  // Antes de guardar la foto: una división que no es del catálogo no crea nada.
+  data = { ...data, division: await exigirDivision(data.division) };
   let evidencia = { provider: 'local', key: null };
   if (multerFile) {
     await validarArchivoEvidencia(multerFile);
     evidencia = await saveEvidence(multerFile);
   }
 
-  // Un valor nuevo queda en el catálogo; uno existente (con otras mayúsculas)
-  // se guarda como ya está escrito allí. Se registra en la misma transacción
-  // que el reporte: si la creación falla, el catálogo no cambia.
+  // Motivo: un valor nuevo queda en el catálogo; uno existente (con otras
+  // mayúsculas) se guarda como ya está escrito allí. Se registra en la misma
+  // transacción que el reporte: si la creación falla, el catálogo no cambia.
+  // La división no: solo las del catálogo (exigirDivision, arriba).
   const reporteId = await repo.crear(
     { ...data, evidenciaProveedor: evidencia.provider, evidenciaKey: evidencia.key },
     usuario,
-    { catalogos: { division: CAT_DIVISION, motivo: CAT_MOTIVO } }
+    { catalogos: { motivo: CAT_MOTIVO } }
   );
   // Ya referenciada en la BD: errorHandler no debe borrarla si algo falla después.
   marcarGuardado(multerFile);
@@ -195,9 +204,9 @@ export async function cerrarNf(reporteId, { numero, comentario }, usuario) {
   const r = await existeOFallar(reporteId);
   // Sin consultar SAP si el reporte no está esperando al supervisor GOF.
   if (r.Estado !== 'NFValidacion') throw conflict('El reporte ya no está esperando la validación del supervisor GOF.');
-  const repetido = (await repo.reportesConDocumentoSalidaNf(num, reporteId)).find((o) => mismoCodigo(o.CodigoBarras, r.CodigoBarras));
+  const repetidoEn = (otros) => otros.find((o) => mismoCodigo(o.CodigoBarras, r.CodigoBarras))?.ReporteId ?? null;
   const sap = await documentoMaterialSap(num, r.CodigoBarras);
-  const v = validarDocumentoSalidaNf({ numero: num, sap, tiendaCodigo: r.TiendaCodigo, codigoBarras: r.CodigoBarras, repetidoEn: repetido?.ReporteId ?? null });
+  const v = validarDocumentoSalidaNf({ numero: num, sap, tiendaCodigo: r.TiendaCodigo, codigoBarras: r.CodigoBarras, repetidoEn: repetidoEn(await repo.reportesConDocumentoSalidaNf(num, reporteId)) });
   if (v.code === 'SAP_NO_DISPONIBLE') throw serviceUnavailable(v.mensaje, { code: v.code });
   if (v.code) throw badRequest(v.mensaje, { code: v.code });
   const cantidadSap = v.lineas.reduce((t, l) => t + l.menge, 0);
@@ -205,7 +214,14 @@ export async function cerrarNf(reporteId, { numero, comentario }, usuario) {
     .filter(Boolean)
     .join(' · ')
     .slice(0, 1000);
-  const ok = await repo.cerrarNf(reporteId, num, eventoDe(usuario, 'NFCerrado', detalleEvento));
+  // SAP (lento) va fuera; el «ya se usó» se repite dentro de la transacción del cierre,
+  // con un candado por número, para que dos cierres a la vez no pasen los dos.
+  const ok = await repo.cerrarNf(reporteId, num, eventoDe(usuario, 'NFCerrado', detalleEvento), (otros) => {
+    const otro = repetidoEn(otros);
+    if (!otro) return;
+    const rep = validarDocumentoSalidaNf({ numero: num, repetidoEn: otro });
+    throw badRequest(rep.mensaje, { code: rep.code });
+  });
   if (!ok) throw conflict('El reporte ya no está esperando la validación del supervisor GOF.');
   const detalle = await obtenerDetalle(reporteId);
   avisarEtapa('nfCerrado', detalle, { detalle: detalleEvento });
@@ -253,9 +269,10 @@ export async function procesarReporte(reporteId, usuario) {
     throw conflict('El reporte no está en estado Aprobado (ya fue procesado, está en proceso, o fue rechazado).');
   }
 
-  const reporte = await repo.obtenerPorId(reporteId);
-
   try {
+    // Dentro del try: si esta lectura falla, el reporte también vuelve a Aprobado.
+    const reporte = await repo.obtenerPorId(reporteId);
+    if (!reporte) throw new Error('El reporte no se encontró después de marcarlo EnProceso.');
     const { sapDocumentoId } = await darDeBajaInventario({
       reporteId,
       sku: reporte.Sku,
@@ -393,10 +410,24 @@ function indice(idx) {
   return n;
 }
 
-export async function obtenerAdjunto(reporteId, idx, usuario) {
+/**
+ * Posición del adjunto pedido. `f` (opcional): su nombre en disco, que manda
+ * el portal. Si en la posición `idx` hay otro (alguien quitó uno antes y la
+ * lista se corrió), se busca por nombre; si ya no está, 404. Sin `f`, solo la posición.
+ */
+function indiceAdjunto(adjuntos, idx, f) {
+  const i = indice(idx);
+  if (!f || adjuntos[i]?.filename === f) return i;
+  const j = adjuntos.findIndex((a) => a?.filename === f);
+  if (j < 0) throw notFound('El archivo ya no existe. Recarga el detalle.');
+  return j;
+}
+
+export async function obtenerAdjunto(reporteId, idx, usuario, f) {
   const r = await existeOFallar(reporteId);
   exigirVisible(r, usuario);
-  const adj = parseJsonArray(r.Adjuntos)[indice(idx)];
+  const adjuntos = parseJsonArray(r.Adjuntos);
+  const adj = adjuntos[indiceAdjunto(adjuntos, idx, f)];
   if (!adj) throw notFound('Adjunto no encontrado.');
   const ext = path.extname(adj.filename).toLowerCase();
   const contentType =
@@ -410,11 +441,13 @@ export async function obtenerAdjunto(reporteId, idx, usuario) {
 
 // Mismos permisos que la ruta de adjuntos para el proveedor.
 
-export async function eliminarAdjunto(reporteId, idx, usuario) {
-  const i = indice(idx);
+export async function eliminarAdjunto(reporteId, idx, usuario, f) {
+  indice(idx);
   const editaProveedor = puedeEditarReporte(usuario, await existeOFallar(reporteId));
   let borrado = null;
   const res = await repo.modificarAdjuntos(reporteId, (a, estado) => {
+    // La posición se resuelve con la lista leída bajo el bloqueo.
+    const i = indiceAdjunto(a, idx, f);
     if (!a[i]) return null;
     // Primero quién puede (403), después si el estado lo permite (409).
     if (esDocGof(a[i])) {
@@ -540,24 +573,51 @@ export async function enviarAlProveedor(reporteId, usuario, { soloA } = {}) {
     ...archivos,
   ];
   const cc = !prueba && remitente.correo && !para.includes(remitente.correo) ? [remitente.correo] : [];
-  const envio = await enviarCorreo({
-    para,
-    cc,
-    responderA: remitente.correo,
-    asunto: prueba ? `[PRUEBA] ${asunto}` : asunto,
-    html,
-    texto,
-    adjuntos,
-  });
+
+  // Reserva atómica del envío (mismas reglas que arriba, en un UPDATE
+  // condicional): si dos peticiones llegan a la vez, solo una manda el correo.
+  let reserva = null;
+  if (!prueba) {
+    reserva = await repo.reservarEnvioProveedor(reporteId, autor(usuario), {
+      estado: ESTADO_ENVIO_PROVEEDOR,
+      maxEnvios: MAX_ENVIOS_PROVEEDOR,
+      esperaMin: ESPERA_REENVIO_MIN,
+    });
+    if (!reserva) {
+      const actual = await existeOFallar(reporteId);
+      throw conflict(motivoNoEnviarProveedor(actual.Estado) || bloqueoReenvio(actual) || 'Otro usuario está enviando este reporte en este momento.');
+    }
+  }
+
+  let envio;
+  try {
+    envio = await enviarCorreo({
+      para,
+      cc,
+      responderA: remitente.correo,
+      asunto: prueba ? `[PRUEBA] ${asunto}` : asunto,
+      html,
+      texto,
+      adjuntos,
+    });
+  } catch (err) {
+    // No salió: se devuelve el contador y la fecha de antes, para poder reintentar.
+    if (reserva) {
+      await repo.revertirReservaEnvioProveedor(reporteId, reserva).catch((e) => {
+        logger.error({ err: e, reporteId }, 'No se pudo revertir la reserva del envío al proveedor tras fallar el correo');
+      });
+    }
+    throw err;
+  }
 
   if (!prueba) {
-    // El correo ya salió: si falla el registro NO se responde error (el usuario
-    // lo reenviaría). Queda en el log para corregirlo a mano.
+    // El correo ya salió (y el envío quedó contado en la reserva): si falla el
+    // historial NO se responde error (el usuario lo reenviaría). Queda en el log.
     const detalleEnvio = `Para: ${para.join(', ')}${cc.length ? ` · Copia: ${cc.join(', ')}` : ''}`.slice(0, 1000);
     try {
-      await repo.registrarEnvioProveedor(reporteId, autor(usuario), eventoDe(usuario, 'EnviadoProveedor', detalleEnvio));
+      await repo.registrarEventoEnvioProveedor(reporteId, eventoDe(usuario, 'EnviadoProveedor', detalleEnvio));
     } catch (err) {
-      logger.error({ err, reporteId, para, cc }, 'Correo al proveedor enviado, pero no se pudo registrar el envío en la BD');
+      logger.error({ err, reporteId, destinatarios: para.length + cc.length }, 'Correo al proveedor enviado, pero no se pudo registrar el evento en el historial');
     }
   }
   return { ...(await obtenerDetalle(reporteId)), envio: { para, cc, aceptados: envio.aceptados, rechazados: envio.rechazados } };

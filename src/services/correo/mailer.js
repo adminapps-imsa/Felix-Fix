@@ -84,13 +84,19 @@ async function enviarPorN8n({ para, cc, responderA, asunto, html, texto, adjunto
     const cuerpo = await res.text();
     if (!res.ok) throw new Error(`n8n respondió ${res.status}${cuerpo ? `: ${cuerpo.slice(0, 300)}` : ''}`);
     const aceptados = [...para, ...cc];
-    logger.info({ via: 'n8n', para, cc, adjuntos: adjuntos.map((a) => a.filename) }, 'Correo enviado');
+    logger.info({ via: 'n8n', ...resumenDestinatarios(aceptados), adjuntos: adjuntos.length }, 'Correo enviado');
     return { messageId: null, aceptados, rechazados: [] };
   } catch (err) {
     const motivo = err.name === 'TimeoutError' ? 'n8n no respondió a tiempo' : err.message;
     logger.error({ via: 'n8n', err: motivo }, 'No se pudo enviar el correo');
     throw badGateway(MSG_FALLO, { code: 'CORREO_FALLO' });
   }
+}
+
+/** Para el log: cuántos destinatarios y de qué dominios, sin las direcciones (datos personales). */
+export function resumenDestinatarios(direcciones) {
+  const lista = (direcciones || []).filter(Boolean);
+  return { destinatarios: lista.length, dominios: [...new Set(lista.map((d) => String(d).split('@')[1]?.toLowerCase()).filter(Boolean))] };
 }
 
 /** Envía y devuelve el messageId. Errores de SMTP o n8n -> 502 con un mensaje genérico (el detalle va al log). */
@@ -109,8 +115,11 @@ export async function enviarCorreo({ para, cc = [], responderA, asunto, html, te
       text: texto,
       attachments: adjuntos,
     });
-    logger.info({ messageId: info.messageId, para, cc, aceptados: info.accepted, rechazados: info.rejected }, 'Correo enviado');
-    if (!info.accepted?.length) throw new Error(`El servidor de correo rechazó todos los destinatarios: ${info.rejected?.join(', ')}`);
+    logger.info(
+      { messageId: info.messageId, ...resumenDestinatarios([...para, ...cc]), aceptados: info.accepted?.length || 0, rechazados: info.rejected?.length || 0 },
+      'Correo enviado'
+    );
+    if (!info.accepted?.length) throw new Error(`El servidor de correo rechazó los ${info.rejected?.length || 0} destinatarios.`);
     return { messageId: info.messageId, aceptados: info.accepted, rechazados: info.rejected || [] };
   } catch (err) {
     logger.error({ err: err.message, code: err.code, response: err.response }, 'No se pudo enviar el correo');

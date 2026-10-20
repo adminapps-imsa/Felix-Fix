@@ -16,6 +16,7 @@ import { parseJsonArray } from '../../repositories/reclamosRepository.js';
 import {
   validarToken,
   validarIndice,
+  indiceAdjunto,
   obtenerOFallar,
   tipoRealDeArchivo,
   exigir,
@@ -43,45 +44,22 @@ export async function verificarPuedeAdjuntar(token, usuario) {
   return r;
 }
 
-/** "#3 7501234567890 TROUSERS BOY, RED, 7" para los mensajes de error. */
-const describirProducto = (l) => [`#${l.posicion}`, l.codigoBarra, l.descripcion].filter(Boolean).join(' ');
-/** Hasta 10 productos; del resto solo se dice cuántos son. */
-const listaProductos = (ls) => ls.slice(0, 10).map(describirProducto).join(' · ') + (ls.length > 10 ? ` · y ${ls.length - 10} más` : '');
-
 /**
  * Una nota de débito (PDF de SAP) solo puede traer productos que la
  * compradora aprobó. Si trae uno rechazado o todavía sin decidir, no se
- * adjunta. Un PDF que no es nota de débito (sin tabla de productos) no se valida aquí.
+ * adjunta (regla: dominio.motivoNotaNoCuadra). Un PDF que no es nota de débito
+ * (sin tabla de productos) no se valida aquí.
  */
 async function validarPdfContraDecisiones(token, nota) {
   if (!nota.legible) return { notaAprobada: false };
   const { lineas } = cruzar(nota.filas, await repo.listarLineas(token));
-  const enReclamo = lineas.filter((l) => l.lineaId !== null);
-  const noEnReclamo = lineas.filter((l) => l.lineaId === null);
-  const rechazados = enReclamo.filter((l) => l.decision === 'rechazado');
-  const sinAprobar = enReclamo.filter((l) => l.decision === null);
-  const doc = nota.numeroDocumento ? ` (documento ${nota.numeroDocumento})` : '';
-  if (rechazados.length) {
-    throw badRequest(
-      `Documento SAP debe coincidir con los productos aprobados${doc}. Trae ${rechazados.length} producto(s) rechazado(s) por la compradora: ${listaProductos(rechazados)}.`,
-      { code: 'PDF_PRODUCTO_RECHAZADO', productos: rechazados.map((l) => l.posicion) }
-    );
-  }
-  if (sinAprobar.length) {
-    throw badRequest(
-      `Documento SAP debe coincidir con los productos aprobados${doc}. Trae ${sinAprobar.length} producto(s) que la compradora aún no aprueba: ${listaProductos(sinAprobar)}.`,
-      { code: 'PDF_PRODUCTO_SIN_APROBAR', productos: sinAprobar.map((l) => l.posicion) }
-    );
-  }
-  if (noEnReclamo.length) {
-    const lista = noEnReclamo.slice(0, 10).map((l) => l.descripcion || l.material).join(' · ') + (noEnReclamo.length > 10 ? ` · y ${noEnReclamo.length - 10} más` : '');
-    throw badRequest(
-      `Documento SAP debe coincidir con los productos aprobados${doc}. Trae ${noEnReclamo.length} producto(s) que no están en este reclamo: ${lista}.`,
-      { code: 'PDF_PRODUCTO_NO_EN_RECLAMO' }
-    );
+  const motivo = dominio.motivoNotaNoCuadra(lineas, nota.numeroDocumento);
+  if (motivo) {
+    const { mensaje, ...extra } = motivo;
+    throw badRequest(mensaje, extra);
   }
   // Nota válida: trae productos del reclamo y todos están aprobados.
-  return { notaAprobada: enReclamo.length > 0, documentoSap: nota.numeroDocumento || null };
+  return { notaAprobada: dominio.esNotaAprobada(lineas), documentoSap: nota.numeroDocumento || null };
 }
 
 const sha256 = async (ruta) => crypto.createHash('sha256').update(await fs.readFile(ruta)).digest('hex');
@@ -110,6 +88,11 @@ async function exigirPdfDeEsteReclamo(r, numeroPdf) {
   const otros = conDocumentos(await repo.buscarPorDocumentosSap([dominio.normalizarDocSap(numeroPdf)])).filter((o) => o.Token.toUpperCase() !== r.Token.toUpperCase());
   exigir(dominio.motivoPdfDeOtroReclamo(numeroPdf, propios, otros));
 }
+
+const esDocDelReclamo = (r, numero) =>
+  [r.SapDoc1, r.SapDoc2, r.SapDoc3, ...parseJsonArray(r.SapDocsExtra)]
+    .filter(Boolean)
+    .some((d) => dominio.normalizarDocSap(d) === dominio.normalizarDocSap(numero));
 
 export async function agregarAdjunto(token, multerFile, usuario) {
   if (!multerFile) throw badRequest('Selecciona una foto, un Excel o un PDF.');
@@ -166,6 +149,9 @@ export async function agregarAdjunto(token, multerFile, usuario) {
       originalname: path.basename(multerFile.originalname || multerFile.filename).slice(0, 255),
       tipo: tipo === 'pdf' || tipo === 'imagen' ? tipo : 'excel',
       ...(nota?.notaAprobada && { notaAprobada: true, documentoSap: nota.documentoSap }),
+      // PDF de uno de los documentos SAP del reclamo: queda anotado de qué documento es
+      // (al reenviar un reclamo devuelto se revisa que cada documento tenga su PDF).
+      ...(!nota?.notaAprobada && lectura?.numeroDocumento && esDocDelReclamo(r, lectura.numeroDocumento) && { documentoSap: String(lectura.numeroDocumento).trim() }),
       uploaded_at: new Date().toISOString(),
       uploaded_by: nombreUsuario(usuario),
     };
@@ -197,16 +183,26 @@ export async function agregarAdjunto(token, multerFile, usuario) {
   }
 }
 
-export async function eliminarAdjunto(token, idx) {
+/** `f` (opcional): nombre en disco del adjunto, por si la posición cambió (ver indiceAdjunto). */
+export async function eliminarAdjunto(token, idx, usuario, f) {
   validarToken(token);
-  const i = validarIndice(idx);
+  validarIndice(idx);
+  // Quien tiene «Eliminar», o quien creó el reclamo mientras la compradora se lo devolvió para corregir.
+  const puedeEliminar = tienePermiso(usuario, 'reclamos.eliminar');
+  const corrige = { username: nombreUsuario(usuario), esAdmin: tienePermiso(usuario, 'configuracion.administrar') };
+  let borrado = null;
   let aBorrar = [];
   const res = await repo.modificarArchivos(token, (a, estado) => {
+    if (!puedeEliminar && dominio.motivoNoCorregir(estado, corrige)) {
+      throw forbidden('Solo quien puede eliminar, o quien creó el reclamo mientras está devuelto para corregir, puede quitar adjuntos.');
+    }
     exigir(dominio.motivoNoEliminarAdjunto(estado));
+    const i = indiceAdjunto(a.adjuntos, idx, f);
     const adj = a.adjuntos[i];
     if (!adj) return null;
     const fotos = a.imagenes.filter((img) => img.origen === adj.filename);
-    aBorrar = [adj.filename, ...fotos.map((f) => f.filename)];
+    borrado = { posicion: i, adj };
+    aBorrar = [adj.filename, ...fotos.map((foto) => foto.filename)];
     return {
       adjuntos: a.adjuntos.filter((_, j) => j !== i),
       imagenes: a.imagenes.filter((img) => img.origen !== adj.filename),
@@ -216,5 +212,10 @@ export async function eliminarAdjunto(token, idx) {
   if (!aBorrar.length) throw notFound('Adjunto no encontrado.');
   // Solo después del commit: si la BD falla, los archivos siguen referenciados.
   await borrarArchivos(aBorrar);
-  return detalle(token);
+  const dto = await detalle(token);
+  logger.info(
+    { reclamo: dto.Numero, posicion: borrado.posicion, archivo: borrado.adj.filename, nombre: borrado.adj.originalname, usuario: nombreUsuario(usuario) },
+    'Adjunto de reclamo eliminado'
+  );
+  return dto;
 }

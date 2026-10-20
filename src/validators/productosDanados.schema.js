@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
-export const ESTADOS = ['Pendiente', 'Aprobado', 'Rechazado', 'EnContabilidad', 'Cerrado', 'EnProceso', 'Procesado'];
+// Todos los estados de la ruta del dominio (TRANSICIONES); test/validators lo comprueba.
+export const ESTADOS = ['Pendiente', 'Aprobado', 'Rechazado', 'NFValidacion', 'EnContabilidad', 'Cerrado', 'EnProceso', 'Procesado'];
 
 export const crearReporteSchema = z.object({
   tiendaId: z.coerce.number().int().positive(),
@@ -9,7 +10,8 @@ export const crearReporteSchema = z.object({
   codigoBarras: z.string().trim().min(1, 'El código de barras es obligatorio.').max(50),
   nombreProducto: z.string().trim().min(1).max(200),
   marca: z.string().trim().max(100).optional().or(z.literal('')),
-  // División y motivo: texto libre que alimenta su catálogo (ReclamoCatalogos).
+  // Motivo: texto libre que alimenta su catálogo (ReclamoCatalogos). División: solo
+  // las activas del catálogo (Perfumería o Cosméticos); el servicio la valida.
   division: z.string().trim().min(1, 'La división es obligatoria.').max(100),
   motivo: z.string().trim().min(1, 'El motivo es obligatorio.').max(100),
   cantidad: z.coerce.number().positive().max(100000),
@@ -33,8 +35,15 @@ const fechaDia = z
   }, 'Fecha inválida (formato AAAA-MM-DD).')
   .optional();
 
+// Id de tienda (INT): entero positivo; vacío = sin filtro. Otra cosa es 400 sin llegar a SQL.
+const tiendaId = z
+  .string()
+  .trim()
+  .refine((v) => v === '' || (/^\d{1,10}$/.test(v) && Number(v) > 0 && Number(v) <= 2147483647), 'Tienda inválida.')
+  .optional();
+
 export const listarQuerySchema = z.object({
-  tienda: z.string().optional(),
+  tienda: tiendaId,
   motivo: z.string().trim().max(100).optional(),
   estado: z.enum(ESTADOS).optional(),
   fechaDesde: fechaDia,
@@ -64,4 +73,15 @@ export const cerrarNfSchema = z.object({
 export const pagoRecibidoSchema = z.object({
   referencia: z.string().trim().min(1, 'Escribe la referencia del pago.').max(200),
   comentario: z.string().trim().max(500).optional().or(z.literal('')),
+});
+
+// `?f=<filename>` de GET/DELETE de un adjunto: su nombre en disco (UUID + extensión), opcional.
+export const adjuntoQuerySchema = z.object({
+  f: z
+    .string()
+    .trim()
+    .max(100)
+    .regex(/^[^/\\]+$/, 'Nombre de archivo inválido.')
+    .optional()
+    .or(z.literal('').transform(() => undefined)),
 });

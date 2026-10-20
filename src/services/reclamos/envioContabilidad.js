@@ -6,14 +6,14 @@ import { parseJsonArray } from '../../repositories/reclamosRepository.js';
 import { reclamoArchivoPath } from '../../config/almacenamiento.js';
 import * as dominio from '../../domain/reclamo.js';
 import { datosDeUsuario } from '../acceso/keycloakAdmin.js';
-import { enviarCorreo } from '../correo/mailer.js';
-import { destinatarios } from '../correo/avisosProductosDanados.js';
+import { enviarCorreo, resumenDestinatarios } from '../correo/mailer.js';
+import { destinatarios } from '../correo/destinatarios.js';
 import { plantillaReclamoContabilidad } from '../correo/plantillaReclamoContabilidad.js';
 import { calcularDocumentos, sincronizarDocumentos } from '../contabilidad/sincronizar.js';
 import { badRequest, conflict } from '../../utils/httpError.js';
 import { env } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
-import { obtenerOFallar, exigir, numeroReclamo, aDto, conNombres, nombreUsuario, detalle } from './comun.js';
+import { validarToken, obtenerOFallar, exigir, numeroReclamo, aDto, conNombres, nombreUsuario, detalle } from './comun.js';
 
 // ------------------------------------------------------------------
 // Envío a contabilidad
@@ -65,9 +65,49 @@ async function archivosParaContabilidad(r) {
   return { archivos, faltantes, total };
 }
 
+/**
+ * Las notas de débito marcadas como validadas (`notaAprobada`) se vuelven a
+ * cruzar con las decisiones ACTUALES: la marca se puso al subir el PDF y una
+ * decisión pudo deshacerse o cambiar después. Regla: dominio.motivoNotasYaNoCuadran.
+ */
+function exigirNotasVigentes(adjuntos, documentos) {
+  const marcadas = adjuntos.filter((a) => a?.tipo === 'pdf' && a.notaAprobada);
+  if (!marcadas.length) return;
+  if (!documentos) {
+    throw conflict('No se pudieron leer las notas de débito para comprobarlas contra las decisiones de la compradora. Intenta de nuevo en unos minutos.', {
+      code: 'NOTA_NO_COMPROBADA',
+    });
+  }
+  const porArchivo = new Map(documentos.map((d) => [d.adjuntoFilename, d]));
+  exigir(
+    dominio.motivoNotasYaNoCuadran(
+      marcadas.map((a) => {
+        const d = porArchivo.get(a.filename);
+        return { nombre: a.originalname || a.filename, numeroDocumento: d?.numeroDocumento ?? null, legible: Boolean(d?.legible), lineas: d?.lineas ?? [] };
+      })
+    )
+  );
+}
+
+/**
+ * Dos envíos del mismo reclamo a la vez (doble clic, dos usuarios) mandarían
+ * el correo dos veces: verificación + correo + registro corren bajo un
+ * candado por reclamo (repo.conCandadoEnvioContabilidad). El segundo no
+ * espera: recibe 409. Si ya terminó el primero, la regla de siempre decide.
+ */
 export async function enviarAContabilidad(token, usuario) {
+  validarToken(token);
+  const res = await repo.conCandadoEnvioContabilidad(token, () => enviar(token, usuario));
+  if (res.ocupado) {
+    throw conflict('Este reclamo se está enviando a contabilidad en este momento. Espera a que termine y recarga el detalle.', { code: 'ENVIO_EN_CURSO' });
+  }
+  return res.resultado;
+}
+
+async function enviar(token, usuario) {
   const r = await obtenerOFallar(token);
-  exigir(dominio.motivoNoEnviarContabilidad(r, parseJsonArray(r.AdjuntosExtra)));
+  const adjuntosReclamo = parseJsonArray(r.AdjuntosExtra);
+  exigir(dominio.motivoNoEnviarContabilidad(r, adjuntosReclamo));
   const para = await destinatarios(PERMISO_CONTABILIDAD);
   if (!para.length) {
     throw badRequest(
@@ -89,14 +129,16 @@ export async function enviarAContabilidad(token, usuario) {
   const remitente = await datosDeUsuario(nombreUsuario(usuario));
   if (!remitente.nombre || remitente.nombre === nombreUsuario(usuario)) remitente.nombre = usuario.name || remitente.nombre;
 
-  // Notas de débito (PDF adjuntos) leídas y cruzadas con los productos, para
-  // el correo. Si algo falla, el correo sale igual sin esa sección.
+  // Notas de débito (PDF adjuntos) leídas y cruzadas con los productos: para
+  // comprobar las notas validadas y para el correo. Si la lectura falla y no
+  // hay notas validadas que comprobar, el correo sale igual sin esa sección.
   let documentos = null;
   try {
     documentos = await calcularDocumentos(r, lineas);
   } catch (err) {
     logger.error({ err, reclamo: dto.Numero }, 'No se pudieron leer los documentos del reclamo para el correo a contabilidad');
   }
+  exigirNotasVigentes(adjuntosReclamo, documentos);
 
   const { asunto, html, texto } = plantillaReclamoContabilidad(dto, lineas, { remitente, archivos, documentos: documentos ?? [] });
   const cc = remitente.correo && !para.includes(remitente.correo) ? [remitente.correo] : [];
@@ -128,6 +170,6 @@ export async function enviarAContabilidad(token, usuario) {
   } catch (err) {
     logger.error({ err, reclamo: dto.Numero }, 'Reclamo enviado a contabilidad pero falló el guardado de sus documentos en la bandeja');
   }
-  logger.info({ reclamo: dto.Numero, para, cc, archivos: archivos.map((a) => a.filename) }, 'Reclamo enviado a contabilidad');
+  logger.info({ reclamo: dto.Numero, ...resumenDestinatarios([...para, ...cc]), archivos: archivos.length }, 'Reclamo enviado a contabilidad');
   return { ...(await detalle(token)), envio: { para, cc, aceptados: envio.aceptados, rechazados: envio.rechazados } };
 }

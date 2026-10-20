@@ -1,8 +1,12 @@
 import * as kc from './keycloakAdmin.js';
 import * as repo from '../../repositories/accesoRepository.js';
 import { PERMISOS, ASIGNABLES, CODIGOS, PERMISO_CONFIGURACION } from './permisos.js';
-import { esSuperAdminRol, invalidarPermisos, permisosGuardados } from './acceso.js';
-import { badRequest, conflict, notFound } from '../../utils/httpError.js';
+import { esSuperAdminRol, invalidarPermisos, permisosGuardados, permisosDeRoles } from './acceso.js';
+import { badRequest, conflict, notFound, serviceUnavailable } from '../../utils/httpError.js';
+import { CORREOS } from '../correo/catalogoCorreos.js';
+import { plantillaBienvenida } from '../correo/plantillaBienvenida.js';
+import { enviarCorreo, correoConfigurado, resumenDestinatarios } from '../correo/mailer.js';
+import { deUsuario } from '../correo/destinatarios.js';
 import { logger } from '../../utils/logger.js';
 
 const quien = (usuario) => usuario.username || usuario.sub;
@@ -97,3 +101,85 @@ export async function quitarRol(userId, rol, usuario) {
 }
 
 export const auditoria = () => repo.listarAuditoria(100);
+
+// ------------------------------------------------------------------
+// Correos: ver cómo se ven, enviarse una prueba y enviar la bienvenida.
+// ------------------------------------------------------------------
+
+/** Lista de los correos del portal (sin el HTML), agrupados como se muestran. */
+export function correos() {
+  return CORREOS().map(({ generar, ...meta }) => ({ ...meta, asunto: generar().asunto }));
+}
+
+function correoPorId(id) {
+  const c = CORREOS().find((x) => x.id === id);
+  if (!c) throw notFound('Ese correo no existe.');
+  return c;
+}
+
+/** Vista previa con datos de ejemplo: { asunto, html, texto }. */
+export function vistaCorreo(id) {
+  const c = correoPorId(id);
+  return { id: c.id, ...c.generar() };
+}
+
+const exigirCorreo = () => {
+  if (!correoConfigurado()) throw serviceUnavailable('El correo del portal no está configurado.');
+};
+
+/** Manda la vista previa (con datos de ejemplo) al correo de quien la pide, marcada como prueba. */
+export async function enviarPruebaCorreo(id, usuario) {
+  exigirCorreo();
+  const c = correoPorId(id);
+  const { correos: para } = await deUsuario(quien(usuario));
+  if (!para.length) throw badRequest('Tu usuario no tiene correo en Keycloak: no hay a dónde mandar la prueba.');
+  const { asunto, html, texto } = c.generar();
+  await enviarCorreo({ para, asunto: `[PRUEBA] ${asunto}`, html, texto });
+  logger.info({ correo: id, usuario: quien(usuario), ...resumenDestinatarios(para) }, 'Prueba de correo enviada');
+  return { para };
+}
+
+/**
+ * Correo de bienvenida a cada usuario elegido, con lo que puede hacer según
+ * sus roles. Devuelve, por usuario, si se envió o por qué no.
+ */
+export async function enviarBienvenida(userIds, usuario) {
+  exigirCorreo();
+  const [mapa, lista] = await Promise.all([kc.mapaRoles(), kc.rolesCliente()]);
+  const delPortal = new Set(lista.map((r) => r.name));
+  const resultados = [];
+  for (const id of [...new Set(userIds)]) {
+    let u;
+    try {
+      u = await kc.obtenerUsuario(id);
+    } catch {
+      resultados.push({ id, enviado: false, motivo: 'No existe en Keycloak.' });
+      continue;
+    }
+    const base = { id, username: u.username, nombre: u.nombre };
+    const roles = [...(mapa.porUsuario.get(id) || [])].filter((r) => delPortal.has(r));
+    if (mapa.deshabilitados?.has(id)) {
+      resultados.push({ ...base, enviado: false, motivo: 'El usuario está deshabilitado.' });
+      continue;
+    }
+    if (!roles.length) {
+      resultados.push({ ...base, enviado: false, motivo: 'No tiene ningún rol del portal: asígnale uno primero.' });
+      continue;
+    }
+    const { correos: para } = await deUsuario(u.username);
+    if (!para.length) {
+      resultados.push({ ...base, enviado: false, motivo: 'No tiene correo en Keycloak.' });
+      continue;
+    }
+    try {
+      const { asunto, html, texto } = plantillaBienvenida({ nombre: u.nombre, username: u.username, roles, permisos: await permisosDeRoles(new Set(roles)) });
+      await enviarCorreo({ para, asunto, html, texto });
+      await auditar('bienvenida', `Bienvenida → ${u.username} (${u.nombre})`, usuario);
+      resultados.push({ ...base, enviado: true });
+    } catch (err) {
+      logger.warn({ err: err.message, username: u.username }, 'No se pudo enviar la bienvenida');
+      resultados.push({ ...base, enviado: false, motivo: 'El servidor de correo no lo aceptó. Intenta de nuevo.' });
+    }
+  }
+  return { resultados };
+}

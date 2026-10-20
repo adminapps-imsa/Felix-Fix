@@ -31,6 +31,21 @@ sí mismo en `dbo.SchemaMigrations` al terminar.
    contabilidad. `ReclamoDocumentosContabilidad` guarda, por cada PDF adjunto
    (nota de débito de SAP) de un reclamo enviado a contabilidad, los datos
    leídos del PDF y su cruce con los productos del reclamo (estado `pendiente`)
+13. `011_reclamos_envio_contabilidad.sql` — Reclamos: cuándo, quién y a quién
+   se envió el reclamo cerrado a contabilidad (`EnviadoContabilidad*`)
+14. `013_productos_danados_nf_documento_1700.sql` — Productos Dañados: estado
+   `NFValidacion` (Gof marca el documento 1700 antes del supervisor GOF)
+15. `014_productos_danados_documento_salida_nf.sql` — Productos Dañados:
+   «Documento salida de NF» que escribe el supervisor GOF (`DocumentoSalidaNf`)
+16. `015_divisiones_perfumeria_cosmeticos.sql` — División: solo Perfumería y
+   Cosméticos activas en el catálogo; las demás quedan inactivas (los casos
+   viejos conservan la suya). Los formularios ya no agregan divisiones nuevas.
+17. `016_reclamos_fecha_llegada_mercancia.sql` — Reclamos: fecha de llegada
+   de la mercancía, obligatoria al crear (Tienda y CEDI); NULL en los viejos
+18. `017_reclamos_devolucion_compradora.sql` — Reclamos: estado `devuelto` y
+   tabla `ReclamoComentarios` (la compradora devuelve a quien lo creó y este lo reenvía)
+19. `018_reclamos_devolucion_retiro_proveedor.sql` — Reclamos: tipo `devolucion`
+   y la marca del retiro del proveedor (`RetiroProveedor*`: día, foto, quién)
 
 ## Esquemas QA y Prod
 
@@ -39,12 +54,18 @@ Las tablas viven en un esquema por ambiente dentro de `FelixVoid`: `QA` y
 y el backend lee el esquema activo de `DB_SCHEMA` en `.env` (hoy `QA`).
 
 ```bash
-npm run migrate -- QA     # crea el esquema si no existe y corre 000..NNN
+npm run migrate -- QA     # crea el esquema si no existe y corre las que faltan
 npm run migrate -- Prod
+npm run migrate -- QA --todas   # vuelve a correr todas, también las ya aplicadas
 ```
 
+`migrate.js` salta las que ya están en `SchemaMigrations` de ese esquema (así
+un cambio hecho a mano después, p. ej. reactivar una división, no se pisa).
 También se pueden correr a mano con `sqlcmd -v SCHEMA=QA -i <archivo>.sql`.
 Cada script se puede volver a correr sin duplicar datos ni objetos.
+
+**Estado (2026-10-20):** QA tiene 000–018. En Prod faltan 010 a 018 (Prod solo tiene 000–009):
+correrlas antes de pasar el portal a `DB_SCHEMA=Prod`.
 
 Para pasar el portal a producción: `DB_SCHEMA=Prod` en `.env` y reiniciar
 `api-factura.service`. Las tablas antiguas en `dbo` quedaron sin usar.

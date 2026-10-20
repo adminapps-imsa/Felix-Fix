@@ -19,5 +19,5 @@ export async function eliminar(token, usuario) {
     ...parseJsonArray(borrado.ImagenesExcel).map((i) => i.filename),
     ...parseJsonArray(borrado.AdjuntosExtra).map((a) => a.filename),
   ]);
-  logger.info({ token, reclamo: numeroReclamo(borrado.ReclamoId), usuario: nombreUsuario(usuario) }, 'Reclamo eliminado');
+  logger.info({ reclamo: numeroReclamo(borrado.ReclamoId), usuario: nombreUsuario(usuario) }, 'Reclamo eliminado');
 }

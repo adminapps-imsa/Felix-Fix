@@ -4,7 +4,9 @@ import { TIPOS_AUTO_APROBADOS, esAutoAprobado } from './tipos.js';
 import { consultarProductos } from '../sapProductosService.js';
 import * as dominio from '../../domain/reclamo.js';
 import { conflict, notFound } from '../../utils/httpError.js';
-import { obtenerOFallar, exigir, lineasConNombres, nombreUsuario, detalle } from './comun.js';
+import { logger } from '../../utils/logger.js';
+import { avisarReclamo } from '../correo/avisosReclamos.js';
+import { obtenerOFallar, exigir, lineasConNombres, nombreUsuario, detalle, numeroReclamo } from './comun.js';
 
 export async function decidir(token, { status, comentario }, usuario) {
   exigir(dominio.motivoNoDecidir(await obtenerOFallar(token)));
@@ -16,7 +18,10 @@ export async function decidir(token, { status, comentario }, usuario) {
     if (actual.Status === 'pendiente' && actual.LineasPendientes > 0) exigir(dominio.motivoLineasPendientes(actual.LineasPendientes));
     throw conflict('El reclamo ya no está pendiente (otro usuario ya lo decidió).');
   }
-  return detalle(token);
+  const dto = await detalle(token);
+  // Aviso a quien lo envía a contabilidad y a quien lo creó.
+  avisarReclamo('cerrado', dto, { comentario, de: usuario.name || nombreUsuario(usuario) });
+  return dto;
 }
 
 function aLineaDto(l, sap) {
@@ -50,7 +55,7 @@ async function lineaDecidible(token, posicion) {
     });
   }
   exigir(dominio.motivoNoCambiarLineas(r));
-  return pos;
+  return { pos, reclamo: r };
 }
 
 async function lineaActualizada(token, pos) {
@@ -60,7 +65,7 @@ async function lineaActualizada(token, pos) {
 }
 
 export async function decidirLinea(token, posicion, { decision, comentario }, usuario) {
-  const pos = await lineaDecidible(token, posicion);
+  const { pos } = await lineaDecidible(token, posicion);
   const ok = await repo.actualizarDecisionLinea(token, pos, {
     desde: 'pendiente',
     hacia: decision,
@@ -82,22 +87,21 @@ export async function decidirLinea(token, posicion, { decision, comentario }, us
  */
 export async function decidirLineas(token, { posiciones, decision, comentario }, usuario) {
   exigir(dominio.motivoNoCambiarLineas(await obtenerOFallar(token)));
-  let actualizadas = 0;
-  for (const pos of [...new Set(posiciones)]) {
-    const ok = await repo.actualizarDecisionLinea(token, pos, {
-      desde: 'pendiente',
-      hacia: decision,
-      comentario,
-      usuario: nombreUsuario(usuario),
-      tiposBloqueados: TIPOS_AUTO_APROBADOS,
-    });
-    if (ok) actualizadas += 1;
-  }
-  return { actualizadas, omitidas: new Set(posiciones).size - actualizadas, lineas: await lineas(token) };
+  const unicas = [...new Set(posiciones)];
+  // Todas en una transacción: si la BD falla a mitad, no queda el lote a medias.
+  const actualizadas = await repo.actualizarDecisionLineas(token, unicas, {
+    desde: 'pendiente',
+    hacia: decision,
+    comentario,
+    usuario: nombreUsuario(usuario),
+    tiposBloqueados: TIPOS_AUTO_APROBADOS,
+  });
+  return { actualizadas, omitidas: unicas.length - actualizadas, lineas: await lineas(token) };
 }
 
-export async function deshacerLinea(token, posicion) {
-  const pos = await lineaDecidible(token, posicion);
+export async function deshacerLinea(token, posicion, usuario) {
+  const { pos, reclamo } = await lineaDecidible(token, posicion);
+  // La línea vuelve a pendiente sin decisor (DecBy = null); quién la deshizo queda en el log.
   const ok = await repo.actualizarDecisionLinea(token, pos, {
     desde: 'decidido',
     hacia: 'pendiente',
@@ -109,5 +113,6 @@ export async function deshacerLinea(token, posicion) {
     await lineaDecidible(token, pos); // si el reclamo se cerró mientras tanto, da ese motivo
     throw conflict('Este producto no tiene una decisión que deshacer.');
   }
+  logger.info({ reclamo: numeroReclamo(reclamo.ReclamoId), posicion: pos, usuario: nombreUsuario(usuario) }, 'Decisión de producto deshecha');
   return lineaActualizada(token, pos);
 }

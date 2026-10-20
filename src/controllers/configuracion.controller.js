@@ -26,3 +26,19 @@ export const quitarRol = asyncHandler(async (req, res) => {
 export const auditoria = asyncHandler(async (req, res) => {
   res.json(await service.auditoria());
 });
+
+export const correos = asyncHandler(async (req, res) => {
+  res.json(service.correos());
+});
+
+export const vistaCorreo = asyncHandler(async (req, res) => {
+  res.json(service.vistaCorreo(req.params.id));
+});
+
+export const enviarPruebaCorreo = asyncHandler(async (req, res) => {
+  res.json(await service.enviarPruebaCorreo(req.params.id, req.user));
+});
+
+export const enviarBienvenida = asyncHandler(async (req, res) => {
+  res.json(await service.enviarBienvenida(req.body.userIds, req.user));
+});

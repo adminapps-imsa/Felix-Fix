@@ -40,6 +40,13 @@ export const crearReclamoSchema = z
     fechaRegistro: z
       .string({ required_error: 'La fecha es obligatoria.' })
       .regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha es obligatoria (AAAA-MM-DD).'),
+    // Fecha de llegada de la mercancía: obligatoria (Tienda y CEDI). Que no sea futura
+    // lo revisa el dominio (motivoFechaLlegadaInvalida).
+    fechaLlegadaMercancia: z
+      .string({ required_error: 'Indica la fecha de llegada de la mercancía.' })
+      .trim()
+      .min(1, 'Indica la fecha de llegada de la mercancía.')
+      .max(10),
     mundo: requerido('Mundo', 100),
     departamento: requerido('Departamento', 100),
     marca: requerido('Marca', 100),
@@ -99,6 +106,34 @@ export const crearReclamoSchema = z
     }
   });
 
+/** Devolver a quien lo creó: el comentario dice qué corregir (el mínimo lo revisa el dominio). */
+export const devolverSchema = z.object({ comentario: texto(1000) });
+
+/** Reenviar a la compradora: respuesta opcional de quien lo corrigió. */
+export const reenviarSchema = z.object({ comentario: texto(1000).optional().default('') });
+
+/**
+ * Corregir los datos de un reclamo devuelto (JSON). Mismos campos que el alta,
+ * sin tipo, origen ni productos: el origen no cambia y el Excel se queda.
+ */
+export const corregirDatosSchema = z.object({
+  sucursal: texto(150).optional().default(''),
+  numeroEmbarqueFactura: texto(100).optional().default(''),
+  fechaRegistro: z.string({ required_error: 'La fecha es obligatoria.' }).regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha es obligatoria (AAAA-MM-DD).'),
+  fechaLlegadaMercancia: z
+    .string({ required_error: 'Indica la fecha de llegada de la mercancía.' })
+    .trim()
+    .min(1, 'Indica la fecha de llegada de la mercancía.')
+    .max(10),
+  mundo: requerido('Mundo', 100),
+  departamento: requerido('Departamento', 100),
+  marca: requerido('Marca', 100),
+  proveedor: requerido('Proveedor', 200),
+  compradora: requerido('Compradora', 150),
+  division: texto(100).optional().default(''),
+  sapDocs: z.array(docSap).max(50, 'Máximo 50 documentos SAP.').default([]),
+});
+
 export const decisionReclamoSchema = z.object({
   status: z.enum(['resuelto', 'rechazado']),
   comentario: texto(1000).optional().default(''),
@@ -135,3 +170,17 @@ export const listarQuerySchema = z.object({
   page: z.string().optional(),
   pageSize: z.string().optional(),
 });
+
+// `?f=<filename>` de GET/DELETE de un adjunto: su nombre en disco (UUID + extensión), opcional.
+export const adjuntoQuerySchema = z.object({
+  f: z
+    .string()
+    .trim()
+    .max(100)
+    .regex(/^[^/\\]+$/, 'Nombre de archivo inválido.')
+    .optional()
+    .or(z.literal('').transform(() => undefined)),
+});
+
+/** Retiro del proveedor: el día (la regla del dominio revisa que sea real y no futuro). La foto va aparte (multipart). */
+export const retiroSchema = z.object({ fecha: z.string({ required_error: 'Indica el día del retiro.' }).trim().max(10) });

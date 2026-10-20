@@ -11,33 +11,34 @@
 //
 // Nunca bloquea ni hace fallar la acción: si el correo no está configurado,
 // MAIL_AVISOS=false, no hay destinatarios o el envío falla, solo se registra
-// en el log.
+// en el log. El diseño es el común de los correos del portal (diseno.js).
 import { env } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
-import { permisosGuardados } from '../acceso/acceso.js';
-import { correosDeRoles, datosDeUsuario } from '../acceso/keycloakAdmin.js';
-import { enviarCorreo, correoConfigurado } from './mailer.js';
+import { enviarCorreo, correoConfigurado, resumenDestinatarios } from './mailer.js';
 import { numeroReporte } from './plantillaReporteProveedor.js';
+import { destinatarios, filtrarDominios, deUsuario } from './destinatarios.js';
+import { documento, parrafo, recuadro, pasos, boton, datos, saludo, esc, datosTexto, pasosTexto } from './diseno.js';
 
-const MARCA = '#4f46e5';
-const TEXTO = '#1e1b4b';
-const SUAVE = '#64748b';
-const BORDE = '#e2e8f0';
-const FONDO = '#f4f5fb';
+// Se mantiene para quien la importaba desde aquí.
+export { destinatarios };
 
-const esc = (v) =>
-  String(v ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+/** Nombre visible de cada etapa (como en el portal). */
+const ESTADO = {
+  Pendiente: 'Pendiente',
+  Aprobado: 'Devolución aprobada',
+  Rechazado: 'NF',
+  NFValidacion: 'NF por validar',
+  EnContabilidad: 'En contabilidad',
+  Cerrado: 'Cerrado',
+};
 
 /**
  * A quién se avisa en cada evento. Para cambiar destinatarios:
  *   - otro permiso/área: cambia `permiso` (o pon `area: null` para no avisar)
  *   - correos fijos:     agrega `correos: ['alguien@maduro.com.pa']` al área
  *   - no avisar al creador: pon `creador: null`
+ * `pasos`: lo que tiene que hacer quien recibe el aviso del área.
+ * `detalle`: cómo se llama el dato extra del evento (motivo del NF, referencia…).
  */
 export const EVENTOS = {
   // Se crea el reporte -> compradora (lo envía al proveedor) + creador.
@@ -45,11 +46,12 @@ export const EVENTOS = {
     area: {
       permiso: 'productos_danados.enviar',
       titulo: 'Nuevo reporte pendiente',
-      accion: 'Envíalo al proveedor y registra su respuesta (Devolución aprobada o NF).',
+      frase: 'Se registró un reporte de producto dañado que espera tu gestión.',
+      pasos: ['Abre el reporte y revisa la foto y los datos.', 'Envíalo al proveedor desde el portal.', 'Cuando responda, registra si es Devolución aprobada o NF.'],
     },
     creador: {
       titulo: 'Recibimos tu reporte',
-      mensaje: 'Tu reporte quedó registrado y pasó a la compradora para enviarlo al proveedor.',
+      frase: 'Tu reporte quedó registrado y pasó a la compradora para enviarlo al proveedor.',
     },
   },
   // El proveedor aprueba la devolución -> Gof (documento) + creador.
@@ -57,100 +59,94 @@ export const EVENTOS = {
     area: {
       permiso: 'productos_danados.documentar',
       titulo: 'Devolución aprobada',
-      accion: 'Sube el documento (PDF o Excel) y envía el reporte a contabilidad.',
+      frase: 'El proveedor aprobó la devolución de este reporte.',
+      pasos: ['Sube el documento (PDF o Excel) en el reporte.', 'Pulsa «Enviar a contabilidad».'],
     },
     creador: {
       titulo: 'El proveedor aprobó la devolución',
-      mensaje: 'El proveedor aprobó la devolución de tu reporte. Sigue con Gof para el documento.',
+      frase: 'El proveedor aprobó la devolución de tu reporte. Ahora Gof prepara el documento para contabilidad.',
     },
   },
   // El proveedor no aprueba (NF) -> Gof (documento 1700) + creador.
   nf: {
+    detalle: 'Motivo del NF',
     area: {
       permiso: 'productos_danados.nf_documento',
       titulo: 'Reporte NF: falta el documento 1700',
-      accion: 'Haz el documento 1700 en SAP, marca el check «Documento 1700» en el reporte y pásalo al supervisor GOF.',
+      frase: 'El proveedor no aprobó la devolución de este reporte (NF).',
+      pasos: ['Haz el documento 1700 en SAP.', 'En el reporte, marca el check «Documento 1700».', 'Así pasa al supervisor GOF para validarlo.'],
     },
     creador: {
       titulo: 'El proveedor no aprobó la devolución (NF)',
-      mensaje: 'El proveedor no aprobó la devolución de tu reporte. Gof hará el documento 1700 y el supervisor GOF lo validará.',
+      frase: 'El proveedor no aprobó la devolución de tu reporte. Gof hará el documento 1700 y el supervisor GOF lo validará.',
     },
   },
-  // Gof registra el documento 1700 -> supervisor GOF (valida y cierra).
+  // Gof marcó el documento 1700 -> supervisor GOF.
   nfValidar: {
     area: {
       permiso: 'productos_danados.nf',
       titulo: 'NF por validar',
-      accion: 'Gof marcó el documento 1700. Escribe el número del documento salida de NF y valida el reporte para cerrarlo.',
+      frase: 'Gof marcó el documento 1700 de este reporte NF.',
+      pasos: ['Escribe el número del «Documento salida de NF».', 'Valida el reporte para cerrarlo.'],
     },
     creador: null,
   },
-  // Gof lo envía a contabilidad -> contabilidad + creador.
+  // Gof lo envió a contabilidad -> contabilidad (pago) + creador.
   contabilidad: {
+    detalle: 'Documentos',
     area: {
       permiso: 'productos_danados.pago',
       titulo: 'Reporte en contabilidad',
-      accion: 'Cuando el proveedor pague, marca "Pago recibido" con la referencia.',
+      frase: 'Gof envió a contabilidad esta devolución aprobada, con su documento.',
+      pasos: ['Cuando el proveedor pague, abre el reporte.', 'Marca «Pago recibido» con la referencia.'],
+      // Contabilidad trabaja los pagos desde su apartado, no desde Productos Dañados.
+      enlace: '/contabilidad?seccion=productos',
     },
     creador: {
       titulo: 'Tu reporte pasó a contabilidad',
-      mensaje: 'Tu reporte ya tiene su documento y está en contabilidad esperando el pago del proveedor.',
+      frase: 'Tu reporte ya tiene su documento y está en contabilidad esperando el pago del proveedor.',
     },
   },
-  // El supervisor GOF cierra el NF -> creador.
+  // El supervisor GOF cerró el NF -> creador.
   nfCerrado: {
+    detalle: 'Detalle del cierre',
     area: null,
     creador: {
       titulo: 'Tu reporte se cerró (NF)',
-      mensaje: 'El supervisor GOF validó tu reporte NF y lo cerró sin devolución del proveedor.',
+      frase: 'El supervisor GOF validó tu reporte NF y lo cerró sin devolución del proveedor.',
     },
   },
-  // Contabilidad registra el pago -> creador.
+  // Contabilidad registró el pago -> creador.
   pagado: {
+    detalle: 'Pago',
     area: null,
     creador: {
       titulo: 'Pago recibido: tu reporte se cerró',
-      mensaje: 'Contabilidad registró el pago del proveedor y tu reporte quedó cerrado.',
+      frase: 'Contabilidad registró el pago del proveedor y tu reporte quedó cerrado.',
     },
   },
 };
 
-const PIE_AREA = 'Aviso automático del portal. Lo recibes porque tu rol tiene este paso asignado en Configuración.';
-const PIE_CREADOR = 'Aviso automático del portal. Lo recibes porque creaste este reporte.';
-
-const filtrarDominios = (correos) => {
-  const permitidos = env.correo.soloDominios;
-  return permitidos.length ? correos.filter((c) => permitidos.includes(c.split('@').pop())) : correos;
-};
-
-/** Correos de los usuarios cuyos roles tienen el permiso (sin el super administrador). */
-export async function destinatarios(permiso) {
-  const guardados = await permisosGuardados();
-  const roles = [...guardados.entries()].filter(([, ps]) => ps.has(permiso)).map(([rol]) => rol);
-  return filtrarDominios(await correosDeRoles(roles));
-}
+const PIE_AREA = 'Lo recibes porque tu rol tiene este paso asignado en Configuración.';
+const PIE_CREADOR = 'Lo recibes porque creaste este reporte.';
 
 async function correosDelArea(area) {
   const porPermiso = area.permiso ? await destinatarios(area.permiso) : [];
   return [...new Set([...porPermiso, ...filtrarDominios(area.correos || [])].map((c) => c.toLowerCase()))];
 }
 
-async function correoDelCreador(r) {
-  if (!r.EmpleadoReportaUsuario) return [];
-  const { correo } = await datosDeUsuario(r.EmpleadoReportaUsuario);
-  return correo ? filtrarDominios([correo.toLowerCase()]) : [];
-}
-
 /**
  * HTML y texto de un aviso.
- * @param aviso  { titulo, accion } (área) o { titulo, mensaje } (creador)
+ * @param aviso  { titulo, frase, pasos?, enlace? } (área o creador)
+ * @param r      reporte (detalle)
+ * @param opts   { detalle, etiquetaDetalle, pie, nombre }
  */
-export function plantillaAviso(aviso, r, { detalle, pie = PIE_AREA } = {}) {
+export function plantillaAviso(aviso, r, { detalle, etiquetaDetalle = 'Detalle', pie = PIE_AREA, nombre } = {}) {
   const numero = numeroReporte(r.ReporteId);
   const asunto = `${aviso.titulo}: ${numero} — ${r.NombreProducto}`;
-  const enlace = env.correo.portalUrl ? `${env.correo.portalUrl}/productos-danados` : '';
-  const intro = aviso.accion ? `<strong>Te toca:</strong> ${esc(aviso.accion)}` : esc(aviso.mensaje);
-  const introTexto = aviso.accion ? `Te toca: ${aviso.accion}` : aviso.mensaje;
+  const base = env.correo.portalUrl;
+  const enlace = base ? `${base}${aviso.enlace || `/productos-danados?estado=${encodeURIComponent(r.Estado || '')}&reporte=${r.ReporteId}`}` : '';
+  const estado = ESTADO[r.Estado] || r.Estado;
   const filas = [
     ['Tienda', r.TiendaNombre],
     ['Producto', r.NombreProducto],
@@ -159,54 +155,38 @@ export function plantillaAviso(aviso, r, { detalle, pie = PIE_AREA } = {}) {
     ['División', r.Division],
     ['Motivo', r.Motivo],
     ['Cantidad', r.Cantidad],
-    ['Detalle', detalle],
-  ].filter(([, v]) => v !== null && v !== undefined && String(v).trim() !== '');
+    ['Reportado por', r.EmpleadoReportaNombre],
+  ];
 
-  const filasHtml = filas
-    .map(
-      ([k, v], i) => `
-          <tr>
-            <td style="padding:8px 12px;border-top:${i ? `1px solid ${BORDE}` : '0'};color:${SUAVE};font-size:13px;width:38%;vertical-align:top;">${esc(k)}</td>
-            <td style="padding:8px 12px;border-top:${i ? `1px solid ${BORDE}` : '0'};color:${TEXTO};font-size:14px;font-weight:600;vertical-align:top;">${esc(v)}</td>
-          </tr>`
-    )
-    .join('');
-
-  const boton = enlace
-    ? `<tr><td style="padding:20px 24px 0;"><a href="${esc(enlace)}" style="display:inline-block;background:${MARCA};color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;border-radius:10px;padding:10px 18px;">Abrir en el portal</a></td></tr>`
-    : '';
-
-  const html = `<!doctype html>
-<html lang="es">
-<head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>${esc(asunto)}</title></head>
-<body style="margin:0;padding:0;background:${FONDO};font-family:Segoe UI,Helvetica,Arial,sans-serif;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${FONDO};padding:24px 12px;">
-    <tr><td align="center">
-      <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid ${BORDE};">
-        <tr><td style="background:${MARCA};padding:18px 24px;">
-          <div style="font-size:12px;color:#c7d2fe;font-weight:600;letter-spacing:.04em;">FELIX FIX · PRODUCTOS DAÑADOS</div>
-          <div style="font-size:20px;color:#ffffff;font-weight:800;margin-top:4px;">${esc(aviso.titulo)} · ${esc(numero)}</div>
-        </td></tr>
-        <tr><td style="padding:20px 24px 0;font-size:15px;line-height:1.6;color:${TEXTO};">${intro}</td></tr>
-        <tr><td style="padding:16px 24px 0;">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${BORDE};border-radius:10px;border-collapse:separate;">${filasHtml}
-          </table>
-        </td></tr>
-        ${boton}
-        <tr><td style="padding:20px 24px 22px;font-size:12px;color:${SUAVE};">${esc(pie)}</td></tr>
-      </table>
-    </td></tr>
-  </table>
-</body>
-</html>`;
+  const html = documento({
+    asunto,
+    modulo: 'PRODUCTOS DAÑADOS',
+    titulo: aviso.titulo,
+    subtitulo: [numero, r.NombreProducto, estado].filter(Boolean).join(' · '),
+    vistaPrevia: aviso.frase,
+    bloques: [
+      parrafo(`${esc(saludo(nombre))}<br />${esc(aviso.frase)}`, { arriba: 22 }),
+      recuadro({ etiqueta: etiquetaDetalle, texto: detalle }),
+      pasos(aviso.pasos),
+      boton({ texto: aviso.pasos ? `Abrir ${numero}` : `Ver ${numero}`, enlace }),
+      datos('Datos del reporte', filas),
+    ],
+    pie: [`Aviso automático del portal Felix Fix. ${pie}`, 'No respondas a este correo: escribe tus comentarios en el reporte.'],
+  });
 
   const texto = [
-    `${aviso.titulo} · ${numero}`,
+    `${aviso.titulo} — ${numero} · ${r.NombreProducto}`,
+    ...(estado ? [`Estado: ${estado}`] : []),
     '',
-    introTexto,
+    saludo(nombre),
+    aviso.frase,
+    ...(detalle ? ['', `${etiquetaDetalle}: ${detalle}`] : []),
+    ...pasosTexto(aviso.pasos),
+    ...(enlace ? ['', `Abrir el reporte: ${enlace}`] : []),
+    ...datosTexto('Datos del reporte', filas),
     '',
-    ...filas.map(([k, v]) => `${k}: ${v}`),
-    ...(enlace ? ['', `Abrir en el portal: ${enlace}`] : []),
+    `Aviso automático del portal Felix Fix. ${pie}`,
+    'No respondas a este correo: escribe tus comentarios en el reporte.',
   ].join('\n');
 
   return { asunto, html, texto };
@@ -217,25 +197,30 @@ export function plantillaAviso(aviso, r, { detalle, pie = PIE_AREA } = {}) {
  * después de guardar.
  * @param evento  clave de EVENTOS
  * @param r       reporte (detalle)
+ * @param opts    { detalle } dato extra del evento (motivo del NF, referencia…)
  */
 export function avisarEtapa(evento, r, opts = {}) {
   const ev = EVENTOS[evento];
   if (!env.correo.avisos || !correoConfigurado() || !ev || !r) return;
   (async () => {
     const area = ev.area ? await correosDelArea(ev.area) : [];
-    const creador = ev.creador ? (await correoDelCreador(r)).filter((c) => !area.includes(c)) : [];
+    const creador = ev.creador ? await deUsuario(r.EmpleadoReportaUsuario) : { correos: [], nombre: '' };
+    const paraCreador = creador.correos.filter((c) => !area.includes(c));
+    // El dato extra solo sale si el evento lo nombra (p. ej. el motivo del NF); si no, repetiría la frase.
+    const comunes = { detalle: ev.detalle ? opts.detalle : null, etiquetaDetalle: ev.detalle };
 
     const envios = [];
-    if (area.length) envios.push({ quien: 'area', para: area, ...plantillaAviso(ev.area, r, opts) });
-    if (creador.length) envios.push({ quien: 'creador', para: creador, ...plantillaAviso(ev.creador, r, { ...opts, pie: PIE_CREADOR }) });
+    // Al área va a varias personas a la vez: saludo sin nombre.
+    if (area.length) envios.push({ quien: 'area', para: area, ...plantillaAviso(ev.area, r, comunes) });
+    if (paraCreador.length) envios.push({ quien: 'creador', para: paraCreador, ...plantillaAviso(ev.creador, r, { ...comunes, pie: PIE_CREADOR, nombre: creador.nombre }) });
     if (ev.area && !area.length) {
       logger.info({ evento, reporteId: r.ReporteId }, 'Aviso al área sin destinatarios (ningún rol con ese permiso tiene usuarios con correo)');
     }
 
     for (const { quien, para, asunto, html, texto } of envios) {
-      await enviarCorreo({ para, asunto, html, texto }).catch((err) =>
-        logger.warn({ err: err.message, evento, quien, reporteId: r.ReporteId }, 'No se pudo enviar el aviso')
-      );
+      await enviarCorreo({ para, asunto, html, texto })
+        .then(() => logger.info({ evento, quien, reporteId: r.ReporteId, ...resumenDestinatarios(para) }, 'Aviso enviado'))
+        .catch((err) => logger.warn({ err: err.message, evento, quien, reporteId: r.ReporteId }, 'No se pudo enviar el aviso'));
     }
   })().catch((err) => logger.warn({ err: err.message, evento, reporteId: r.ReporteId }, 'No se pudo enviar el aviso'));
 }

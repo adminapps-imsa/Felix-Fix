@@ -1,11 +1,10 @@
-import fs from 'node:fs';
 import * as service from '../services/reclamosService.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
-import { notFound } from '../utils/httpError.js';
+import { abrirParaEnviar, enviarStream } from '../utils/enviarArchivo.js';
 
 /** Envía un archivo de disco; 404 si ya no existe (en vez de un 500 de stream). */
-function enviarArchivo(res, { ruta, contentType, nombre, inline = true }) {
-  if (!fs.existsSync(ruta)) throw notFound('El archivo ya no está disponible.');
+async function enviarArchivo(res, next, { ruta, contentType, nombre, inline = true }) {
+  const stream = await abrirParaEnviar(ruta);
   if (contentType) res.type(contentType);
   if (nombre) {
     const encoded = encodeURIComponent(nombre);
@@ -13,7 +12,7 @@ function enviarArchivo(res, { ruta, contentType, nombre, inline = true }) {
   }
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Cache-Control', 'private, max-age=300');
-  fs.createReadStream(ruta).pipe(res);
+  enviarStream(stream, res, next);
 }
 
 export const permisos = asyncHandler(async (req, res) => {
@@ -21,16 +20,16 @@ export const permisos = asyncHandler(async (req, res) => {
 });
 
 export const listar = asyncHandler(async (req, res) => {
-  res.json(await service.listar(req.query));
+  res.json(await service.listar(req.query, req.user));
 });
 
 export const detalle = asyncHandler(async (req, res) => {
   res.json(await service.detalle(req.params.token));
 });
 
-export const excel = asyncHandler(async (req, res) => {
+export const excel = asyncHandler(async (req, res, next) => {
   const { ruta, nombre } = await service.archivoExcel(req.params.token);
-  enviarArchivo(res, { ruta, nombre, inline: false });
+  await enviarArchivo(res, next, { ruta, nombre, inline: false });
 });
 
 export const catalogos = asyncHandler(async (req, res) => {
@@ -80,11 +79,11 @@ export const decidirLineas = asyncHandler(async (req, res) => {
 });
 
 export const deshacerLinea = asyncHandler(async (req, res) => {
-  res.json(await service.deshacerLinea(req.params.token, req.params.pos));
+  res.json(await service.deshacerLinea(req.params.token, req.params.pos, req.user));
 });
 
-export const imagen = asyncHandler(async (req, res) => {
-  enviarArchivo(res, await service.imagen(req.params.token, req.params.idx));
+export const imagen = asyncHandler(async (req, res, next) => {
+  await enviarArchivo(res, next, await service.imagen(req.params.token, req.params.idx));
 });
 
 /** Middleware: permiso para adjuntar, ANTES de que multer guarde el archivo en disco. */
@@ -97,15 +96,40 @@ export const agregarAdjunto = asyncHandler(async (req, res) => {
   res.status(201).json(await service.agregarAdjunto(req.params.token, req.file, req.user));
 });
 
-export const adjunto = asyncHandler(async (req, res) => {
-  enviarArchivo(res, await service.adjunto(req.params.token, req.params.idx));
+// `?f=<filename>` (opcional): el adjunto por su nombre en disco si la posición cambió.
+export const adjunto = asyncHandler(async (req, res, next) => {
+  await enviarArchivo(res, next, await service.adjunto(req.params.token, req.params.idx, req.query.f));
 });
 
 export const eliminarAdjunto = asyncHandler(async (req, res) => {
-  res.json(await service.eliminarAdjunto(req.params.token, req.params.idx));
+  res.json(await service.eliminarAdjunto(req.params.token, req.params.idx, req.user, req.query.f));
 });
 
 export const eliminar = asyncHandler(async (req, res) => {
   await service.eliminar(req.params.token, req.user);
   res.status(204).end();
+});
+
+export const devolver = asyncHandler(async (req, res) => {
+  res.json(await service.devolver(req.params.token, req.body, req.user));
+});
+
+export const corregirDatos = asyncHandler(async (req, res) => {
+  res.json(await service.corregirDatos(req.params.token, req.body, req.user));
+});
+
+export const reenviar = asyncHandler(async (req, res) => {
+  res.json(await service.reenviar(req.params.token, req.body, req.user));
+});
+
+export const registrarRetiro = asyncHandler(async (req, res) => {
+  res.json(await service.registrarRetiro(req.params.token, req.body, req.file, req.user));
+});
+
+export const quitarRetiro = asyncHandler(async (req, res) => {
+  res.json(await service.quitarRetiro(req.params.token, req.user));
+});
+
+export const fotoRetiro = asyncHandler(async (req, res, next) => {
+  await enviarArchivo(res, next, await service.fotoRetiro(req.params.token));
 });

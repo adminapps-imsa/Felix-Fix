@@ -7,7 +7,7 @@ import { reclamoArchivoPath } from '../../config/almacenamiento.js';
 import { tienePermiso } from '../acceso/permisos.js';
 import { parsePagination, buildPaginationMeta } from '../../utils/pagination.js';
 import { notFound } from '../../utils/httpError.js';
-import { validarIndice, obtenerOFallar, numeroReclamo, aDto, conNombres, nombreUsuario } from './comun.js';
+import { validarIndice, indiceAdjunto, obtenerOFallar, numeroReclamo, aDto, conNombres, nombreUsuario } from './comun.js';
 
 export function permisos(usuario) {
   const puedeDecidir = tienePermiso(usuario, 'reclamos.decidir');
@@ -21,15 +21,20 @@ export function permisos(usuario) {
     puedeAdjuntarCerrado: tienePermiso(usuario, 'reclamos.adjuntar'),
     // Enviar a contabilidad: solo quien tiene el permiso propio (Gof, Torre de Control). La compradora decide, no envía.
     puedeEnviarContabilidad: tienePermiso(usuario, 'reclamos.enviar_contabilidad'),
+    // Devolver a quien lo creó: quien decide (la compradora). Corregir y reenviar: quien lo creó o el super administrador.
+    puedeDevolver: puedeDecidir,
+    puedeCorregirCualquiera: tienePermiso(usuario, 'configuracion.administrar'),
+    // Reclamos de devolución: marcar que el proveedor ya retiró el producto (Gof).
+    puedeRegistrarRetiro: tienePermiso(usuario, 'reclamos.retiro_proveedor'),
     esAdmin: puedeDecidir,
     username: nombreUsuario(usuario),
   };
 }
 
-export async function listar(query) {
+export async function listar(query, usuario) {
   const pagination = parsePagination(query);
   const filtros = { status: query.status || undefined, porEnviar: query.porEnviar === '1', q: query.q?.trim() || undefined };
-  const [{ items, total }, kpis] = await Promise.all([repo.listar(filtros, pagination), repo.obtenerKpis()]);
+  const [{ items, total }, kpis] = await Promise.all([repo.listar(filtros, pagination), repo.obtenerKpis(usuario ? nombreUsuario(usuario) : null)]);
   return { data: await conNombres(items.map(aDto)), pagination: buildPaginationMeta({ ...pagination, total }), kpis };
 }
 
@@ -50,9 +55,11 @@ export async function imagen(token, idx) {
   return { ruta: reclamoArchivoPath(img.filename), contentType: CONTENT_TYPE_IMAGEN[ext] || 'application/octet-stream' };
 }
 
-export async function adjunto(token, idx) {
+/** `f` (opcional): nombre en disco del adjunto, por si la posición cambió (ver indiceAdjunto). */
+export async function adjunto(token, idx, f) {
   const r = await obtenerOFallar(token);
-  const adj = parseJsonArray(r.AdjuntosExtra)[validarIndice(idx)];
+  const adjuntos = parseJsonArray(r.AdjuntosExtra);
+  const adj = adjuntos[indiceAdjunto(adjuntos, idx, f)];
   if (!adj) throw notFound('Adjunto no encontrado.');
   const ext = path.extname(adj.filename).toLowerCase();
   const contentType =

@@ -15,6 +15,7 @@ import authRoutes from './routes/auth.routes.js';
 import reclamosRoutes from './routes/reclamos.routes.js';
 import configuracionRoutes from './routes/configuracion.routes.js';
 import contabilidadRoutes from './routes/contabilidad.routes.js';
+import tableroRoutes from './routes/tablero.routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const portalDistDir = path.join(__dirname, '..', 'portal', 'dist');
@@ -72,6 +73,7 @@ export function createApp() {
   app.use('/api/reclamos', reclamosRoutes);
   app.use('/api/configuracion', configuracionRoutes);
   app.use('/api/contabilidad', contabilidadRoutes);
+  app.use('/api/tablero', tableroRoutes);
 
   app.use('/api', notFoundHandler);
 

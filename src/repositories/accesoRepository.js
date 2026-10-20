@@ -28,7 +28,7 @@ export async function guardarPermisosRol(rol, permisos, usuario) {
     }
     await tx.commit();
   } catch (err) {
-    await tx.rollback();
+    await tx.rollback().catch(() => {});
     throw err;
   }
 }

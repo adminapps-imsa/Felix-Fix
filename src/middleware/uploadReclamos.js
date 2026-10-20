@@ -106,6 +106,13 @@ export const uploadExcelPreview = multer({ storage: multer.memoryStorage(), file
   'excel'
 );
 
+/** Foto del retiro del proveedor (solo imagen), una por petición. */
+export const uploadFotoRetiro = multer({
+  storage: diskStorage,
+  fileFilter: (req, file, cb) => (esImagen(file) ? cb(null, true) : cb(badRequest('La foto del retiro debe ser una imagen JPG, PNG o WEBP.'))),
+  limits,
+}).single('foto');
+
 /** Adjunto de soporte adicional (foto, Excel o PDF), uno por petición. */
 export const uploadAdjuntoReclamo = multer({ storage: diskStorage, fileFilter: imagenExcelOPdf, limits }).single('archivo');
 

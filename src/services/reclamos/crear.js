@@ -22,9 +22,12 @@ import { leerNotaPdf } from '../contabilidad/leerNotaPdf.js';
 import { crearReclamoSchema } from '../../validators/reclamos.schema.js';
 import { badRequest } from '../../utils/httpError.js';
 import { tienePermiso } from '../acceso/permisos.js';
+import { exigirDivision } from '../divisiones.js';
+import { avisarReclamo } from '../correo/avisosReclamos.js';
 import { env } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
-import { normalizarDocSap, motivoDocsRepetidos, motivoDocsEnOtrosReclamos, documentosUsados } from '../../domain/reclamo.js';
+import { normalizarDocSap, motivoDocsRepetidos, motivoDocsEnOtrosReclamos, documentosUsados, motivoFechaLlegadaInvalida } from '../../domain/reclamo.js';
+import { diaPanama } from '../../domain/tablero.js';
 import { tipoReal, tipoRealDeArchivo, nombreUsuario, detalle, exigir, conDocumentos } from './comun.js';
 
 export const ORIGEN_PRINCIPAL = 'principal';
@@ -224,6 +227,9 @@ function validarCampos(body) {
   }
   const data = result.data;
 
+  const fechaLlegada = motivoFechaLlegadaInvalida(data.fechaLlegadaMercancia, diaPanama(new Date()));
+  if (fechaLlegada) throw badRequest(fechaLlegada.mensaje, { code: fechaLlegada.code });
+
   // Al menos 1 documento SAP entre los 3 fijos + los extra. Se compactan en
   // orden: los 3 primeros llenos van a SapDoc1..3, el resto a SapDocsExtra.
   const docs = [data.sapDoc1, data.sapDoc2, data.sapDoc3, ...data.sapDocsExtra].filter(Boolean);
@@ -313,17 +319,20 @@ export async function crear(body, multerFile, usuario, pdfs = []) {
       }
     }
 
-    // División y motivo: si es un valor nuevo queda guardado en su catálogo; si
-    // ya existía (con otras mayúsculas), se usa como está escrito allí. Va
-    // después de validar el Excel para no registrar valores de un reclamo que
-    // no se llega a crear.
-    const autor = nombreUsuario(usuario);
+    // División: solo las del catálogo (Perfumería o Cosméticos), como están
+    // escritas allí (no escribe nada).
     if (data.origen !== 'cedi') data.division = '';
-    if (data.division) data.division = await repo.asegurarValorCatalogo('division', data.division, autor);
-    if (data.motivo) data.motivo = await repo.asegurarValorCatalogo('motivo', data.motivo, autor);
+    if (data.division) data.division = await exigirDivision(data.division);
 
     // Un PDF por cada documento SAP, con el mismo número impreso.
     const adjuntosSap = await validarPdfsSap(docsSap, pdfs, usuario);
+
+    // Motivo: si es un valor nuevo queda guardado en su catálogo. Va al final,
+    // después de validar el Excel y los PDF, para no registrar valores de un
+    // reclamo que no pasa las validaciones. Ojo: corre FUERA de la transacción
+    // del alta, así que si repo.crear falla después (p. ej. documento SAP ya
+    // usado en otro reclamo), el motivo nuevo queda igual en el catálogo.
+    if (data.motivo) data.motivo = await repo.asegurarValorCatalogo('motivo', data.motivo, nombreUsuario(usuario));
 
     const token = crypto.randomUUID();
     const alta = await repo.crear(
@@ -358,7 +367,10 @@ export async function crear(body, multerFile, usuario, pdfs = []) {
       }
     }
 
-    return detalle(token);
+    const dto = await detalle(token);
+    // Aviso a las compradoras: solo si espera su decisión (los «notificados» son solo informativos).
+    if (dto.Status === 'pendiente') avisarReclamo('nuevo', dto, { comentario: dto.Comentario, de: usuario.name || nombreUsuario(usuario) });
+    return dto;
   } catch (err) {
     await borrarArchivos(archivosCreados);
     throw err;

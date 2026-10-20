@@ -15,3 +15,8 @@ export const permisosRolSchema = z.object({
 export const asignarRolSchema = z.object({
   rol: z.string().trim().min(1).max(100),
 });
+
+/** Bienvenida: hasta 50 usuarios de Keycloak por envío (ids UUID). */
+export const bienvenidaSchema = z.object({
+  userIds: z.array(z.string().uuid('Usuario inválido.')).min(1, 'Elige al menos una persona.').max(50, 'Máximo 50 personas por envío.'),
+});

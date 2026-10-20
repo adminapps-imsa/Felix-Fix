@@ -8,6 +8,8 @@
 //   adjuntos.js           adjuntar y quitar archivos, validar la nota de débito
 //   envioContabilidad.js  envío por correo a contabilidad
 //   eliminar.js           borrar el reclamo completo
+//   devolucion.js         devolver a quien lo creó, corregir y reenviar
+//   retiro.js             retiro del proveedor en los reclamos de devolución
 export { numeroReclamo, detalle } from './reclamos/comun.js';
 export { permisos, listar, archivoExcel, imagen, adjunto } from './reclamos/consultas.js';
 export {
@@ -25,3 +27,5 @@ export { decidir, lineas, decidirLinea, decidirLineas, deshacerLinea } from './r
 export { verificarPuedeAdjuntar, agregarAdjunto, eliminarAdjunto } from './reclamos/adjuntos.js';
 export { enviarAContabilidad } from './reclamos/envioContabilidad.js';
 export { eliminar } from './reclamos/eliminar.js';
+export { devolver, corregirDatos, reenviar } from './reclamos/devolucion.js';
+export { registrarRetiro, quitarRetiro, fotoRetiro } from './reclamos/retiro.js';

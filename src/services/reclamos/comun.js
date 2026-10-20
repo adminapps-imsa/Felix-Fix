@@ -22,6 +22,21 @@ export function validarIndice(idx) {
   return n;
 }
 
+export const MSG_ARCHIVO_YA_NO_EXISTE = 'El archivo ya no existe. Recarga el detalle.';
+
+/**
+ * Posición del adjunto pedido. `f` (opcional): su nombre en disco, que manda
+ * el portal. Si en la posición `idx` hay otro (alguien quitó uno antes y la
+ * lista se corrió), se busca por nombre; si ya no está, 404. Sin `f`, solo la posición.
+ */
+export function indiceAdjunto(adjuntos, idx, f) {
+  const i = validarIndice(idx);
+  if (!f || adjuntos[i]?.filename === f) return i;
+  const j = adjuntos.findIndex((a) => a?.filename === f);
+  if (j < 0) throw notFound(MSG_ARCHIVO_YA_NO_EXISTE);
+  return j;
+}
+
 export async function obtenerOFallar(token) {
   const reclamo = await repo.obtenerPorToken(validarToken(token));
   if (!reclamo) throw notFound('Reclamo no encontrado.');
@@ -83,7 +98,7 @@ export function aDto(r) {
 /** Agrega el nombre completo (de Keycloak) junto a cada username guardado. */
 export async function conNombres(dtos) {
   const nombres = await nombresDeUsuarios(
-    dtos.flatMap((d) => [d.CreatedBy, d.DecisionBy, d.EnviadoContabilidadBy, ...d.AdjuntosExtra.map((a) => a.uploaded_by)])
+    dtos.flatMap((d) => [d.CreatedBy, d.DecisionBy, d.EnviadoContabilidadBy, d.RetiroProveedorPor, ...d.AdjuntosExtra.map((a) => a.uploaded_by)])
   );
   const n = (u) => (u ? nombres.get(u) || u : null);
   return dtos.map((d) => ({
@@ -91,6 +106,7 @@ export async function conNombres(dtos) {
     CreatedByNombre: n(d.CreatedBy),
     DecisionByNombre: n(d.DecisionBy),
     EnviadoContabilidadByNombre: n(d.EnviadoContabilidadBy),
+    RetiroProveedorPorNombre: n(d.RetiroProveedorPor),
     AdjuntosExtra: d.AdjuntosExtra.map((a) => ({ ...a, uploaded_by_nombre: n(a.uploaded_by) })),
   }));
 }
@@ -108,6 +124,9 @@ export function nombreUsuario(usuario) {
 export const asegurarModificable = (estado, accion, opciones) => exigir(dominio.motivoNoModificable(estado, accion, opciones));
 
 export async function detalle(token) {
-  const [dto] = await conNombres([aDto(await obtenerOFallar(token))]);
-  return dto;
+  const r = await obtenerOFallar(token);
+  const [[dto], comentarios] = await Promise.all([conNombres([aDto(r)]), repo.listarComentarios(r.ReclamoId)]);
+  // Devoluciones de la compradora y respuestas de quien lo creó, con su nombre.
+  const nombres = await nombresDeUsuarios(comentarios.map((c) => c.Usuario));
+  return { ...dto, Comentarios: comentarios.map((c) => ({ ...c, UsuarioNombre: nombres.get(c.Usuario) || c.Usuario })) };
 }

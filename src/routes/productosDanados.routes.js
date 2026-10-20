@@ -15,6 +15,7 @@ import {
   cerrarNfSchema,
   documento1700Schema,
   pagoRecibidoSchema,
+  adjuntoQuerySchema,
 } from '../validators/productosDanados.schema.js';
 
 const router = Router();
@@ -63,9 +64,15 @@ const envioDiarioLimiter = rateLimit({
 });
 router.post('/:id/correo/enviar', enviar, envioLimiter, envioDiarioLimiter, controller.enviarAlProveedor);
 router.post('/:id/adjuntos', editar, uploadAdjuntoReporte, borrarSiFalla, controller.agregarAdjunto);
-router.get('/:id/adjuntos/:idx', ver, controller.adjunto);
+// `?f=<filename>` (opcional): identifica el adjunto por su nombre en disco, por si la posición cambió.
+router.get('/:id/adjuntos/:idx', ver, validateQuery(adjuntoQuerySchema), controller.adjunto);
 // Gof también quita sus documentos para contabilidad (el servicio revisa cuál).
-router.delete('/:id/adjuntos/:idx', requirePermiso('productos_danados.crear', 'productos_danados.aprobar', 'productos_danados.procesar', 'productos_danados.documentar'), controller.eliminarAdjunto);
+router.delete(
+  '/:id/adjuntos/:idx',
+  requirePermiso('productos_danados.crear', 'productos_danados.aprobar', 'productos_danados.procesar', 'productos_danados.documentar'),
+  validateQuery(adjuntoQuerySchema),
+  controller.eliminarAdjunto
+);
 
 // Después de la respuesta del proveedor.
 router.patch('/:id/documento-1700', requirePermiso('productos_danados.nf_documento'), validateBody(documento1700Schema), controller.registrarDocumento1700);

@@ -44,6 +44,8 @@ export function detectarTipoPorMotivo(texto) {
   if (t.includes('FALTANTE')) return 'faltante_real';
   if (t.includes('SOBRANTE')) return 'sobrante_real';
   if (t.includes('DIFERENCIA')) return 'diferencias';
+  // «DEVOLUCIÓN», «DEVOLUCION AL PROVEEDOR», «DEVOLUCIONES»…
+  if (t.includes('DEVOLUCI')) return 'devolucion';
   if (t.includes('DEFECTUOS')) return 'danos_textil';
   return null;
 }
@@ -235,7 +237,7 @@ function puntajeCantidad(h) {
   let score = 40;
   if (h.includes('RECLAM')) score = 100;
   else if (h === 'CANTIDAD' || h === 'CANT' || h === 'CANT.' || h === 'QTY') score = 80;
-  else if (h.includes('DIFERENCIA') || h.includes('FALTANTE') || h.includes('SOBRANTE') || h.includes('AVERIAD'))
+  else if (h.includes('DIFERENCIA') || h.includes('FALTANTE') || h.includes('SOBRANTE') || h.includes('AVERIAD') || h.includes('DEVOLUCI'))
     score = 70;
   if (RE_CANTIDAD_REFERENCIA.test(h)) score -= 50;
   return score;
