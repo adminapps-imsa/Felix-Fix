@@ -115,9 +115,17 @@ acciones, y solo recibe avisos de:
 - **Productos Dañados:** los de sus marcas en el catálogo. Si la marca no está,
   van a la compradora principal de Belleza (la de más filas de ese mundo).
 
-Quien no está en la tabla (otros roles, el super administrador o una
-compradora que no está en el catálogo) ve todo, como antes. Un caso fuera de su
-alcance responde 404 (`router.param` en las rutas de Reclamos y Productos Dañados).
+Quien no está en la tabla o tiene `VeTodo = 1` (migración `021`: hoy Alma
+Batista, Karina Samuels y Ana Gabriela López), otros roles, el super
+administrador o una compradora que no está en el catálogo (Rosa Saavedra) ven
+todo, como antes. Un caso fuera de su alcance responde 404 (`router.param` en
+las rutas de Reclamos y Productos Dañados).
+
+**Avisos a compradoras** (permisos `productos_danados.enviar` y
+`reclamos.decidir`): llegan **solo a la compradora asignada**, vea todo o no.
+En Reclamos es la elegida en «Compradora»; en Productos Dañados, la dueña de
+la marca en el catálogo (o la principal de Belleza). Si no hay ninguna en el
+portal, no sale el aviso.
 
 ## Productos Dañados — flujo y avisos
 

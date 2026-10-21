@@ -4,6 +4,7 @@
 import { env } from '../../config/env.js';
 import { permisosGuardados } from '../acceso/acceso.js';
 import { correosDeRoles, datosDeUsuario } from '../acceso/keycloakAdmin.js';
+import { usuariosAsignados } from '../acceso/alcanceCompradora.js';
 
 export const filtrarDominios = (correos) => {
   const permitidos = env.correo.soloDominios;
@@ -22,4 +23,17 @@ export async function deUsuario(username) {
   if (!username) return { correos: [], nombre: '' };
   const { correo, nombre } = await datosDeUsuario(username);
   return { correos: correo ? filtrarDominios([correo.toLowerCase()]) : [], nombre: nombre && nombre !== username ? nombre : '' };
+}
+
+/**
+ * Permisos de los avisos que van a las compradoras: esos avisos llegan solo a
+ * la compradora asignada al caso, no a todas las que tienen el permiso.
+ */
+export const PERMISOS_COMPRADORA = new Set(['productos_danados.enviar', 'reclamos.decidir']);
+
+/** Correos de las compradoras asignadas al caso ({ reclamo } o { reporteId }); [] si no hay ninguna en el portal. */
+export async function correosDeAsignadas(caso) {
+  const usuarios = await usuariosAsignados(caso);
+  const correos = (await Promise.all(usuarios.map((u) => deUsuario(u)))).flatMap((d) => d.correos);
+  return [...new Set(correos)];
 }

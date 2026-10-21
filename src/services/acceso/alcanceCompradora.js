@@ -7,16 +7,18 @@
 //     catálogo. Si la marca no está, va a la compradora principal de Belleza
 //     (Perfumería y Cosméticos), la que tiene más filas de ese mundo.
 //
-// Solo se aplica a quien está en CompradoraUsuarios (migración 020). Los demás
-// roles, el super administrador y una compradora que no está en el catálogo ven
-// todo, como antes. La regla va en SQL para que listas, KPIs y Tablero cuenten
-// lo mismo que se ve.
+// Solo se aplica a quien está en CompradoraUsuarios (migración 020) sin VeTodo
+// (021). Los demás roles, el super administrador, una compradora con VeTodo y
+// una que no está en el catálogo ven todo, como antes. La regla va en SQL para
+// que listas, KPIs y Tablero cuenten lo mismo que se ve.
+//
+// Avisos a las compradoras: solo a la ASIGNADA al caso (correosDeAsignadas), la
+// vea todo o no. Reclamos: la elegida en «Compradora». Productos Dañados: la
+// dueña de la marca en el catálogo (o la principal de Belleza).
 import { getPool, sql, S } from '../../config/db.js';
 import { env } from '../../config/env.js';
 import { tienePermiso, PERMISO_CONFIGURACION } from './permisos.js';
-import { datosDeUsuario } from './keycloakAdmin.js';
 import { notFound } from '../../utils/httpError.js';
-import { logger } from '../../utils/logger.js';
 
 const CAT = env.reclamos.compradorasTabla;
 // Sin distinguir mayúsculas ni acentos, y sin espacios de sobra (el catálogo trae «ZANYA LOPEZ », «Belleza»…).
@@ -26,20 +28,28 @@ const limpio = (col) => `LTRIM(RTRIM(${col})) ${CI}`;
 export const MUNDO_PRODUCTOS = 'BELLEZA';
 
 const TTL_MS = 5 * 60 * 1000;
-let cache = null; // { at, porUsuario: Map<username, nombre> }
+let cache = null; // { at, porUsuario: Map<username, { nombre, veTodo }> }
 
-/** username (minúsculas) → nombre en el catálogo. */
+/** Nombre comparable: sin acentos, mayúsculas y espacios colapsados («Zanya López » = «ZANYA LOPEZ»). */
+export const normalizarNombre = (s) =>
+  String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim().toUpperCase();
+
+/** username (minúsculas) → { nombre en el catálogo, veTodo }. */
 export async function mapaCompradoras() {
   if (cache && Date.now() - cache.at < TTL_MS) return cache.porUsuario;
-  const { recordset } = await (await getPool()).request().query(`SELECT Username, NombreCatalogo FROM ${S}.CompradoraUsuarios`);
-  cache = { at: Date.now(), porUsuario: new Map(recordset.map((f) => [f.Username.trim().toLowerCase(), f.NombreCatalogo.trim()])) };
+  const { recordset } = await (await getPool()).request().query(`SELECT Username, NombreCatalogo, VeTodo FROM ${S}.CompradoraUsuarios`);
+  cache = {
+    at: Date.now(),
+    porUsuario: new Map(recordset.map((f) => [f.Username.trim().toLowerCase(), { nombre: f.NombreCatalogo.trim(), veTodo: Boolean(f.VeTodo) }])),
+  };
   return cache.porUsuario;
 }
 
 /** Nombre de catálogo si el usuario es una compradora con alcance; null si ve todo. */
 export async function compradoraDe(usuario) {
   if (!usuario?.username || tienePermiso(usuario, PERMISO_CONFIGURACION)) return null;
-  return (await mapaCompradoras()).get(usuario.username.trim().toLowerCase()) || null;
+  const c = (await mapaCompradoras()).get(usuario.username.trim().toLowerCase());
+  return c && !c.veTodo ? c.nombre : null;
 }
 
 const conNombre = (request, nombre) => {
@@ -113,24 +123,25 @@ export const exigirAlcance = (tipo) => async (req, res, next, valor) => {
 };
 
 /**
- * Avisos: quita de `correos` a las compradoras con alcance a quienes el caso no
- * les toca. `caso`: { reclamoToken } o { reporteId }. Si algo falla, deja la
- * lista como estaba (un aviso de más es mejor que uno perdido).
+ * Usuarios (username) de las compradoras asignadas al caso, vean todo o no.
+ * `caso`: { reclamo } (con su Compradora) o { reporteId }.
  */
-export async function quitarCompradorasAjenas(correos, caso) {
-  if (!correos.length) return correos;
-  try {
-    const fuera = new Set();
-    for (const [username, nombre] of await mapaCompradoras()) {
-      const { correo } = await datosDeUsuario(username);
-      const c = correo?.toLowerCase();
-      if (!c || !correos.includes(c)) continue;
-      const ve = caso.reclamoToken ? await puedeVerReclamo(caso.reclamoToken, nombre) : await puedeVerReporte(caso.reporteId, nombre);
-      if (!ve) fuera.add(c);
-    }
-    return correos.filter((c) => !fuera.has(c));
-  } catch (err) {
-    logger.warn({ err: err.message }, 'No se pudo filtrar los avisos por compradora: se envían a todo el área');
-    return correos;
+export async function usuariosAsignados(caso) {
+  let nombres;
+  if (caso.reclamo) nombres = caso.reclamo.Compradora ? [caso.reclamo.Compradora] : [];
+  else {
+    const pool = await getPool();
+    const request = pool.request().input('reporteId', sql.BigInt, Number(caso.reporteId));
+    const { recordsets } = await request.query(`
+      DECLARE @marca NVARCHAR(200) = (SELECT LTRIM(RTRIM(Marca)) FROM ${S}.ReportesProductoDanado WHERE ReporteId = @reporteId);
+      SELECT DISTINCT LTRIM(RTRIM(cx.compradora)) AS nombre FROM ${CAT} cx
+      WHERE cx.compradora IS NOT NULL AND ${limpio('cx.marca')} = @marca;
+      SELECT TOP 1 LTRIM(RTRIM(cp.compradora)) AS nombre FROM ${CAT} cp
+      WHERE ${limpio('cp.mundo')} = '${MUNDO_PRODUCTOS}' AND cp.compradora IS NOT NULL
+      GROUP BY LTRIM(RTRIM(cp.compradora)) ORDER BY COUNT(*) DESC;`);
+    const porMarca = recordsets[0].map((f) => f.nombre);
+    nombres = porMarca.length ? porMarca : recordsets[1].map((f) => f.nombre);
   }
+  const buscados = new Set(nombres.map(normalizarNombre));
+  return [...(await mapaCompradoras())].filter(([, c]) => buscados.has(normalizarNombre(c.nombre))).map(([username]) => username);
 }

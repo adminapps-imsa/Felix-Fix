@@ -52,6 +52,8 @@ sí mismo en `dbo.SchemaMigrations` al terminar.
 21. `020_compradora_usuarios.sql` — `CompradoraUsuarios`: qué usuario del portal
    es cada compradora del catálogo de FelixApproval (8 emparejadas), para que
    cada una vea solo los casos de sus mundos y marcas
+22. `021_compradora_ve_todo.sql` — `CompradoraUsuarios.VeTodo`: compradoras que
+   por ahora ven todo (Alma Batista, Karina Samuels, Ana Gabriela López)
 
 ## Esquemas QA y Prod
 
