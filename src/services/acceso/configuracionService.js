@@ -178,7 +178,9 @@ export async function enviarBienvenida(userIds, usuario) {
       resultados.push({ ...base, enviado: true });
     } catch (err) {
       logger.warn({ err: err.message, username: u.username }, 'No se pudo enviar la bienvenida');
-      resultados.push({ ...base, enviado: false, motivo: 'El servidor de correo no lo aceptó. Intenta de nuevo.' });
+      // Con el envío apagado para pruebas se dice eso, no que el servidor lo rechazó.
+      const motivo = err.extra?.code === 'CORREO_DESACTIVADO' ? err.message : 'El servidor de correo no lo aceptó. Intenta de nuevo.';
+      resultados.push({ ...base, enviado: false, motivo });
     }
   }
   return { resultados };

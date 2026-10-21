@@ -123,6 +123,9 @@ export const env = {
     maxAdjuntosMb: Number(process.env.MAIL_MAX_ADJUNTOS_MB) || 20,
     // Avisos internos a cada área cuando un reporte le llega (por defecto sí).
     avisos: bool(process.env.MAIL_AVISOS, true),
+    // Interruptor general para pruebas: con true no sale NINGÚN correo (avisos,
+    // proveedor, bienvenida). El envío responde 503 CORREO_DESACTIVADO y queda en el log.
+    desactivado: bool(process.env.MAIL_DESACTIVADO, false),
     // Dirección del portal para el enlace de los avisos (por defecto, el primer CORS_ORIGIN).
     portalUrl: (process.env.PORTAL_URL || (process.env.CORS_ORIGIN || '').split(',')[0] || '').trim().replace(/\/+$/, ''),
   },

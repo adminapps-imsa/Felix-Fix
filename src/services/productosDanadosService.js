@@ -7,7 +7,7 @@ import { listarCatalogo } from '../repositories/reclamosRepository.js';
 import { reporteAdjuntoPath, evidenciaAbsolutePath } from '../config/almacenamiento.js';
 import { nombresDeUsuarios, datosDeUsuario } from './acceso/keycloakAdmin.js';
 import { plantillaReporteProveedor } from './correo/plantillaReporteProveedor.js';
-import { enviarCorreo, correoConfigurado, validarDestinatarios } from './correo/mailer.js';
+import { enviarCorreo, correoConfigurado, correoDesactivado, validarDestinatarios, MSG_DESACTIVADO } from './correo/mailer.js';
 import { avisarEtapa } from './correo/avisosProductosDanados.js';
 import { env } from '../config/env.js';
 import * as historialRepo from '../repositories/historialRepository.js';
@@ -587,6 +587,7 @@ async function armarCorreo(reporteId, usuario) {
   if (total > maxBytes) avisos.push(`Los archivos suman ${(total / 1048576).toFixed(1)} MB y el máximo es ${env.correo.maxAdjuntosMb} MB.`);
   if (!correos.length) avisos.push('Agrega y guarda al menos un correo del proveedor.');
   if (motivoNoEnviarProveedor(r.Estado)) avisos.push(motivoNoEnviarProveedor(r.Estado));
+  if (correoDesactivado()) avisos.push(MSG_DESACTIVADO);
 
   const remitente = await datosDeUsuario(autor(usuario));
   if (!remitente.nombre || remitente.nombre === autor(usuario)) remitente.nombre = usuario.name || remitente.nombre;

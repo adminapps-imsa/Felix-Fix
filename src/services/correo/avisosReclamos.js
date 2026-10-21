@@ -175,7 +175,7 @@ export function plantillaAvisoReclamo(evento, r, { comentario, de, nombre, fecha
  */
 export function avisarReclamo(evento, r, { para, comentario, de } = {}) {
   const ev = EVENTOS[evento];
-  if (!env.correo.avisos || !correoConfigurado() || !ev || !r) return;
+  if (!env.correo.avisos || env.correo.desactivado || !correoConfigurado() || !ev || !r) return;
   const fecha = new Date();
   (async () => {
     const area = ev.area ? await destinatarios(ev.area.permiso) : [];

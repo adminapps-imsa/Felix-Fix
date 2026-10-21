@@ -47,6 +47,11 @@ export function validarDestinatarios(correos) {
 
 export const correoConfigurado = () => isCorreoConfigured();
 
+export const MSG_DESACTIVADO = 'El envío de correos está apagado en este servidor mientras se hacen pruebas (MAIL_DESACTIVADO). No se envió nada.';
+
+/** true si MAIL_DESACTIVADO=true: ningún correo sale del portal. */
+export const correoDesactivado = () => env.correo.desactivado;
+
 /**
  * Entrega el correo al webhook de n8n como multipart/form-data:
  *   campos  para, cc (separados por coma), responderA, asunto, html, texto,
@@ -102,6 +107,11 @@ export function resumenDestinatarios(direcciones) {
 /** Envía y devuelve el messageId. Errores de SMTP o n8n -> 502 con un mensaje genérico (el detalle va al log). */
 export async function enviarCorreo({ para, cc = [], responderA, asunto, html, texto, adjuntos = [] }) {
   validarDestinatarios([...para, ...cc]);
+  // Antes de tocar n8n o SMTP: con el interruptor de pruebas no sale nada.
+  if (correoDesactivado()) {
+    logger.warn({ ...resumenDestinatarios([...para, ...cc]), adjuntos: adjuntos.length }, 'Correo NO enviado: MAIL_DESACTIVADO=true');
+    throw serviceUnavailable(MSG_DESACTIVADO, { code: 'CORREO_DESACTIVADO' });
+  }
   if (env.correo.n8nUrl) return enviarPorN8n({ para, cc, responderA, asunto, html, texto, adjuntos });
   const t = obtenerTransporte();
   try {

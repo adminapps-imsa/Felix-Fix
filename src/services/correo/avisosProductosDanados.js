@@ -223,7 +223,7 @@ export function plantillaAviso(aviso, r, { detalle, etiquetaDetalle = 'Detalle',
  */
 export function avisarEtapa(evento, r, opts = {}) {
   const ev = EVENTOS[evento];
-  if (!env.correo.avisos || !correoConfigurado() || !ev || !r) return;
+  if (!env.correo.avisos || env.correo.desactivado || !correoConfigurado() || !ev || !r) return;
   (async () => {
     const area = ev.area ? await correosDelArea(ev.area) : [];
     const creador = ev.creador ? await deUsuario(r.EmpleadoReportaUsuario) : { correos: [], nombre: '' };
