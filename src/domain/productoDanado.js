@@ -46,6 +46,17 @@ export function alcanceVista(permisos) {
 
 export const puedeVerReporte = (alcance, r) => !alcance || alcance.includes(r?.Resolucion);
 
+/**
+ * «Solo los reportes que creó» (Tienda): el usuario (username) cuyos reportes
+ * ve, o null si ve los de todos. Sin username no ve ninguno ('').
+ */
+export const creadorVisible = (usuario) =>
+  usuario?.permisos?.has('productos_danados.solo_propios') ? String(usuario.username || '').trim() : null;
+
+/** true si `creador` (de creadorVisible) puede ver el reporte `r`. */
+export const esDelCreador = (creador, r) =>
+  creador === null || (creador !== '' && String(r?.EmpleadoReportaUsuario || '').trim().toLowerCase() === creador.toLowerCase());
+
 /** Gof: el check «Documento 1700» debe estar marcado para pasarlo al supervisor GOF. */
 export function motivoNoDocumento1700({ confirmado }) {
   return confirmado === true ? null : 'Marca el check «Documento 1700» para confirmar que ya está hecho en SAP.';

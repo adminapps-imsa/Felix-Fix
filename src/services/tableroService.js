@@ -1,11 +1,11 @@
 // Tablero: cómo va el trabajo de quien entra, armado con sus permisos. Cada
 // módulo sale solo si el usuario lo trabaja; Productos Dañados respeta lo que
-// puede ver (Gof: solo NF y devoluciones), igual que la lista.
+// puede ver (Gof: solo NF y devoluciones; Tienda: los que creó), igual que la lista.
 import * as repo from '../repositories/tableroRepository.js';
 import { obtenerKpis as kpisProductos } from '../repositories/productosDanadosRepository.js';
 import { obtenerKpis as kpisReclamos } from '../repositories/reclamosRepository.js';
 import { tienePermiso } from './acceso/permisos.js';
-import { alcanceVista } from '../domain/productoDanado.js';
+import { alcanceVista, creadorVisible } from '../domain/productoDanado.js';
 import { compradoraDe } from './acceso/alcanceCompradora.js';
 import { periodoValido, granularidad, inicioPeriodo, serie, resumirCola, promedioTramo, topConOtros } from '../domain/tablero.js';
 
@@ -42,12 +42,12 @@ export async function obtenerTablero(query, usuario) {
 }
 
 async function tableroProductos(usuario, { desde, ahora, gran, compradora }) {
-  const resoluciones = alcanceVista(usuario.permisos || new Set());
+  const alcance = { resoluciones: alcanceVista(usuario.permisos || new Set()), compradora, creador: creadorVisible(usuario) };
   const [kpis, abiertos, hitos, desglose, miTrabajo] = await Promise.all([
-    kpisProductos({ resoluciones, compradora }),
-    repo.pdAbiertos(resoluciones, compradora),
-    repo.pdHitos(resoluciones, desde, compradora),
-    repo.pdDesglose(resoluciones, desde, compradora),
+    kpisProductos(alcance),
+    repo.pdAbiertos(alcance),
+    repo.pdHitos(alcance, desde),
+    repo.pdDesglose(alcance, desde),
     repo.pdMiTrabajo(usuario, desde),
   ]);
 

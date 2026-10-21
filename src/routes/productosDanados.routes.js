@@ -29,6 +29,8 @@ const procesarLimiter = rateLimit({ windowMs: 60_000, max: 10 });
 router.use(requireAuth);
 // Cada compradora solo abre (y trabaja) los reportes de sus marcas: los demás responden 404.
 router.param('id', exigirAlcance('reporte'));
+// Tienda («Solo los reportes que creó»): los de otras personas también responden 404.
+router.param('id', controller.exigirPropio);
 
 // Quien crea o envía al proveedor también ve la lista, el detalle y los KPIs.
 const ver = requirePermiso(

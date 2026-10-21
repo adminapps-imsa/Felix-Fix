@@ -10,6 +10,18 @@ function idReporte(req) {
   return id;
 }
 
+/** `router.param('id')`: Tienda solo abre los reportes que creó (service.exigirPropio). */
+export async function exigirPropio(req, res, next, valor) {
+  const id = Number(valor);
+  if (!Number.isSafeInteger(id) || id <= 0) return next(); // idReporte responde 404
+  try {
+    await service.exigirPropio(id, req.user);
+    next();
+  } catch (err) {
+    next(err);
+  }
+}
+
 export const listar = asyncHandler(async (req, res) => {
   res.json(await service.listarReportes(req.query, req.user));
 });

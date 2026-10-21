@@ -79,8 +79,11 @@ contra la base de datos del portal (`node sql/migrate.js`).
    3 filas de ejemplo. La base del portal ya tiene 6 tiendas (TD04 Vía España,
    TD15 Multiplaza, TD20 Albrook, TD26 Alta Plaza, TD28 Town Center,
    TD30 Metromall); confirmar si falta alguna.
-6. **Visibilidad entre tiendas**: por defecto cualquier usuario autenticado
-   ve reportes de todas las tiendas (no se pidió scoping por tienda).
+6. **Visibilidad entre tiendas**: quien tiene el permiso de restricción
+   «Solo los reportes que creó» (`productos_danados.solo_propios`, rol Tienda
+   desde la migración `022`) ve solo los reportes que creó él mismo: lista,
+   tarjetas, Inicio, Tablero y detalle (los de otros responden 404). Los demás
+   roles ven todos (las compradoras, según su alcance).
 7. **Integración SAP — PENDIENTE DE DEFINIR CONTIGO**:
    `src/services/sapBajaService.js` expone `darDeBajaInventario()`, hoy
    lanza `SapNoImplementadoError` de forma controlada. Falta que confirmes:

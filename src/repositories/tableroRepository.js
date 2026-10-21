@@ -5,10 +5,11 @@ import { condicionReporte, condicionReclamo } from '../services/acceso/alcanceCo
 // promedios) los hace src/domain/tablero.js con estas filas.
 
 /**
- * Quien ve solo una parte de Productos Dañados: Gof (por resolución) y cada
- * compradora (por sus marcas). El mismo filtro de la lista.
+ * Quien ve solo una parte de Productos Dañados: Gof (por resolución), cada
+ * compradora (por sus marcas) y Tienda (los que creó). El mismo filtro de la lista.
+ * `alcance`: { resoluciones, compradora, creador }.
  */
-function condicionAlcance(request, resoluciones, compradora) {
+function condicionAlcance(request, { resoluciones, compradora, creador }) {
   const partes = [];
   if (resoluciones) {
     const params = resoluciones.map((res, i) => {
@@ -18,6 +19,10 @@ function condicionAlcance(request, resoluciones, compradora) {
     partes.push(`r.Resolucion IN (${params.join(', ')})`);
   }
   if (compradora) partes.push(condicionReporte(request, compradora));
+  if (creador != null) {
+    request.input('creador', sql.VarChar(150), creador);
+    partes.push('r.EmpleadoReportaUsuario = @creador');
+  }
   return partes.length ? partes.join(' AND ') : '1 = 1';
 }
 
@@ -27,9 +32,9 @@ const alcanceReclamos = (request, compradora) => (compradora ? condicionReclamo(
 // ---------- Productos Dañados ----------
 
 /** Reportes abiertos con la fecha en que llegaron a su etapa actual (último evento que los dejó en ese estado). */
-export async function pdAbiertos(resoluciones, compradora) {
+export async function pdAbiertos(alcancePd) {
   const request = (await getPool()).request();
-  const alcance = condicionAlcance(request, resoluciones, compradora);
+  const alcance = condicionAlcance(request, alcancePd);
   const { recordset } = await request.query(`
     SELECT r.ReporteId, r.Estado, r.NombreProducto, r.Cantidad, r.Motivo, t.Codigo AS TiendaCodigo, t.Nombre AS TiendaNombre,
       COALESCE(
@@ -48,9 +53,9 @@ export async function pdAbiertos(resoluciones, compradora) {
  * proveedor, documento 1700, cierre del NF, envío a contabilidad y pago.
  * Sirve para la serie (nuevos/cerrados) y para los tiempos entre etapas.
  */
-export async function pdHitos(resoluciones, desde, compradora) {
+export async function pdHitos(alcancePd, desde) {
   const request = (await getPool()).request();
-  const alcance = condicionAlcance(request, resoluciones, compradora);
+  const alcance = condicionAlcance(request, alcancePd);
   request.input('desde', sql.DateTime2, desde);
   const { recordset } = await request.query(`
     SELECT r.ReporteId, r.Resolucion, r.FechaCreacion AS Creado,
@@ -72,9 +77,9 @@ export async function pdHitos(resoluciones, desde, compradora) {
 }
 
 /** Reportes creados desde `desde`, por tienda, motivo y división (reportes y unidades). */
-export async function pdDesglose(resoluciones, desde, compradora) {
+export async function pdDesglose(alcancePd, desde) {
   const request = (await getPool()).request();
-  const alcance = condicionAlcance(request, resoluciones, compradora);
+  const alcance = condicionAlcance(request, alcancePd);
   request.input('desde', sql.DateTime2, desde);
   const { recordsets } = await request.query(`
     SELECT t.Codigo + ' ' + t.Nombre AS etiqueta, COUNT(*) AS n, SUM(r.Cantidad) AS unidades

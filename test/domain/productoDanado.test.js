@@ -12,6 +12,8 @@ import {
   MAX_ENVIOS_PROVEEDOR,
   alcanceVista,
   puedeVerReporte,
+  creadorVisible,
+  esDelCreador,
   motivoNoDocumento1700,
   motivoNoValidarNf,
   validarDocumentoSalidaNf,
@@ -192,4 +194,16 @@ test('cambios al corregir: solo los campos que cambiaron (números y vacíos equ
   assert.deepEqual(cambiosAlCorregir(antes, igual), []);
   assert.deepEqual(cambiosAlCorregir(antes, { ...igual, cantidad: 3, motivo: 'Vencimiento', tiendaId: 4 }), ['Tienda', 'Motivo', 'Cantidad']);
   assert.deepEqual(cambiosAlCorregir(antes, igual, { fotoNueva: true }), ['Foto']);
+});
+
+test('creadorVisible / esDelCreador: Tienda («Solo los reportes que creó») ve solo los suyos', () => {
+  const tienda = { username: 'BRodriguez', permisos: new Set(['productos_danados.crear', 'productos_danados.ver', 'productos_danados.solo_propios']) };
+  const compradora = { username: 'kmock', permisos: new Set(['productos_danados.ver', 'productos_danados.enviar']) };
+  assert.equal(creadorVisible(tienda), 'BRodriguez');
+  assert.equal(creadorVisible(compradora), null);
+  assert.equal(creadorVisible({ permisos: new Set(['productos_danados.solo_propios']) }), ''); // sin username: ninguno
+  assert.equal(esDelCreador('BRodriguez', { EmpleadoReportaUsuario: 'brodriguez' }), true); // sin distinguir mayúsculas
+  assert.equal(esDelCreador('BRodriguez', { EmpleadoReportaUsuario: 'kferrera' }), false);
+  assert.equal(esDelCreador('', { EmpleadoReportaUsuario: '' }), false);
+  assert.equal(esDelCreador(null, { EmpleadoReportaUsuario: 'otro' }), true); // ve todos
 });

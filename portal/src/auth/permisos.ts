@@ -8,6 +8,7 @@ export const P = {
   pdEliminar: 'productos_danados.eliminar',
   pdNf: 'productos_danados.nf',
   pdVerNf: 'productos_danados.ver_nf',
+  pdSoloPropios: 'productos_danados.solo_propios',
   pdNfDocumento: 'productos_danados.nf_documento',
   pdDocumentar: 'productos_danados.documentar',
   pdPago: 'productos_danados.pago',

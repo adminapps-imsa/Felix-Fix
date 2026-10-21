@@ -32,6 +32,8 @@ import {
   MAX_ENVIOS_PROVEEDOR,
   ESPERA_REENVIO_MIN,
   alcanceVista,
+  creadorVisible,
+  esDelCreador,
   puedeVerReporte,
   motivoNoDocumento1700,
   motivoNoValidarNf,
@@ -78,6 +80,7 @@ async function toFiltros(query, usuario) {
   return {
     resoluciones: usuario ? alcanceVista(usuario.permisos || new Set()) : null,
     compradora: await compradoraDe(usuario),
+    creador: usuario ? creadorVisible(usuario) : null,
     tiendaId: query.tienda ? Number(query.tienda) : undefined,
     motivo: query.motivo || undefined,
     estado: query.estado || undefined,
@@ -99,9 +102,22 @@ export async function obtenerKpis(query, usuario) {
   return repo.obtenerKpis(await toFiltros(query, usuario));
 }
 
-/** Quien ve solo una parte (Gof) no abre los demás reportes (ni su foto ni sus adjuntos): responde como si no existieran. */
+/** Quien ve solo una parte (Gof, Tienda) no abre los demás reportes (ni su foto ni sus adjuntos): responde como si no existieran. */
 function exigirVisible(reporte, usuario) {
-  if (usuario && !puedeVerReporte(alcanceVista(usuario.permisos || new Set()), reporte)) throw notFound('Reporte no encontrado.');
+  if (!usuario) return;
+  if (!puedeVerReporte(alcanceVista(usuario.permisos || new Set()), reporte) || !esDelCreador(creadorVisible(usuario), reporte))
+    throw notFound('Reporte no encontrado.');
+}
+
+/**
+ * Tienda («Solo los reportes que creó»): un reporte de otra persona responde
+ * 404 en todas las rutas /:id (detalle, archivos y acciones), como si no existiera.
+ */
+export async function exigirPropio(reporteId, usuario) {
+  const creador = creadorVisible(usuario);
+  if (creador === null) return;
+  const reporte = await repo.obtenerPorId(reporteId);
+  if (reporte && !esDelCreador(creador, reporte)) throw notFound('Reporte no encontrado.');
 }
 
 /** `usuario` (opcional): se pasa en las consultas para aplicar lo que puede ver. */

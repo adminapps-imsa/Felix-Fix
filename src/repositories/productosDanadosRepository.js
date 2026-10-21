@@ -37,6 +37,11 @@ function aplicarFiltros(request, filtros) {
   }
   // Compradora con alcance: solo los de sus marcas (alcanceCompradora.js).
   if (filtros.compradora) condiciones.push(condicionReporte(request, filtros.compradora));
+  // Tienda («Solo los reportes que creó»): solo los suyos.
+  if (filtros.creador != null) {
+    request.input('creador', sql.VarChar(150), filtros.creador);
+    condiciones.push('r.EmpleadoReportaUsuario = @creador');
+  }
   if (filtros.estado) {
     request.input('estado', sql.VarChar(20), filtros.estado);
     condiciones.push('r.Estado = @estado');

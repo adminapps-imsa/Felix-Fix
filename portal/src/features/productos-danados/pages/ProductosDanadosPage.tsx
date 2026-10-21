@@ -68,7 +68,7 @@ export function ProductosDanadosPage() {
   ) : (
     <EstadoVacio
       icono={PackageSearch}
-      titulo="Todavía no hay reportes"
+      titulo={puede(P.pdSoloPropios) ? 'Todavía no has creado reportes' : 'Todavía no hay reportes'}
       texto={puede(P.pdCrear) ? 'Cuando reportes un producto dañado aparecerá aquí.' : 'Cuando se reporte un producto dañado aparecerá aquí.'}
       accion={
         puede(P.pdCrear) && (
@@ -84,7 +84,9 @@ export function ProductosDanadosPage() {
     <div className="flex flex-col gap-6">
       <BandaPagina solape className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <TituloPagina icono={PackageSearch} titulo="Productos Dañados">
-          <p className="bajada-pagina">Bajas por deterioro, daño, vencimiento o cambio/devolución.</p>
+          <p className="bajada-pagina">
+            {puede(P.pdSoloPropios) ? 'Tus reportes: aquí ves solo los que creaste.' : 'Bajas por deterioro, daño, vencimiento o cambio/devolución.'}
+          </p>
         </TituloPagina>
         <RequirePermiso permiso={P.pdCrear}>
           <Button onClick={() => setShowNuevo(true)}>

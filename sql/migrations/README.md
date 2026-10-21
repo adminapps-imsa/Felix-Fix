@@ -54,6 +54,10 @@ sí mismo en `dbo.SchemaMigrations` al terminar.
    cada una vea solo los casos de sus mundos y marcas
 22. `021_compradora_ve_todo.sql` — `CompradoraUsuarios.VeTodo`: compradoras que
    por ahora ven todo (Alma Batista, Karina Samuels, Ana Gabriela López)
+23. `022_productos_danados_solo_propios.sql` — permiso de restricción
+   `productos_danados.solo_propios` («Solo los reportes que creó») para el rol
+   Tienda: cada usuario de tienda ve solo los reportes que creó. Solo agrega esa
+   fila en `RolPermisos`; no toca los demás permisos.
 
 ## Esquemas QA y Prod
 
