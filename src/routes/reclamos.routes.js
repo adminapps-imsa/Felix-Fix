@@ -5,6 +5,7 @@ import { requireAuth, requirePermiso } from '../middleware/auth.js';
 import { uploadExcelReclamo, uploadExcelPreview, uploadPdfPreview, uploadAdjuntoReclamo, uploadFotoRetiro } from '../middleware/uploadReclamos.js';
 import { validateBody, validateQuery } from '../validators/validate.js';
 import { borrarSiFalla } from '../middleware/upload.js';
+import { exigirAlcance } from '../services/acceso/alcanceCompradora.js';
 import { devolverSchema, reenviarSchema, retiroSchema, decisionReclamoSchema, decisionLineaSchema, decisionLineasSchema, listarQuerySchema, proveedorQuerySchema, documentosSapQuerySchema, adjuntoQuerySchema } from '../validators/reclamos.schema.js';
 
 const router = Router();
@@ -12,6 +13,8 @@ const router = Router();
 // Cualquier permiso de Reclamos incluye verlos (no se puede crear ni decidir
 // lo que no se ve). Crear, decidir y eliminar se exigen en cada ruta.
 router.use(requireAuth, requirePermiso('reclamos.ver', 'reclamos.crear', 'reclamos.adjuntar', 'reclamos.decidir', 'reclamos.eliminar', 'reclamos.contabilidad', 'reclamos.enviar_contabilidad', 'reclamos.retiro_proveedor'));
+// Cada compradora solo abre (y decide) los reclamos de sus mundos y marcas: los demás responden 404.
+router.param('token', exigirAlcance('reclamo'));
 const crear = requirePermiso('reclamos.crear');
 const decidir = requirePermiso('reclamos.decidir');
 const eliminar = requirePermiso('reclamos.eliminar');

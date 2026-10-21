@@ -5,6 +5,7 @@ import { parseJsonArray } from '../../repositories/reclamosRepository.js';
 import { CONTENT_TYPE_IMAGEN } from './excelImages.js';
 import { reclamoArchivoPath } from '../../config/almacenamiento.js';
 import { tienePermiso } from '../acceso/permisos.js';
+import { compradoraDe } from '../acceso/alcanceCompradora.js';
 import { parsePagination, buildPaginationMeta } from '../../utils/pagination.js';
 import { notFound } from '../../utils/httpError.js';
 import { validarIndice, indiceAdjunto, obtenerOFallar, numeroReclamo, aDto, conNombres, nombreUsuario } from './comun.js';
@@ -33,8 +34,9 @@ export function permisos(usuario) {
 
 export async function listar(query, usuario) {
   const pagination = parsePagination(query);
-  const filtros = { status: query.status || undefined, porEnviar: query.porEnviar === '1', q: query.q?.trim() || undefined };
-  const [{ items, total }, kpis] = await Promise.all([repo.listar(filtros, pagination), repo.obtenerKpis(usuario ? nombreUsuario(usuario) : null)]);
+  const compradora = await compradoraDe(usuario);
+  const filtros = { status: query.status || undefined, porEnviar: query.porEnviar === '1', q: query.q?.trim() || undefined, compradora };
+  const [{ items, total }, kpis] = await Promise.all([repo.listar(filtros, pagination), repo.obtenerKpis(usuario ? nombreUsuario(usuario) : null, compradora)]);
   return { data: await conNombres(items.map(aDto)), pagination: buildPaginationMeta({ ...pagination, total }), kpis };
 }
 

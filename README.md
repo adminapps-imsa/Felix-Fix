@@ -103,6 +103,22 @@ contra la base de datos del portal (`node sql/migrate.js`).
    sale ni el correo al proveedor ni los avisos internos; el portal lo indica
    en vez de fallar.
 
+## Cada compradora ve sus mundos y marcas
+
+`src/services/acceso/alcanceCompradora.js` (migración `020`). La compradora que
+está en `CompradoraUsuarios` (usuario → nombre en el catálogo de FelixApproval
+`compradoras_proveedores`) solo ve, en listas, KPIs, Inicio, Tablero, detalle y
+acciones, y solo recibe avisos de:
+
+- **Reclamos:** los que la tienen como «Compradora», o cuyo mundo y marca son
+  suyos en el catálogo (si el mundo es solo de ella, cualquier marca).
+- **Productos Dañados:** los de sus marcas en el catálogo. Si la marca no está,
+  van a la compradora principal de Belleza (la de más filas de ese mundo).
+
+Quien no está en la tabla (otros roles, el super administrador o una
+compradora que no está en el catálogo) ve todo, como antes. Un caso fuera de su
+alcance responde 404 (`router.param` en las rutas de Reclamos y Productos Dañados).
+
 ## Productos Dañados — flujo y avisos
 
 Pendiente → (compradora envía al proveedor) → **NF**: Gof marca el check

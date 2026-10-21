@@ -7,6 +7,7 @@ import { uploadAdjuntoReporte } from '../middleware/uploadReclamos.js';
 import { validateBody, validateQuery } from '../validators/validate.js';
 import { env } from '../config/env.js';
 import { serviceUnavailable } from '../utils/httpError.js';
+import { exigirAlcance } from '../services/acceso/alcanceCompradora.js';
 import {
   crearReporteSchema,
   corregirReporteSchema,
@@ -26,6 +27,8 @@ const router = Router();
 const procesarLimiter = rateLimit({ windowMs: 60_000, max: 10 });
 
 router.use(requireAuth);
+// Cada compradora solo abre (y trabaja) los reportes de sus marcas: los demás responden 404.
+router.param('id', exigirAlcance('reporte'));
 
 // Quien crea o envía al proveedor también ve la lista, el detalle y los KPIs.
 const ver = requirePermiso(

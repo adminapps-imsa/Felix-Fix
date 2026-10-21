@@ -1,6 +1,7 @@
 import { getPool, sql, S } from '../config/db.js';
 import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
+import { condicionReclamo } from '../services/acceso/alcanceCompradora.js';
 
 const SELECT_BASE = `
   SELECT
@@ -20,6 +21,8 @@ const SELECT_BASE = `
 
 function aplicarFiltros(request, filtros) {
   const condiciones = [];
+  // Compradora con alcance: solo los de sus mundos y marcas (alcanceCompradora.js).
+  if (filtros.compradora) condiciones.push(condicionReclamo(request, filtros.compradora));
   if (filtros.status) {
     request.input('status', sql.VarChar(15), filtros.status);
     condiciones.push('r.Status = @status');
@@ -64,10 +67,13 @@ export async function listar(filtros, { offset, pageSize }) {
 /**
  * KPIs globales (no dependen del filtro de estado, para que sirvan de pestañas).
  * `username` (opcional): además cuenta los devueltos que creó ese usuario (los que le toca corregir).
+ * `compradora` (opcional): solo los reclamos de su alcance.
  */
-export async function obtenerKpis(username = null) {
+export async function obtenerKpis(username = null, compradora = null) {
   const pool = await getPool();
-  const { recordset } = await pool.request().input('username', sql.VarChar(150), username).query(`
+  const request = pool.request().input('username', sql.VarChar(150), username);
+  const enAlcance = (a) => (compradora ? condicionReclamo(request, compradora, a) : '1 = 1');
+  const { recordset } = await request.query(`
     SELECT
       COUNT(*) AS total,
       SUM(CASE WHEN Status = 'pendiente' THEN 1 ELSE 0 END) AS pendientes,
@@ -77,11 +83,12 @@ export async function obtenerKpis(username = null) {
       -- Solo productos de reclamos abiertos: los de reclamos cerrados ya no se deciden.
       (SELECT COUNT(*) FROM ${S}.ReclamoLineas l
          JOIN ${S}.Reclamos rr ON rr.Token = l.ReclamoToken
-        WHERE l.DecStatus = 'pendiente' AND rr.Status IN ('pendiente', 'notificado')) AS productosPorDecidir,
+        WHERE l.DecStatus = 'pendiente' AND rr.Status IN ('pendiente', 'notificado') AND ${enAlcance('rr')}) AS productosPorDecidir,
       SUM(CASE WHEN Status IN ('resuelto', 'rechazado') AND EnviadoContabilidadAt IS NULL THEN 1 ELSE 0 END) AS porEnviarContabilidad,
       SUM(CASE WHEN Status = 'devuelto' THEN 1 ELSE 0 END) AS devueltos,
       SUM(CASE WHEN Status = 'devuelto' AND CreatedBy = @username THEN 1 ELSE 0 END) AS misDevueltos
-    FROM ${S}.Reclamos
+    FROM ${S}.Reclamos r
+    WHERE ${enAlcance('r')}
   `);
   const row = recordset[0];
   return {

@@ -15,6 +15,7 @@ import { env } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
 import { enviarCorreo, correoConfigurado, resumenDestinatarios } from './mailer.js';
 import { destinatarios, deUsuario } from './destinatarios.js';
+import { quitarCompradorasAjenas } from '../acceso/alcanceCompradora.js';
 import { TIPO_LABEL } from './plantillaReclamoContabilidad.js';
 import { documento, parrafo, recuadro, pasos, boton, datos, saludo, esc, fechaHora, datosTexto, pasosTexto } from './diseno.js';
 
@@ -178,7 +179,8 @@ export function avisarReclamo(evento, r, { para, comentario, de } = {}) {
   if (!env.correo.avisos || env.correo.desactivado || !correoConfigurado() || !ev || !r) return;
   const fecha = new Date();
   (async () => {
-    const area = ev.area ? await destinatarios(ev.area.permiso) : [];
+    // A cada compradora solo le llegan los reclamos de sus mundos y marcas.
+    const area = ev.area ? await quitarCompradorasAjenas(await destinatarios(ev.area.permiso), { reclamoToken: r.Token }) : [];
     const persona = ev.persona ? await deUsuario(para || r.CreatedBy) : { correos: [], nombre: '' };
     const paraPersona = persona.correos.filter((c) => !area.includes(c));
 

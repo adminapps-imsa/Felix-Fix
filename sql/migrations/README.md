@@ -49,6 +49,9 @@ sí mismo en `dbo.SchemaMigrations` al terminar.
 20. `019_productos_danados_devolver_tienda.sql` — Productos Dañados: estado
    `Devuelto` (la compradora lo devuelve a la tienda antes de enviarlo al
    proveedor) y las acciones de historial `DevueltoTienda` y `Corregido`
+21. `020_compradora_usuarios.sql` — `CompradoraUsuarios`: qué usuario del portal
+   es cada compradora del catálogo de FelixApproval (8 emparejadas), para que
+   cada una vea solo los casos de sus mundos y marcas
 
 ## Esquemas QA y Prod
 

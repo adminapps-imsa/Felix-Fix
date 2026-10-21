@@ -1,24 +1,35 @@
 import { getPool, sql, S } from '../config/db.js';
+import { condicionReporte, condicionReclamo } from '../services/acceso/alcanceCompradora.js';
 
 // Lecturas del Tablero. Solo consultas: los cálculos (series, antigüedad,
 // promedios) los hace src/domain/tablero.js con estas filas.
 
-/** Quien ve solo una parte de Productos Dañados (Gof): el mismo filtro de la lista. */
-function condicionAlcance(request, resoluciones) {
-  if (!resoluciones) return '1 = 1';
-  const params = resoluciones.map((res, i) => {
-    request.input(`resolucion${i}`, sql.VarChar(20), res);
-    return `@resolucion${i}`;
-  });
-  return `r.Resolucion IN (${params.join(', ')})`;
+/**
+ * Quien ve solo una parte de Productos Dañados: Gof (por resolución) y cada
+ * compradora (por sus marcas). El mismo filtro de la lista.
+ */
+function condicionAlcance(request, resoluciones, compradora) {
+  const partes = [];
+  if (resoluciones) {
+    const params = resoluciones.map((res, i) => {
+      request.input(`resolucion${i}`, sql.VarChar(20), res);
+      return `@resolucion${i}`;
+    });
+    partes.push(`r.Resolucion IN (${params.join(', ')})`);
+  }
+  if (compradora) partes.push(condicionReporte(request, compradora));
+  return partes.length ? partes.join(' AND ') : '1 = 1';
 }
+
+/** Reclamos de la compradora (alias r), o todos. */
+const alcanceReclamos = (request, compradora) => (compradora ? condicionReclamo(request, compradora) : '1 = 1');
 
 // ---------- Productos Dañados ----------
 
 /** Reportes abiertos con la fecha en que llegaron a su etapa actual (último evento que los dejó en ese estado). */
-export async function pdAbiertos(resoluciones) {
+export async function pdAbiertos(resoluciones, compradora) {
   const request = (await getPool()).request();
-  const alcance = condicionAlcance(request, resoluciones);
+  const alcance = condicionAlcance(request, resoluciones, compradora);
   const { recordset } = await request.query(`
     SELECT r.ReporteId, r.Estado, r.NombreProducto, r.Cantidad, r.Motivo, t.Codigo AS TiendaCodigo, t.Nombre AS TiendaNombre,
       COALESCE(
@@ -37,9 +48,9 @@ export async function pdAbiertos(resoluciones) {
  * proveedor, documento 1700, cierre del NF, envío a contabilidad y pago.
  * Sirve para la serie (nuevos/cerrados) y para los tiempos entre etapas.
  */
-export async function pdHitos(resoluciones, desde) {
+export async function pdHitos(resoluciones, desde, compradora) {
   const request = (await getPool()).request();
-  const alcance = condicionAlcance(request, resoluciones);
+  const alcance = condicionAlcance(request, resoluciones, compradora);
   request.input('desde', sql.DateTime2, desde);
   const { recordset } = await request.query(`
     SELECT r.ReporteId, r.Resolucion, r.FechaCreacion AS Creado,
@@ -61,9 +72,9 @@ export async function pdHitos(resoluciones, desde) {
 }
 
 /** Reportes creados desde `desde`, por tienda, motivo y división (reportes y unidades). */
-export async function pdDesglose(resoluciones, desde) {
+export async function pdDesglose(resoluciones, desde, compradora) {
   const request = (await getPool()).request();
-  const alcance = condicionAlcance(request, resoluciones);
+  const alcance = condicionAlcance(request, resoluciones, compradora);
   request.input('desde', sql.DateTime2, desde);
   const { recordsets } = await request.query(`
     SELECT t.Codigo + ' ' + t.Nombre AS etiqueta, COUNT(*) AS n, SUM(r.Cantidad) AS unidades
@@ -120,8 +131,9 @@ export async function pdMiTrabajo({ sub, username }, desde) {
  * Reclamos abiertos (por decidir), devueltos a quien los creó y cerrados sin
  * enviar a contabilidad, con cuándo llegaron a esa etapa.
  */
-export async function recAbiertos() {
-  const { recordset } = await (await getPool()).request().query(`
+export async function recAbiertos(compradora) {
+  const request = (await getPool()).request();
+  const { recordset } = await request.query(`
     SELECT r.ReclamoId, r.Token, r.Status, r.Tipo, r.Origen, r.Proveedor, r.Sucursal, r.Compradora, r.CreatedBy,
       CASE r.Status WHEN 'pendiente' THEN 'porDecidir' WHEN 'devuelto' THEN 'devuelto' ELSE 'porEnviar' END AS Cola,
       CASE r.Status
@@ -132,34 +144,38 @@ export async function recAbiertos() {
       END AS Entrada,
       (SELECT COUNT(*) FROM ${S}.ReclamoLineas l WHERE l.ReclamoToken = r.Token AND l.DecStatus = 'pendiente') AS LineasPendientes
     FROM ${S}.Reclamos r
-    WHERE r.Status IN ('pendiente', 'devuelto')
-       OR (r.Status IN ('resuelto', 'rechazado') AND r.EnviadoContabilidadAt IS NULL)
+    WHERE (r.Status IN ('pendiente', 'devuelto')
+       OR (r.Status IN ('resuelto', 'rechazado') AND r.EnviadoContabilidadAt IS NULL))
+      AND ${alcanceReclamos(request, compradora)}
   `);
   return recordset;
 }
 
 /** Hitos de los reclamos con movimiento desde `desde`. */
-export async function recHitos(desde) {
-  const { recordset } = await (await getPool()).request().input('desde', sql.DateTime2, desde).query(`
-    SELECT ReclamoId, CreatedAt AS Creado, DecisionAt AS Decision, EnviadoContabilidadAt AS EnviadoContabilidad
-    FROM ${S}.Reclamos
-    WHERE CreatedAt >= @desde OR DecisionAt >= @desde OR EnviadoContabilidadAt >= @desde
+export async function recHitos(desde, compradora) {
+  const request = (await getPool()).request().input('desde', sql.DateTime2, desde);
+  const { recordset } = await request.query(`
+    SELECT r.ReclamoId, r.CreatedAt AS Creado, r.DecisionAt AS Decision, r.EnviadoContabilidadAt AS EnviadoContabilidad
+    FROM ${S}.Reclamos r
+    WHERE (r.CreatedAt >= @desde OR r.DecisionAt >= @desde OR r.EnviadoContabilidadAt >= @desde) AND ${alcanceReclamos(request, compradora)}
   `);
   return recordset;
 }
 
 /** Reclamos creados desde `desde` por tipo, origen y proveedor; y productos decididos en el periodo. */
-export async function recDesglose(desde) {
-  const { recordsets } = await (await getPool()).request().input('desde', sql.DateTime2, desde).query(`
-    SELECT Tipo AS etiqueta, COUNT(*) AS n FROM ${S}.Reclamos WHERE CreatedAt >= @desde GROUP BY Tipo;
-    SELECT Origen AS etiqueta, COUNT(*) AS n FROM ${S}.Reclamos WHERE CreatedAt >= @desde GROUP BY Origen;
-    SELECT COALESCE(NULLIF(Proveedor, ''), 'Sin proveedor') AS etiqueta, COUNT(*) AS n
-    FROM ${S}.Reclamos WHERE CreatedAt >= @desde GROUP BY COALESCE(NULLIF(Proveedor, ''), 'Sin proveedor');
+export async function recDesglose(desde, compradora) {
+  const request = (await getPool()).request().input('desde', sql.DateTime2, desde);
+  const alcance = alcanceReclamos(request, compradora);
+  const { recordsets } = await request.query(`
+    SELECT r.Tipo AS etiqueta, COUNT(*) AS n FROM ${S}.Reclamos r WHERE r.CreatedAt >= @desde AND ${alcance} GROUP BY r.Tipo;
+    SELECT r.Origen AS etiqueta, COUNT(*) AS n FROM ${S}.Reclamos r WHERE r.CreatedAt >= @desde AND ${alcance} GROUP BY r.Origen;
+    SELECT COALESCE(NULLIF(r.Proveedor, ''), 'Sin proveedor') AS etiqueta, COUNT(*) AS n
+    FROM ${S}.Reclamos r WHERE r.CreatedAt >= @desde AND ${alcance} GROUP BY COALESCE(NULLIF(r.Proveedor, ''), 'Sin proveedor');
 
     -- Productos de los reclamos creados en el periodo, por cómo quedaron.
     SELECT l.DecStatus AS etiqueta, COUNT(*) AS n, COALESCE(SUM(l.Cantidad), 0) AS unidades
     FROM ${S}.ReclamoLineas l JOIN ${S}.Reclamos r ON r.Token = l.ReclamoToken
-    WHERE r.CreatedAt >= @desde
+    WHERE r.CreatedAt >= @desde AND ${alcance}
     GROUP BY l.DecStatus;
   `);
   return {

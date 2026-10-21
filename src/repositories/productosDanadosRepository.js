@@ -1,6 +1,7 @@
 import { getPool, sql, S } from '../config/db.js';
 import { registrarEvento } from './historialRepository.js';
 import { TRANSICIONES } from '../domain/productoDanado.js';
+import { condicionReporte } from '../services/acceso/alcanceCompradora.js';
 
 const SELECT_BASE = `
   SELECT
@@ -34,6 +35,8 @@ function aplicarFiltros(request, filtros) {
     });
     condiciones.push(`r.Resolucion IN (${params.join(', ')})`);
   }
+  // Compradora con alcance: solo los de sus marcas (alcanceCompradora.js).
+  if (filtros.compradora) condiciones.push(condicionReporte(request, filtros.compradora));
   if (filtros.estado) {
     request.input('estado', sql.VarChar(20), filtros.estado);
     condiciones.push('r.Estado = @estado');

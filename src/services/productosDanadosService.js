@@ -17,6 +17,7 @@ import { documentoMaterialSap } from './sapProductosService.js';
 import { parsePagination, buildPaginationMeta } from '../utils/pagination.js';
 import { badRequest, conflict, notFound, badGateway, forbidden, serviceUnavailable } from '../utils/httpError.js';
 import { tienePermiso } from './acceso/permisos.js';
+import { compradoraDe } from './acceso/alcanceCompradora.js';
 import { exigirDivision } from './divisiones.js';
 import {
   esDocGof,
@@ -73,9 +74,10 @@ export function inicioDiaPanama(fecha, dias = 0) {
   return new Date(Date.UTC(y, m - 1, d + dias, OFFSET_PANAMA_H));
 }
 
-function toFiltros(query, usuario) {
+async function toFiltros(query, usuario) {
   return {
     resoluciones: usuario ? alcanceVista(usuario.permisos || new Set()) : null,
+    compradora: await compradoraDe(usuario),
     tiendaId: query.tienda ? Number(query.tienda) : undefined,
     motivo: query.motivo || undefined,
     estado: query.estado || undefined,
@@ -87,14 +89,14 @@ function toFiltros(query, usuario) {
 }
 
 export async function listarReportes(query, usuario) {
-  const filtros = toFiltros(query, usuario);
+  const filtros = await toFiltros(query, usuario);
   const pagination = parsePagination(query);
   const { items, total } = await repo.listar(filtros, pagination);
   return { data: items.map(aDto), pagination: buildPaginationMeta({ ...pagination, total }) };
 }
 
 export async function obtenerKpis(query, usuario) {
-  return repo.obtenerKpis(toFiltros(query, usuario));
+  return repo.obtenerKpis(await toFiltros(query, usuario));
 }
 
 /** Quien ve solo una parte (Gof) no abre los demás reportes (ni su foto ni sus adjuntos): responde como si no existieran. */

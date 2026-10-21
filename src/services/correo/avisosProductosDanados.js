@@ -17,6 +17,7 @@ import { logger } from '../../utils/logger.js';
 import { enviarCorreo, correoConfigurado, resumenDestinatarios } from './mailer.js';
 import { numeroReporte } from './plantillaReporteProveedor.js';
 import { destinatarios, filtrarDominios, deUsuario } from './destinatarios.js';
+import { quitarCompradorasAjenas } from '../acceso/alcanceCompradora.js';
 import { documento, parrafo, recuadro, pasos, boton, datos, saludo, esc, datosTexto, pasosTexto } from './diseno.js';
 
 // Se mantiene para quien la importaba desde aquí.
@@ -225,7 +226,8 @@ export function avisarEtapa(evento, r, opts = {}) {
   const ev = EVENTOS[evento];
   if (!env.correo.avisos || env.correo.desactivado || !correoConfigurado() || !ev || !r) return;
   (async () => {
-    const area = ev.area ? await correosDelArea(ev.area) : [];
+    // A cada compradora solo le llegan los reportes de sus marcas.
+    const area = ev.area ? await quitarCompradorasAjenas(await correosDelArea(ev.area), { reporteId: r.ReporteId }) : [];
     const creador = ev.creador ? await deUsuario(r.EmpleadoReportaUsuario) : { correos: [], nombre: '' };
     const paraCreador = creador.correos.filter((c) => !area.includes(c));
     // El dato extra solo sale si el evento lo nombra (p. ej. el motivo del NF); si no, repetiría la frase.
