@@ -111,6 +111,17 @@ Pendiente → (compradora envía al proveedor) → **NF**: Gof marca el check
 aprobada**: Gof sube el documento → Contabilidad registra el pago → Cerrado
 (migraciones `013` y `014`).
 
+**Devolver a la tienda** (migración `019`): si la tienda llenó mal el
+formulario, la compradora (`productos_danados.enviar` o `.aprobar`) pulsa
+«Devolver a la tienda» con un comentario obligatorio, solo mientras el reporte
+está Pendiente y **antes de enviarlo al proveedor** (`motivoNoDevolverATienda`).
+El reporte queda **Devuelto** y le llega un correo a quien lo creó. Lo corrige
+quien lo creó o cualquier usuario con «Crear reportes» (los usuarios no están
+ligados a una tienda): «Corregir y reenviar» abre el mismo formulario del alta
+con los datos cargados (todo se puede cambiar, también la tienda y la foto) y
+una respuesta opcional (`PUT /:id/corregir`). Vuelve a Pendiente, el historial
+guarda qué campos cambió y la compradora recibe un aviso.
+
 **Validación del «Documento salida de NF»** (`validarDocumentoSalidaNf` en
 `src/domain/productoDanado.js`, SAP solo lectura): 10 dígitos; existe en SAP
 (MSEG); es la salida del Almacén NF (movimiento **551** desde el almacén

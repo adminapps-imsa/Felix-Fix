@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowRight, ClipboardList, FileCheck2, FileX2, Package, Send, Trash2 } from 'lucide-react';
+import { ArrowRight, ClipboardList, FileCheck2, FileX2, Package, PencilLine, Send, Trash2, Undo2 } from 'lucide-react';
 import { Modal } from '../../../components/ui/Modal';
 import { Button } from '../../../components/ui/Button';
 import { useAvisos } from '../../../components/ui/Avisos';
@@ -12,7 +12,9 @@ import { RequirePermiso } from '../../../auth/RequirePermiso';
 import { useAuth } from '../../../auth/useAuth';
 import { P } from '../../../auth/permisos';
 import { HistorialTimeline } from './HistorialTimeline';
-import { RechazarModal } from './RechazarModal';
+import { RechazarModal, DEVOLVER_TIENDA } from './RechazarModal';
+import { NuevoReporteForm } from './NuevoReporteForm';
+import { useTiendas } from '../hooks/useTiendas';
 import { CierreModal } from './CierreModal';
 import { EvidenciaImage } from './EvidenciaImage';
 import { CorreosProveedor } from './CorreosProveedor';
@@ -26,13 +28,15 @@ import type { Estado, ReporteDetalle } from '../../../types/productoDanado';
 // No se borra lo que ya está en contabilidad, cerrado o en SAP (igual que el backend).
 const NO_ELIMINABLES: Estado[] = ['EnProceso', 'Procesado', 'EnContabilidad', 'Cerrado'];
 // Correos del proveedor y adjuntos: solo mientras el reporte está en estas etapas (el backend responde 409 si no).
-const ESTADOS_EDITABLES: Estado[] = ['Pendiente', 'Aprobado'];
+const ESTADOS_EDITABLES: Estado[] = ['Pendiente', 'Devuelto', 'Aprobado'];
 
 /** Qué falta y quién lo tiene, para que cada rol sepa si le toca. */
 function siguientePaso(r: ReporteDetalle): string | null {
   switch (r.Estado) {
     case 'Pendiente':
       return 'Compradora: enviar al proveedor y registrar su respuesta (Devolución aprobada o NF).';
+    case 'Devuelto':
+      return 'Tienda: corregir lo que pidió la compradora y reenviarlo.';
     case 'Rechazado':
       return 'NF · Gof hace el documento 1700, marca el check aquí y lo pasa al supervisor GOF.';
     case 'NFValidacion':
@@ -62,9 +66,11 @@ function cambioA(r: ReporteDetalle, estado: Estado) {
 function rutaReporte(r: ReporteDetalle): PasoRuta[] {
   const e = r.Estado;
   const esNf = r.Resolucion === 'NF' || e === 'Rechazado' || e === 'NFValidacion';
-  const respondido = e !== 'Pendiente';
+  const respondido = e !== 'Pendiente' && e !== 'Devuelto';
   const reportado: PasoRuta = { titulo: 'Reportado', estado: 'hecho', fecha: r.FechaCreacion, quien: r.EmpleadoReportaNombre };
-  const envio: PasoRuta = r.EnviadoProveedorAt
+  const envio: PasoRuta = e === 'Devuelto'
+    ? { titulo: 'Devuelto a la tienda', estado: 'actual', ...cambioA(r, 'Devuelto'), nota: 'Le toca a la tienda corregirlo' }
+    : r.EnviadoProveedorAt
     ? { titulo: 'Enviado al proveedor', estado: 'hecho', fecha: r.EnviadoProveedorAt, quien: r.EnviadoProveedorPorNombre || r.EnviadoProveedorPor }
     : respondido
       ? { titulo: 'Enviado al proveedor', estado: 'hecho', nota: 'No se envió desde el portal' }
@@ -125,6 +131,9 @@ export function ReporteDetalleModal({
   const [showRechazar, setShowRechazar] = useState(false);
   const [confirmarEliminar, setConfirmarEliminar] = useState(false);
   const [cierre, setCierre] = useState<'nf' | 'pago' | null>(null);
+  const [showDevolver, setShowDevolver] = useState(false);
+  const [showCorregir, setShowCorregir] = useState(false);
+  const tiendas = useTiendas();
   const { puede, user } = useAuth();
   // Igual que el backend: quien trabaja con el proveedor edita cualquier reporte; quien solo crea, los suyos.
   const puedeEditar =
@@ -191,6 +200,8 @@ export function ReporteDetalleModal({
               <span>{siguientePaso(reporte)}</span>
             </div>
           )}
+
+          {reporte.Estado === 'Devuelto' && <ComentarioDevolucion reporte={reporte} />}
 
           {reporte.MotivoRechazo && (
             <div className="rounded-xl border border-danger/20 bg-danger/5 px-3 py-2 text-sm">
@@ -278,6 +289,19 @@ export function ReporteDetalleModal({
               <Button variant="ghost" className="mr-auto px-3 text-danger" disabled={busy} onClick={() => setConfirmarEliminar(true)}>
                 <Trash2 size={15} /> Eliminar
               </Button>
+            )}
+            {/* Antes de enviarlo al proveedor, la compradora puede devolverlo a la tienda (igual que el backend). */}
+            {reporte.Estado === 'Pendiente' && !reporte.EnviadoProveedorAt && puede(P.pdEnviar, P.pdAprobar) && (
+              <Button variant="secondary" disabled={busy} onClick={() => setShowDevolver(true)}>
+                <Undo2 size={15} /> Devolver a la tienda
+              </Button>
+            )}
+            {reporte.Estado === 'Devuelto' && (
+              <RequirePermiso permiso={P.pdCrear}>
+                <Button disabled={busy} onClick={() => setShowCorregir(true)}>
+                  <PencilLine size={15} /> Corregir y reenviar
+                </Button>
+              </RequirePermiso>
             )}
             {reporte.Estado === 'Pendiente' && (
               <RequirePermiso permiso={P.pdAprobar}>
@@ -374,6 +398,32 @@ export function ReporteDetalleModal({
         />
       )}
 
+      {showDevolver && (
+        <RechazarModal
+          textos={DEVOLVER_TIENDA}
+          onClose={() => setShowDevolver(false)}
+          onConfirm={async (comentario) => {
+            setReporte(await apiProductosDanados.devolverATienda(reporteId, comentario));
+            setActionError(null);
+            onChanged();
+            avisos.ok(`Reporte #${reporteId} devuelto a la tienda.`);
+          }}
+        />
+      )}
+
+      {showCorregir && reporte && (
+        <NuevoReporteForm
+          tiendas={tiendas}
+          reporte={reporte}
+          onClose={() => setShowCorregir(false)}
+          onCreated={(actualizado) => {
+            setReporte(actualizado);
+            setActionError(null);
+            onChanged();
+          }}
+        />
+      )}
+
       {showRechazar && (
         <RechazarModal
           onClose={() => setShowRechazar(false)}
@@ -418,6 +468,23 @@ function EsqueletoReporte() {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+/** Lo que pidió corregir la compradora (la última devolución del historial). */
+function ComentarioDevolucion({ reporte }: { reporte: ReporteDetalle }) {
+  const d = [...reporte.historial].reverse().find((h) => h.Accion === 'DevueltoTienda');
+  if (!d) return null;
+  return (
+    <div className="rounded-xl border border-brand-500/30 bg-brand-500/[0.06] px-3 py-2 text-sm">
+      <div className="flex items-center gap-1.5 font-semibold">
+        <Undo2 size={15} className="text-brand-500" /> Devuelto a la tienda: qué hay que corregir
+      </div>
+      <p className="mt-1 whitespace-pre-wrap opacity-90">{d.Detalle}</p>
+      <p className="mt-1 text-xs opacity-60">
+        {d.UsuarioNombre || d.UsuarioId} · {formatFecha(d.FechaEvento)}
+      </p>
     </div>
   );
 }

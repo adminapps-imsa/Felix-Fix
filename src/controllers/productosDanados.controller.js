@@ -45,6 +45,14 @@ export const rechazar = asyncHandler(async (req, res) => {
   res.json(await service.rechazarReporte(idReporte(req), motivoRechazo, req.user));
 });
 
+export const devolverATienda = asyncHandler(async (req, res) => {
+  res.json(await service.devolverATienda(idReporte(req), req.body, req.user));
+});
+
+export const corregir = asyncHandler(async (req, res) => {
+  res.json(await service.corregirReporte(idReporte(req), req.body, req.file, req.user));
+});
+
 export const procesar = asyncHandler(async (req, res) => {
   res.json(await service.procesarReporte(idReporte(req), req.user));
 });

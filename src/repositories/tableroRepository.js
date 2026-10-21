@@ -27,7 +27,7 @@ export async function pdAbiertos(resoluciones) {
       ) AS Entrada
     FROM ${S}.ReportesProductoDanado r
     INNER JOIN ${S}.Tiendas t ON t.TiendaId = r.TiendaId
-    WHERE r.Estado IN ('Pendiente', 'Rechazado', 'NFValidacion', 'Aprobado', 'EnContabilidad') AND ${alcance}
+    WHERE r.Estado IN ('Pendiente', 'Devuelto', 'Rechazado', 'NFValidacion', 'Aprobado', 'EnContabilidad') AND ${alcance}
   `);
   return recordset;
 }

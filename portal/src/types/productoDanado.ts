@@ -1,12 +1,14 @@
 /** Texto del catálogo de motivos (crece cuando alguien escribe uno nuevo). */
 export type Motivo = string;
 /**
- * Flujo: Pendiente → NF (Rechazado, con Gof: check documento 1700) → NF por validar
+ * Flujo: Pendiente → Devuelto (la compradora lo devuelve a la tienda antes de
+ * enviarlo al proveedor; la tienda corrige y vuelve a Pendiente).
+ * Pendiente → NF (Rechazado, con Gof: check documento 1700) → NF por validar
  * (NFValidacion, con supervisor GOF: documento salida de NF) → Cerrado, o
  * Pendiente → Devolución aprobada (Aprobado, con Gof) → EnContabilidad → Cerrado.
  * EnProceso/Procesado son de la baja en SAP (todavía sin integrar).
  */
-export type Estado = 'Pendiente' | 'Aprobado' | 'Rechazado' | 'NFValidacion' | 'EnContabilidad' | 'Cerrado' | 'EnProceso' | 'Procesado';
+export type Estado = 'Pendiente' | 'Devuelto' | 'Aprobado' | 'Rechazado' | 'NFValidacion' | 'EnContabilidad' | 'Cerrado' | 'EnProceso' | 'Procesado';
 
 // Códigos de antes de que el motivo fuera un catálogo (la migración 008 ya
 // los reescribió; se conserva por si llega alguno sin migrar).
@@ -15,6 +17,7 @@ export const motivoLabel = (m: string) => MOTIVO_LEGADO[m] || m;
 
 export const ESTADO_LABEL: Record<Estado, string> = {
   Pendiente: 'Pendiente',
+  Devuelto: 'Devuelto a la tienda',
   Aprobado: 'Devolución aprobada',
   Rechazado: 'NF',
   NFValidacion: 'NF por validar',
@@ -118,6 +121,7 @@ export interface Tienda {
 
 export interface Kpis {
   pendientes: number;
+  devueltos: number;
   aprobados: number;
   rechazados: number;
   nfValidacion: number;

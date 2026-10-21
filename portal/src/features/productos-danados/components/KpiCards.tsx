@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Clock, XCircle, FileUp, Landmark, Lock, FileCheck2 } from 'lucide-react';
+import { Clock, XCircle, FileUp, Landmark, Lock, FileCheck2, Undo2 } from 'lucide-react';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { Cifra } from '../../../components/ui/Cifra';
 import { Esqueleto } from '../../../components/ui/Esqueleto';
@@ -9,6 +9,7 @@ import type { Estado, Kpis } from '../../../types/productoDanado';
 // Una tarjeta por etapa del flujo, con quién la tiene; al tocarla filtra la lista.
 const CARDS: Array<{ key: keyof Kpis; estado: Estado; label: string; quien: string; icon: ReactNode; color: string }> = [
   { key: 'pendientes', estado: 'Pendiente', label: 'Pendientes', quien: 'Compradora', icon: <Clock size={18} />, color: 'text-warning' },
+  { key: 'devueltos', estado: 'Devuelto', label: 'Devueltos a la tienda', quien: 'Tienda · corregir', icon: <Undo2 size={18} />, color: 'text-brand-500 dark:text-brand-400' },
   { key: 'rechazados', estado: 'Rechazado', label: 'NF', quien: 'Gof · documento 1700', icon: <XCircle size={18} />, color: 'text-danger' },
   { key: 'nfValidacion', estado: 'NFValidacion', label: 'NF por validar', quien: 'Supervisor GOF', icon: <FileCheck2 size={18} />, color: 'text-danger' },
   { key: 'aprobados', estado: 'Aprobado', label: 'Devolución aprobada', quien: 'Gof', icon: <FileUp size={18} />, color: 'text-brand-500 dark:text-brand-400' },
@@ -31,7 +32,7 @@ export function KpiCards({
 }) {
   const cards = estadosVisibles ? CARDS.filter((c) => estadosVisibles.includes(c.estado)) : CARDS;
   return (
-    <div className={cn('grid grid-cols-2 gap-3 sm:grid-cols-3', cards.length === 6 ? 'lg:grid-cols-6' : 'lg:grid-cols-3')}>
+    <div className={cn('grid grid-cols-2 gap-3 sm:grid-cols-3', cards.length === CARDS.length ? 'lg:grid-cols-4 xl:grid-cols-7' : 'lg:grid-cols-3')}>
       {cards.map((card) => {
         const activa = estado === card.estado;
         return (

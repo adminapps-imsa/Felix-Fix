@@ -85,6 +85,7 @@ export async function obtenerKpis(filtros) {
   const result = await request.query(`
     SELECT
       SUM(CASE WHEN Estado = 'Pendiente' THEN 1 ELSE 0 END) AS pendientes,
+      SUM(CASE WHEN Estado = 'Devuelto' THEN 1 ELSE 0 END) AS devueltos,
       SUM(CASE WHEN Estado = 'Aprobado' THEN 1 ELSE 0 END) AS aprobados,
       SUM(CASE WHEN Estado = 'Rechazado' THEN 1 ELSE 0 END) AS rechazados,
       SUM(CASE WHEN Estado = 'NFValidacion' THEN 1 ELSE 0 END) AS nfValidacion,
@@ -98,6 +99,7 @@ export async function obtenerKpis(filtros) {
   const row = result.recordset[0];
   return {
     pendientes: row.pendientes || 0,
+    devueltos: row.devueltos || 0,
     aprobados: row.aprobados || 0,
     rechazados: row.rechazados || 0,
     nfValidacion: row.nfValidacion || 0,
@@ -249,7 +251,7 @@ async function transicionEstado({ reporteId, estadoDesde, estadoHacia, camposExt
  * Cambio de estado + evento de historial en UNA transacción: o quedan los dos
  * o ninguno. `evento` lleva lo del historial (accion, usuario, detalle); los
  * estados se toman de la transición. `verificar` (opcional) recibe la fila
- * (Estado, Adjuntos) leída con UPDLOCK antes del cambio y puede lanzar o
+ * (Estado, Adjuntos, EnviadoProveedorAt) leída con UPDLOCK antes del cambio y puede lanzar o
  * devolver campos extra para el evento. `antesDeCambiar(transaction)`
  * (opcional, async) corre primero, dentro de la misma transacción, y puede
  * lanzar. Devuelve false si el reporte ya no estaba en estadoDesde (o no existe).
@@ -265,7 +267,7 @@ async function transicionConHistorial({ reporteId, estadoDesde, estadoHacia, cam
     if (verificar) {
       const { recordset } = await new sql.Request(transaction)
         .input('reporteId', sql.BigInt, reporteId)
-        .query(`SELECT Estado, Adjuntos FROM ${S}.ReportesProductoDanado WITH (UPDLOCK, HOLDLOCK) WHERE ReporteId = @reporteId`);
+        .query(`SELECT Estado, Adjuntos, EnviadoProveedorAt FROM ${S}.ReportesProductoDanado WITH (UPDLOCK, HOLDLOCK) WHERE ReporteId = @reporteId`);
       if (!recordset.length || recordset[0].Estado !== estadoDesde) {
         await transaction.rollback();
         return false;
@@ -291,6 +293,71 @@ async function transicionConHistorial({ reporteId, estadoDesde, estadoHacia, cam
 
 const transicion = (nombre, datos) =>
   transicionConHistorial({ estadoDesde: TRANSICIONES[nombre].desde, estadoHacia: TRANSICIONES[nombre].hacia, ...datos });
+
+// Compradora: lo devuelve a la tienda. `verificar` revisa, con la fila bloqueada, que no se haya enviado al proveedor.
+export const devolverATienda = (reporteId, evento, verificar) => transicion('devolverATienda', { reporteId, evento, verificar });
+
+/**
+ * Tienda: guarda el formulario corregido y lo devuelve a Pendiente, con el
+ * historial, en una transacción con la fila bloqueada. `verificar(fila)`
+ * (regla del dominio) devuelve por qué no se puede, o null. `evento(fila, data)`
+ * arma el evento del historial con la fila de antes. `evidencia` (opcional):
+ * { provider, key } de la foto nueva. Un motivo nuevo queda en el catálogo.
+ * Devuelve { fila } (lo de antes, para borrar la foto vieja), { bloqueado } o null si no existe.
+ */
+export async function corregir(reporteId, data, usuario, { verificar, evento, evidencia, catalogos = {} }) {
+  const pool = await getPool();
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+  try {
+    const { recordset } = await new sql.Request(transaction).input('reporteId', sql.BigInt, reporteId).query(`
+      SELECT Estado, TiendaId, EmpleadoReportaNombre, CodigoBarras, NombreProducto, Marca, Division, Motivo, Cantidad, Descripcion,
+             EvidenciaProveedor, EvidenciaKey
+      FROM ${S}.ReportesProductoDanado WITH (UPDLOCK, HOLDLOCK) WHERE ReporteId = @reporteId`);
+    const fila = recordset[0];
+    const motivo = fila && verificar(fila);
+    if (!fila || motivo) {
+      await transaction.rollback();
+      return fila ? { bloqueado: motivo } : null;
+    }
+    data = { ...data };
+    for (const [campo, tipo] of Object.entries(catalogos)) {
+      data[campo] = await asegurarValorCatalogoTx(transaction, tipo, data[campo], usuario.username || usuario.sub);
+    }
+    const request = new sql.Request(transaction)
+      .input('reporteId', sql.BigInt, reporteId)
+      .input('tiendaId', sql.Int, data.tiendaId)
+      .input('empleadoReportaNombre', sql.VarChar(150), data.empleadoReportaNombre)
+      .input('codigoBarras', sql.VarChar(50), data.codigoBarras || null)
+      .input('nombreProducto', sql.VarChar(200), data.nombreProducto)
+      .input('marca', sql.VarChar(100), data.marca || null)
+      .input('division', sql.NVarChar(100), data.division)
+      .input('motivo', sql.NVarChar(100), data.motivo)
+      .input('cantidad', sql.Decimal(18, 3), data.cantidad)
+      .input('descripcion', sql.NVarChar(1000), data.descripcion || null)
+      .input('estadoDesde', sql.VarChar(20), TRANSICIONES.corregir.desde)
+      .input('estadoHacia', sql.VarChar(20), TRANSICIONES.corregir.hacia);
+    const sets = [
+      'TiendaId = @tiendaId', 'EmpleadoReportaNombre = @empleadoReportaNombre', 'CodigoBarras = @codigoBarras',
+      'NombreProducto = @nombreProducto', 'Marca = @marca', 'Division = @division', 'Motivo = @motivo',
+      'Cantidad = @cantidad', 'Descripcion = @descripcion', 'Estado = @estadoHacia', 'FechaActualizacion = SYSUTCDATETIME()',
+    ];
+    if (evidencia) {
+      request.input('evidenciaProveedor', sql.VarChar(20), evidencia.provider).input('evidenciaKey', sql.NVarChar(500), evidencia.key);
+      sets.push('EvidenciaProveedor = @evidenciaProveedor', 'EvidenciaKey = @evidenciaKey');
+    }
+    await request.query(`UPDATE ${S}.ReportesProductoDanado SET ${sets.join(', ')} WHERE ReporteId = @reporteId AND Estado = @estadoDesde`);
+    await registrarEvento(
+      { reporteId, estadoAnterior: TRANSICIONES.corregir.desde, estadoNuevo: TRANSICIONES.corregir.hacia, ...evento(fila, data) },
+      new sql.Request(transaction)
+    );
+    await transaction.commit();
+    return { fila };
+  } catch (err) {
+    await transaction.rollback().catch(() => {});
+    throw err;
+  }
+}
 
 // Devolución aprobada: pasa a Gof.
 export const aprobar = (reporteId, evento) => transicion('aprobar', { reporteId, camposExtra: { resolucion: 'Devolucion' }, evento });

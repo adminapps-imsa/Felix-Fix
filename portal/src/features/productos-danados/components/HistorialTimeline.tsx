@@ -16,6 +16,8 @@ const ACCION_LABEL: Record<string, string> = {
   AdjuntoAgregado: 'Adjunto agregado',
   AdjuntoEliminado: 'Adjunto eliminado',
   EnviadoProveedor: 'Enviado al proveedor por correo',
+  DevueltoTienda: 'Devuelto a la tienda para corregir',
+  Corregido: 'Corregido por la tienda · vuelve a la compradora',
 };
 
 export function HistorialTimeline({ historial }: { historial: HistorialItem[] }) {

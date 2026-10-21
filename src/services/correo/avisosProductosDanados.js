@@ -25,6 +25,7 @@ export { destinatarios };
 /** Nombre visible de cada etapa (como en el portal). */
 const ESTADO = {
   Pendiente: 'Pendiente',
+  Devuelto: 'Devuelto a la tienda',
   Aprobado: 'Devolución aprobada',
   Rechazado: 'NF',
   NFValidacion: 'NF por validar',
@@ -53,6 +54,27 @@ export const EVENTOS = {
       titulo: 'Recibimos tu reporte',
       frase: 'Tu reporte quedó registrado y pasó a la compradora para enviarlo al proveedor.',
     },
+  },
+  // La compradora lo devuelve para corregir -> quien lo creó.
+  devuelto: {
+    detalle: 'Qué hay que corregir',
+    area: null,
+    creador: {
+      titulo: 'Tu reporte necesita una corrección',
+      frase: 'La compradora te devolvió el reporte antes de enviarlo al proveedor. Corrige lo que indica y reenvíalo.',
+      pasos: ['Abre el reporte y lee el comentario de la compradora.', 'Pulsa «Corregir y reenviar», cambia lo que haga falta y guarda.'],
+    },
+  },
+  // La tienda lo corrigió -> compradora (vuelve a su bandeja de pendientes).
+  reenviado: {
+    detalle: 'Lo que corrigió la tienda',
+    area: {
+      permiso: 'productos_danados.enviar',
+      titulo: 'Reporte corregido por la tienda',
+      frase: 'La tienda corrigió el reporte que devolviste y volvió a quedar pendiente.',
+      pasos: ['Abre el reporte y revisa los cambios.', 'Envíalo al proveedor o devuélvelo otra vez si falta algo.'],
+    },
+    creador: null,
   },
   // El proveedor aprueba la devolución -> Gof (documento) + creador.
   aprobado: {

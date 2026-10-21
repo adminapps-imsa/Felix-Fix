@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 // Todos los estados de la ruta del dominio (TRANSICIONES); test/validators lo comprueba.
-export const ESTADOS = ['Pendiente', 'Aprobado', 'Rechazado', 'NFValidacion', 'EnContabilidad', 'Cerrado', 'EnProceso', 'Procesado'];
+export const ESTADOS = ['Pendiente', 'Devuelto', 'Aprobado', 'Rechazado', 'NFValidacion', 'EnContabilidad', 'Cerrado', 'EnProceso', 'Procesado'];
 
 export const crearReporteSchema = z.object({
   tiendaId: z.coerce.number().int().positive(),
@@ -16,6 +16,16 @@ export const crearReporteSchema = z.object({
   motivo: z.string().trim().min(1, 'El motivo es obligatorio.').max(100),
   cantidad: z.coerce.number().positive().max(100000),
   descripcion: z.string().trim().max(1000).optional().or(z.literal('')),
+});
+
+/** Tienda: el mismo formulario del alta, más una respuesta opcional para la compradora. La foto nueva va aparte (multipart). */
+export const corregirReporteSchema = crearReporteSchema.extend({
+  respuesta: z.string().trim().max(1000).optional().or(z.literal('')),
+});
+
+/** Compradora: lo que tiene que corregir la tienda (el mínimo lo revisa el dominio). */
+export const devolverATiendaSchema = z.object({
+  comentario: z.string().trim().max(1000, 'El comentario es demasiado largo (máx. 1000).').optional().default(''),
 });
 
 export const rechazarReporteSchema = z.object({

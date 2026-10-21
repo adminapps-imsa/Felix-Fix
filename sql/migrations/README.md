@@ -46,6 +46,9 @@ sí mismo en `dbo.SchemaMigrations` al terminar.
    tabla `ReclamoComentarios` (la compradora devuelve a quien lo creó y este lo reenvía)
 19. `018_reclamos_devolucion_retiro_proveedor.sql` — Reclamos: tipo `devolucion`
    y la marca del retiro del proveedor (`RetiroProveedor*`: día, foto, quién)
+20. `019_productos_danados_devolver_tienda.sql` — Productos Dañados: estado
+   `Devuelto` (la compradora lo devuelve a la tienda antes de enviarlo al
+   proveedor) y las acciones de historial `DevueltoTienda` y `Corregido`
 
 ## Esquemas QA y Prod
 

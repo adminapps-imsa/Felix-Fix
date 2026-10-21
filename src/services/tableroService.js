@@ -19,7 +19,7 @@ const PERMISOS_PRODUCTOS = [
 const PERMISOS_RECLAMOS = ['reclamos.ver', 'reclamos.crear', 'reclamos.adjuntar', 'reclamos.decidir', 'reclamos.eliminar', 'reclamos.enviar_contabilidad'];
 
 /** Etapas abiertas de un reporte, en el orden del flujo. */
-const ETAPAS_PD = ['Pendiente', 'Rechazado', 'NFValidacion', 'Aprobado', 'EnContabilidad'];
+const ETAPAS_PD = ['Pendiente', 'Devuelto', 'Rechazado', 'NFValidacion', 'Aprobado', 'EnContabilidad'];
 
 export async function obtenerTablero(query, usuario) {
   const dias = periodoValido(query.dias);

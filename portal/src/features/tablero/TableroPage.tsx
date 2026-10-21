@@ -180,6 +180,7 @@ function semaforo(c: Cola<unknown>): Semaforo {
 }
 
 const ETAPAS_PD: { estado: EtapaAbierta; titulo: string; icono: LucideIcon; permisos: string[] }[] = [
+  { estado: 'Devuelto', titulo: 'Corregir reportes devueltos', icono: Undo2, permisos: [P.pdCrear] },
   { estado: 'Pendiente', titulo: 'Enviar al proveedor', icono: Send, permisos: [P.pdEnviar, P.pdAprobar] },
   { estado: 'Rechazado', titulo: 'Hacer el documento 1700', icono: FileWarning, permisos: [P.pdNfDocumento] },
   { estado: 'NFValidacion', titulo: 'Validar NF', icono: FileCheck2, permisos: [P.pdNf] },

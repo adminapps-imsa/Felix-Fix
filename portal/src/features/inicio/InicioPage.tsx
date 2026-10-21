@@ -75,6 +75,8 @@ export function InicioPage() {
   const n = (v: number | undefined | null) => (datos ? (v ?? null) : null);
 
   const tareas: Tarea[] = [];
+  if (puede(P.pdCrear))
+    tareas.push({ id: 'pd-devueltos', cantidad: n(pd?.devueltos), titulo: 'Reportes devueltos para corregir', detalle: 'La compradora dejó un comentario: corrige lo que indica y reenvíalos.', to: '/productos-danados?estado=Devuelto', tono: 'text-brand-600 dark:text-brand-400' });
   if (puede(P.pdEnviar, P.pdAprobar))
     tareas.push({ id: 'pd-pend', cantidad: n(pd?.pendientes), titulo: 'Reportes por enviar al proveedor', detalle: 'Envíalos y registra la respuesta: Devolución aprobada o NF.', to: '/productos-danados?estado=Pendiente', tono: 'text-warning' });
   if (puede(P.pdNfDocumento))

@@ -41,6 +41,12 @@ export function rechazarReporte(id: number, motivoRechazo: string) {
   return api.patch<ReporteDetalle>(`${ruta(id)}/rechazar`, { motivoRechazo });
 }
 
+/** Compradora: lo devuelve a la tienda (antes de enviarlo al proveedor) con lo que hay que corregir. */
+export const devolverATienda = (id: number, comentario: string) => api.patch<ReporteDetalle>(`${ruta(id)}/devolver-tienda`, { comentario });
+
+/** Tienda: el formulario corregido (mismos campos del alta, foto nueva opcional y `respuesta`); vuelve a Pendiente. */
+export const corregirReporte = (id: number, form: FormData) => api.putForm<ReporteDetalle>(`${ruta(id)}/corregir`, form);
+
 export function procesarReporte(id: number) {
   return api.post<ReporteDetalle>(`${ruta(id)}/procesar`);
 }

@@ -62,7 +62,7 @@ export interface ItemColaDocumento {
   total: number;
 }
 
-export type EtapaAbierta = 'Pendiente' | 'Rechazado' | 'NFValidacion' | 'Aprobado' | 'EnContabilidad';
+export type EtapaAbierta = 'Pendiente' | 'Devuelto' | 'Rechazado' | 'NFValidacion' | 'Aprobado' | 'EnContabilidad';
 
 export interface TableroProductos {
   kpis: Kpis;

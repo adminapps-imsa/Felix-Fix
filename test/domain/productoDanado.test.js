@@ -16,6 +16,9 @@ import {
   motivoNoValidarNf,
   validarDocumentoSalidaNf,
   mismoCodigo,
+  motivoNoDevolverATienda,
+  motivoNoCorregir,
+  cambiosAlCorregir,
 } from '../../src/domain/productoDanado.js';
 
 const docGof = { filename: 'a.pdf', etapa: 'gof' };
@@ -150,4 +153,43 @@ test('mismo código de barras aunque cambien los ceros a la izquierda', () => {
   assert.equal(mismoCodigo(' 7501234567890 ', '7501234567890'), true);
   assert.equal(mismoCodigo('7501234567891', '7501234567890'), false);
   assert.equal(mismoCodigo(null, null), false);
+});
+
+test('devolver a la tienda: Pendiente → Devuelto → Pendiente al corregir', () => {
+  assert.deepEqual(TRANSICIONES.devolverATienda, { desde: 'Pendiente', hacia: 'Devuelto' });
+  assert.deepEqual(TRANSICIONES.corregir, { desde: 'Devuelto', hacia: 'Pendiente' });
+});
+
+test('devolver a la tienda: solo Pendiente, sin enviar al proveedor y con comentario', () => {
+  const pendiente = { Estado: 'Pendiente', EnviadoProveedorAt: null };
+  assert.equal(motivoNoDevolverATienda(pendiente, 'La foto no se ve'), null);
+  assert.match(motivoNoDevolverATienda(pendiente, '  ab '), /qué tiene que corregir/);
+  assert.match(motivoNoDevolverATienda({ ...pendiente, EnviadoProveedorAt: new Date() }, 'La foto no se ve'), /ya se envió al proveedor/);
+  for (const Estado of ['Devuelto', 'Aprobado', 'Rechazado', 'Cerrado']) {
+    assert.match(motivoNoDevolverATienda({ Estado }, 'La foto no se ve'), /Solo se devuelve/, Estado);
+  }
+});
+
+test('corregir: solo un reporte devuelto', () => {
+  assert.equal(motivoNoCorregir({ Estado: 'Devuelto' }), null);
+  for (const Estado of ['Pendiente', 'Aprobado', 'Cerrado']) assert.match(motivoNoCorregir({ Estado }), /ya no está devuelto/, Estado);
+});
+
+test('corregir: correos y adjuntos del proveedor se pueden cambiar mientras está devuelto', () => {
+  assert.equal(motivoNoEditable('Devuelto'), null);
+  assert.equal(motivoNoEnviarProveedor('Devuelto') !== null, true);
+});
+
+test('cambios al corregir: solo los campos que cambiaron (números y vacíos equivalentes no cuentan)', () => {
+  const antes = {
+    TiendaId: 3, EmpleadoReportaNombre: 'Ana', CodigoBarras: '7701', NombreProducto: 'Perfume', Marca: null,
+    Division: 'Perfumería', Motivo: 'Daño', Cantidad: 2, Descripcion: null,
+  };
+  const igual = {
+    tiendaId: 3, empleadoReportaNombre: 'Ana ', codigoBarras: '7701', nombreProducto: 'Perfume', marca: '',
+    division: 'Perfumería', motivo: 'Daño', cantidad: '2.000', descripcion: '',
+  };
+  assert.deepEqual(cambiosAlCorregir(antes, igual), []);
+  assert.deepEqual(cambiosAlCorregir(antes, { ...igual, cantidad: 3, motivo: 'Vencimiento', tiendaId: 4 }), ['Tienda', 'Motivo', 'Cantidad']);
+  assert.deepEqual(cambiosAlCorregir(antes, igual, { fotoNueva: true }), ['Foto']);
 });

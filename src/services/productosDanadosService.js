@@ -36,6 +36,9 @@ import {
   motivoNoValidarNf,
   validarDocumentoSalidaNf,
   mismoCodigo,
+  motivoNoDevolverATienda,
+  motivoNoCorregir,
+  cambiosAlCorregir,
 } from '../domain/productoDanado.js';
 import { logger } from '../utils/logger.js';
 
@@ -173,6 +176,79 @@ export async function rechazarReporte(reporteId, motivoRechazo, usuario) {
   if (!ok) throw conflict('El reporte ya no está en estado Pendiente.');
   const detalle = await obtenerDetalle(reporteId);
   avisarEtapa('nf', detalle, { detalle: motivoRechazo });
+  return detalle;
+}
+
+// ------------------------------------------------------------------
+// Devolver a la tienda: la compradora lo regresa (antes de enviarlo al
+// proveedor) y la tienda corrige el formulario y lo reenvía.
+// ------------------------------------------------------------------
+
+export async function devolverATienda(reporteId, { comentario }, usuario) {
+  const texto = String(comentario ?? '').trim();
+  const r = await existeOFallar(reporteId);
+  exigirVisible(r, usuario);
+  // Primero con lo leído (mensaje claro); después, con la fila bloqueada, dentro de la transacción.
+  const motivo = motivoNoDevolverATienda(r, texto);
+  if (motivo) throw r.Estado === 'Pendiente' && !r.EnviadoProveedorAt ? badRequest(motivo) : conflict(motivo);
+  const ok = await repo.devolverATienda(reporteId, eventoDe(usuario, 'DevueltoTienda', texto.slice(0, 1000)), (fila) => {
+    const m = motivoNoDevolverATienda(fila, texto);
+    if (m) throw conflict(m);
+  });
+  if (!ok) throw conflict('El reporte ya no está Pendiente.');
+  const detalle = await obtenerDetalle(reporteId);
+  logger.info({ reporteId, usuario: autor(usuario), para: detalle.EmpleadoReportaUsuario }, 'Reporte devuelto a la tienda');
+  avisarEtapa('devuelto', detalle, { detalle: texto });
+  return detalle;
+}
+
+/**
+ * Tienda: corrige el formulario del reporte devuelto (los mismos campos del
+ * alta y, si quiere, una foto nueva) y lo reenvía a la compradora (Pendiente).
+ * Lo puede hacer cualquiera con «Crear reportes» (lo revisa la ruta).
+ */
+export async function corregirReporte(reporteId, data, multerFile, usuario) {
+  const r = await existeOFallar(reporteId);
+  exigirVisible(r, usuario);
+  const motivo = motivoNoCorregir(r);
+  if (motivo) throw conflict(motivo);
+  const { respuesta, ...formulario } = data;
+  const datos = { ...formulario, division: await exigirDivision(formulario.division) };
+
+  let evidencia = null;
+  if (multerFile) {
+    await validarArchivoEvidencia(multerFile);
+    evidencia = await saveEvidence(multerFile);
+  }
+  const texto = String(respuesta ?? '').trim();
+  const res = await repo.corregir(reporteId, datos, usuario, {
+    verificar: motivoNoCorregir,
+    evidencia,
+    catalogos: { motivo: CAT_MOTIVO },
+    evento: (antes, nuevos) => {
+      const cambios = cambiosAlCorregir(antes, nuevos, { fotoNueva: Boolean(evidencia) });
+      const detalle = [cambios.length ? `Corrigió: ${cambios.join(', ')}` : 'Sin cambios en el formulario', texto && `Respuesta: ${texto}`]
+        .filter(Boolean)
+        .join(' · ')
+        .slice(0, 1000);
+      return eventoDe(usuario, 'Corregido', detalle);
+    },
+  });
+  if (!res) throw notFound('Reporte no encontrado.');
+  if (res.bloqueado) throw conflict(res.bloqueado);
+  marcarGuardado(multerFile);
+
+  // La foto anterior ya no la usa nadie (solo después del commit).
+  const vieja = res.fila;
+  if (evidencia && vieja.EvidenciaKey && vieja.EvidenciaProveedor === 'local') {
+    await fs.unlink(evidenciaAbsolutePath(vieja.EvidenciaKey)).catch((err) => {
+      if (err.code !== 'ENOENT') logger.error({ err, reporteId }, 'No se pudo borrar la foto anterior de un reporte corregido');
+    });
+  }
+  const detalle = await obtenerDetalle(reporteId);
+  logger.info({ reporteId, usuario: autor(usuario) }, 'Reporte corregido y reenviado a la compradora');
+  // El detalle del aviso: qué corrigió y su respuesta (el último evento del historial).
+  avisarEtapa('reenviado', detalle, { detalle: detalle.historial.at(-1)?.Detalle });
   return detalle;
 }
 

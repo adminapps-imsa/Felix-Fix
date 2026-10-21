@@ -9,6 +9,8 @@ import { env } from '../config/env.js';
 import { serviceUnavailable } from '../utils/httpError.js';
 import {
   crearReporteSchema,
+  corregirReporteSchema,
+  devolverATiendaSchema,
   rechazarReporteSchema,
   listarQuerySchema,
   correosSchema,
@@ -88,6 +90,16 @@ router.post(
   validateBody(crearReporteSchema),
   controller.crear
 );
+
+// Devolver a la tienda (compradora, antes de enviarlo al proveedor) y corregirlo
+// (quien lo creó o cualquiera con «Crear reportes»): mismo formulario del alta.
+router.patch(
+  '/:id/devolver-tienda',
+  requirePermiso('productos_danados.enviar', 'productos_danados.aprobar'),
+  validateBody(devolverATiendaSchema),
+  controller.devolverATienda
+);
+router.put('/:id/corregir', requirePermiso('productos_danados.crear'), uploadEvidencia, validateBody(corregirReporteSchema), controller.corregir);
 
 router.delete('/:id', requirePermiso('productos_danados.eliminar'), controller.eliminar);
 

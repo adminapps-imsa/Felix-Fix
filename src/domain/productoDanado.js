@@ -6,6 +6,7 @@
 // si no; el servicio lo traduce al error HTTP que corresponda.
 //
 // Estados (valor interno → lo que ve el usuario):
+//   Pendiente → Devuelto ("Devuelto a la tienda", compradora, antes de enviarlo al proveedor) → Pendiente (la tienda corrige)
 //   Pendiente → Aprobado ("Devolución aprobada", Gof) → EnContabilidad → Cerrado
 //   Pendiente → Rechazado ("NF", Gof: check documento 1700) → NFValidacion ("NF por validar", supervisor GOF:
 //   «Documento salida de NF» y validar) → Cerrado
@@ -13,6 +14,8 @@
 
 /** Cada cambio de estado: desde dónde puede salir y a dónde llega. */
 export const TRANSICIONES = {
+  devolverATienda: { desde: 'Pendiente', hacia: 'Devuelto' },
+  corregir: { desde: 'Devuelto', hacia: 'Pendiente' },
   aprobar: { desde: 'Pendiente', hacia: 'Aprobado' },
   rechazar: { desde: 'Pendiente', hacia: 'Rechazado' },
   registrarDocumento1700: { desde: 'Rechazado', hacia: 'NFValidacion' },
@@ -97,9 +100,55 @@ export function validarDocumentoSalidaNf({ numero, sap, tiendaCodigo, codigoBarr
 }
 
 // Correos del proveedor y adjuntos para el proveedor: solo antes de que el reporte siga a contabilidad/NF.
-export const ESTADOS_EDITABLES = ['Pendiente', 'Aprobado'];
+export const ESTADOS_EDITABLES = ['Pendiente', 'Devuelto', 'Aprobado'];
 
-export const MSG_NO_EDITABLE = 'Los correos y adjuntos para el proveedor solo se pueden cambiar mientras el reporte está Pendiente o Aprobado.';
+export const MSG_NO_EDITABLE = 'Los correos y adjuntos para el proveedor solo se pueden cambiar mientras el reporte está Pendiente, devuelto a la tienda o Aprobado.';
+
+// ------------------------------------------------------------------
+// Devolver a la tienda: la compradora lo regresa para corregir el formulario.
+// ------------------------------------------------------------------
+
+export const MIN_COMENTARIO_DEVOLVER = 5;
+
+/** Compradora: solo un reporte Pendiente que todavía no se envió al proveedor, con lo que hay que corregir. */
+export function motivoNoDevolverATienda(r, comentario) {
+  if (r?.Estado !== TRANSICIONES.devolverATienda.desde) return 'Solo se devuelve a la tienda un reporte Pendiente.';
+  if (r.EnviadoProveedorAt) return 'Este reporte ya se envió al proveedor: ya no se puede devolver a la tienda.';
+  if (String(comentario ?? '').trim().length < MIN_COMENTARIO_DEVOLVER) return 'Escribe qué tiene que corregir la tienda.';
+  return null;
+}
+
+/** Tienda: corrige y reenvía solo un reporte devuelto. */
+export const motivoNoCorregir = (r) =>
+  r?.Estado === TRANSICIONES.corregir.desde ? null : 'Este reporte ya no está devuelto a la tienda (alguien lo corrigió o cambió de estado).';
+
+/** Campos del formulario que se comparan al corregir, con su nombre para el historial. */
+const CAMPOS_FORMULARIO = [
+  ['TiendaId', 'tiendaId', 'Tienda'],
+  ['EmpleadoReportaNombre', 'empleadoReportaNombre', 'Empleado'],
+  ['CodigoBarras', 'codigoBarras', 'Código de barras'],
+  ['NombreProducto', 'nombreProducto', 'Producto'],
+  ['Marca', 'marca', 'Marca'],
+  ['Division', 'division', 'División'],
+  ['Motivo', 'motivo', 'Motivo'],
+  ['Cantidad', 'cantidad', 'Cantidad'],
+  ['Descripcion', 'descripcion', 'Descripción'],
+];
+
+const valorCampo = (v) => (v === null || v === undefined ? '' : typeof v === 'number' ? String(v) : String(v).trim());
+const mismoValor = (a, b) => {
+  const x = valorCampo(a);
+  const y = valorCampo(b);
+  if (x === y) return true;
+  return x !== '' && y !== '' && Number.isFinite(Number(x)) && Number(x) === Number(y);
+};
+
+/** Qué cambió la tienda al corregir, para el historial: ['Cantidad', 'Motivo', …]. */
+export function cambiosAlCorregir(antes, datos, { fotoNueva = false } = {}) {
+  const cambios = CAMPOS_FORMULARIO.filter(([col, campo]) => !mismoValor(antes?.[col], datos?.[campo])).map(([, , nombre]) => nombre);
+  if (fotoNueva) cambios.push('Foto');
+  return cambios;
+}
 
 export const motivoNoEditable = (estado) => (ESTADOS_EDITABLES.includes(estado) ? null : MSG_NO_EDITABLE);
 
