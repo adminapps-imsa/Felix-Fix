@@ -4,8 +4,9 @@
 //   nuevo     -> compradoras (reclamos.decidir): hay un reclamo por revisar.
 //   devuelto  -> quien lo creó: la compradora lo devolvió con un comentario.
 //   reenviado -> la compradora que lo devolvió: ya está corregido.
-//   cerrado   -> quien lo envía a contabilidad (reclamos.enviar_contabilidad)
-//                y quien lo creó: la compradora lo confirmó o rechazó.
+//   cerrado   -> quien lo envía a contabilidad (reclamos.enviar_contabilidad):
+//                la compradora lo confirmó o rechazó. A quien lo creó ya no
+//                se le avisa (solo informaba; quitado el 2026-10-21).
 // Si alguien está en el área y además es la persona, recibe solo el del área.
 //
 // Nunca bloquea ni hace fallar la acción (igual que los avisos de Productos
@@ -81,14 +82,6 @@ const EVENTOS = {
       ],
       boton: 'Abrir y enviar',
       pie: 'Lo recibes porque tu rol envía los reclamos a contabilidad.',
-    },
-    persona: {
-      titulo: 'Tu reclamo se cerró',
-      estado: 'Cerrado por la compradora',
-      frase: (de, r) => `${de} ${cerradoTexto(r)} tu reclamo. Ahora se envía a contabilidad.`,
-      etiquetaComentario: 'Comentario de la compradora',
-      boton: 'Ver el reclamo',
-      pie: 'Lo recibes porque creaste este reclamo.',
     },
   },
 };

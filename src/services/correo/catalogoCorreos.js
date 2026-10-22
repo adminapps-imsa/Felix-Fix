@@ -157,14 +157,6 @@ const CORREOS_RECLAMOS = [
       plantillaAvisoReclamo('cerrado', reclamo({ Status: 'resuelto', LineasAprobadas: 2, LineasPendientes: 0 }), { comentario: 'Todo bien con la factura.', de: 'Compradora de ejemplo', para: 'area' }),
   },
   {
-    id: 'rec-cerrado-creador',
-    nombre: 'Tu reclamo se cerró',
-    cuando: 'La compradora confirma o rechaza el reclamo.',
-    quien: 'Quien creó el reclamo',
-    generar: () =>
-      plantillaAvisoReclamo('cerrado', reclamo({ Status: 'resuelto', LineasAprobadas: 2, LineasPendientes: 0 }), { comentario: 'Todo bien con la factura.', de: 'Compradora de ejemplo', nombre: 'Gof de ejemplo', para: 'persona' }),
-  },
-  {
     id: 'rec-contabilidad',
     nombre: 'Reclamo para contabilidad',
     cuando: 'Gof o Torre de Control pulsan «Enviar a contabilidad».',

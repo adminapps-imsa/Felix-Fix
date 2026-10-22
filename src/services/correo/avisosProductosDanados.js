@@ -9,6 +9,10 @@
 //   creador  -> quien creó el reporte (EmpleadoReportaUsuario).
 // Si alguien está en los dos grupos recibe solo el aviso del área.
 //
+// Solo se avisa a quien tiene que hacer algo: los avisos que solo informaban
+// al creador («Recibimos tu reporte», «pasó a contabilidad», «se cerró»…) se
+// quitaron el 2026-10-21 para no llenar de correos a las tiendas.
+//
 // Nunca bloquea ni hace fallar la acción: si el correo no está configurado,
 // MAIL_AVISOS=false, no hay destinatarios o el envío falla, solo se registra
 // en el log. El diseño es el común de los correos del portal (diseno.js).
@@ -42,7 +46,7 @@ const ESTADO = {
  * `detalle`: cómo se llama el dato extra del evento (motivo del NF, referencia…).
  */
 export const EVENTOS = {
-  // Se crea el reporte -> compradora (lo envía al proveedor) + creador.
+  // Se crea el reporte -> compradora (lo envía al proveedor).
   nuevo: {
     area: {
       permiso: 'productos_danados.enviar',
@@ -50,10 +54,7 @@ export const EVENTOS = {
       frase: 'Se registró un reporte de producto dañado que espera tu gestión.',
       pasos: ['Abre el reporte y revisa la foto y los datos.', 'Envíalo al proveedor desde el portal.', 'Cuando responda, registra si es Devolución aprobada o NF.'],
     },
-    creador: {
-      titulo: 'Recibimos tu reporte',
-      frase: 'Tu reporte quedó registrado y pasó a la compradora para enviarlo al proveedor.',
-    },
+    creador: null,
   },
   // La compradora lo devuelve para corregir -> quien lo creó.
   devuelto: {
@@ -76,7 +77,7 @@ export const EVENTOS = {
     },
     creador: null,
   },
-  // El proveedor aprueba la devolución -> Gof (documento) + creador.
+  // El proveedor aprueba la devolución -> Gof (documento).
   aprobado: {
     area: {
       permiso: 'productos_danados.documentar',
@@ -84,12 +85,9 @@ export const EVENTOS = {
       frase: 'El proveedor aprobó la devolución de este reporte.',
       pasos: ['Sube el documento (PDF o Excel) en el reporte.', 'Pulsa «Enviar a contabilidad».'],
     },
-    creador: {
-      titulo: 'El proveedor aprobó la devolución',
-      frase: 'El proveedor aprobó la devolución de tu reporte. Ahora Gof prepara el documento para contabilidad.',
-    },
+    creador: null,
   },
-  // El proveedor no aprueba (NF) -> Gof (documento 1700) + creador.
+  // El proveedor no aprueba (NF) -> Gof (documento 1700).
   nf: {
     detalle: 'Motivo del NF',
     area: {
@@ -98,10 +96,7 @@ export const EVENTOS = {
       frase: 'El proveedor no aprobó la devolución de este reporte (NF).',
       pasos: ['Haz el documento 1700 en SAP.', 'En el reporte, marca el check «Documento 1700».', 'Así pasa al supervisor GOF para validarlo.'],
     },
-    creador: {
-      titulo: 'El proveedor no aprobó la devolución (NF)',
-      frase: 'El proveedor no aprobó la devolución de tu reporte. Gof hará el documento 1700 y el supervisor GOF lo validará.',
-    },
+    creador: null,
   },
   // Gof marcó el documento 1700 -> supervisor GOF.
   nfValidar: {
@@ -113,7 +108,7 @@ export const EVENTOS = {
     },
     creador: null,
   },
-  // Gof lo envió a contabilidad -> contabilidad (pago) + creador.
+  // Gof lo envió a contabilidad -> contabilidad (pago).
   contabilidad: {
     detalle: 'Documentos',
     area: {
@@ -124,28 +119,19 @@ export const EVENTOS = {
       // Contabilidad trabaja los pagos desde su apartado, no desde Productos Dañados.
       enlace: '/contabilidad?seccion=productos',
     },
-    creador: {
-      titulo: 'Tu reporte pasó a contabilidad',
-      frase: 'Tu reporte ya tiene su documento y está en contabilidad esperando el pago del proveedor.',
-    },
+    creador: null,
   },
-  // El supervisor GOF cerró el NF -> creador.
+  // El supervisor GOF cerró el NF -> sin aviso.
   nfCerrado: {
     detalle: 'Detalle del cierre',
     area: null,
-    creador: {
-      titulo: 'Tu reporte se cerró (NF)',
-      frase: 'El supervisor GOF validó tu reporte NF y lo cerró sin devolución del proveedor.',
-    },
+    creador: null,
   },
-  // Contabilidad registró el pago -> creador.
+  // Contabilidad registró el pago -> sin aviso.
   pagado: {
     detalle: 'Pago',
     area: null,
-    creador: {
-      titulo: 'Pago recibido: tu reporte se cerró',
-      frase: 'Contabilidad registró el pago del proveedor y tu reporte quedó cerrado.',
-    },
+    creador: null,
   },
 };
 
