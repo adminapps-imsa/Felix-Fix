@@ -217,6 +217,8 @@ export interface PermisosReclamos {
   puedeDevolver: boolean;
   /** Corregir y reenviar cualquier reclamo devuelto (super administrador); los demás, solo los que crearon. */
   puedeCorregirCualquiera: boolean;
+  /** Super administrador: elimina el reclamo en cualquier estado. */
+  puedeEliminarCualquiera: boolean;
   /** Reclamos de devolución: marcar que el proveedor retiró el producto (Gof). */
   puedeRegistrarRetiro: boolean;
   /** Igual a puedeDecidir (compatibilidad). */

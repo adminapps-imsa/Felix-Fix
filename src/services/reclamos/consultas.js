@@ -16,6 +16,8 @@ export function permisos(usuario) {
     puedeCrear: tienePermiso(usuario, 'reclamos.crear'),
     puedeDecidir,
     puedeEliminar: tienePermiso(usuario, 'reclamos.eliminar'),
+    // Super administrador (sin «Vista por»): elimina desde el detalle en cualquier estado.
+    puedeEliminarCualquiera: Boolean(usuario?.esSuperAdmin && !usuario.vista),
     // Adjuntar en cualquier reclamo (no solo en los propios).
     puedeAdjuntar: puedeDecidir || tienePermiso(usuario, 'reclamos.adjuntar'),
     // Torre de Control: también agrega adjuntos cuando el reclamo ya tiene decisión.

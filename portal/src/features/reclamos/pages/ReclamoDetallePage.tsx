@@ -32,6 +32,7 @@ export function ReclamoDetallePage() {
   const puedeDecidir = Boolean(permisos?.puedeDecidir);
   const puedeEnviarContabilidad = Boolean(permisos?.puedeEnviarContabilidad);
   const puedeEliminar = Boolean(permisos?.puedeEliminar);
+  const esSuperAdmin = Boolean(permisos?.puedeEliminarCualquiera);
 
   const [reclamo, setReclamo] = useState<Reclamo | null>(null);
   const [lineas, setLineas] = useState<ReclamoLinea[]>([]);
@@ -130,10 +131,18 @@ export function ReclamoDetallePage() {
       </BandaPagina>
 
       <GlassCard className="relative flex flex-col items-center gap-2 py-8 text-center">
-        {puedeEliminar && !bloqueado && (
-          <Button variant="ghost" className="absolute right-4 top-4 px-3 py-1.5 text-sm text-danger" onClick={() => setConfirmarEliminar(true)}>
+        {/* Super administrador: a la izquierda y en cualquier estado. */}
+        {esSuperAdmin ? (
+          <Button variant="ghost" className="absolute left-4 top-4 px-3 py-1.5 text-sm text-danger" onClick={() => setConfirmarEliminar(true)}>
             <Trash2 size={15} /> Eliminar
           </Button>
+        ) : (
+          puedeEliminar &&
+          !bloqueado && (
+            <Button variant="ghost" className="absolute right-4 top-4 px-3 py-1.5 text-sm text-danger" onClick={() => setConfirmarEliminar(true)}>
+              <Trash2 size={15} /> Eliminar
+            </Button>
+          )
         )}
         <span className="etiqueta">Reclamo</span>
         <h1 className="numero-caso text-5xl">{reclamo.Numero}</h1>
@@ -220,6 +229,11 @@ export function ReclamoDetallePage() {
         >
           Se eliminará <strong>{reclamo.Numero}</strong> con todos sus productos, el Excel, las fotos y los adjuntos. Esta acción no se puede
           deshacer.
+          {bloqueado && (
+            <span className="mt-2 block font-semibold text-danger">
+              {reclamo.EnviadoContabilidadAt ? 'Este reclamo ya se envió a contabilidad: también se borra lo que recibió contabilidad.' : 'Este reclamo ya está cerrado.'}
+            </span>
+          )}
         </ConfirmModal>
       )}
     </div>

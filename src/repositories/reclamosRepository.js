@@ -439,7 +439,7 @@ export async function eliminar(token, motivoBloqueo) {
     const { recordset } = await new sql.Request(transaction)
       .input('token', sql.UniqueIdentifier, token)
       .query(
-        `SELECT ReclamoId, ArchivoExcel, ImagenesExcel, AdjuntosExtra, Status, EnviadoContabilidadAt
+        `SELECT ReclamoId, ArchivoExcel, ImagenesExcel, AdjuntosExtra, RetiroProveedorFoto, Status, EnviadoContabilidadAt
          FROM ${S}.Reclamos WITH (UPDLOCK, HOLDLOCK) WHERE Token = @token`
       );
     if (!recordset[0]) {
@@ -456,6 +456,7 @@ export async function eliminar(token, motivoBloqueo) {
       .input('reclamoId', sql.BigInt, recordset[0].ReclamoId)
       .query(`
         DELETE FROM ${S}.ReclamoComentarios WHERE ReclamoId = @reclamoId;
+        DELETE FROM ${S}.ReclamoDocumentosContabilidad WHERE ReclamoId = @reclamoId;
         DELETE FROM ${S}.ReclamoLineas WHERE ReclamoToken = @token;
         DELETE FROM ${S}.Reclamos WHERE Token = @token;`);
     await transaction.commit();
