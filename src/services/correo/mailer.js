@@ -54,41 +54,39 @@ export const MSG_DESACTIVADO = 'El envío de correos está apagado en este servi
 export const correoDesactivado = () => env.correo.desactivado;
 
 /**
- * Entrega el correo al webhook de n8n como multipart/form-data:
- *   campos  para, cc (separados por coma), responderA, asunto, html, texto,
- *           deNombre, adjuntos (nombres de los campos de archivo, separados por coma),
- *           enLinea (campo=cid de los adjuntos incrustados en el html, separados por coma)
- *   archivos adjunto0, adjunto1, … (con su nombre original)
- * n8n debe responder 2xx cuando Outlook ya lo envió (Webhook con
- * "Respond: When last node finishes" o un nodo "Respond to Webhook").
+ * Entrega el correo al webhook de n8n («Respuesta Felix Fix») como JSON:
+ *   email_to, email_cc (separados por coma), email_subject, email_html,
+ *   attachments [{ filename, contentType, data (base64), isInline, contentId }]
+ * isInline/contentId van en los adjuntos incrustados en el html (el logo, cid:).
+ * El workflow manda por Graph sendMail cuando hay adjuntos y por el nodo
+ * Outlook cuando no. Sin email_to o email_html no envía nada, así que el html
+ * nunca va vacío.
  */
-async function enviarPorN8n({ para, cc, responderA, asunto, html, texto, adjuntos }) {
+async function enviarPorN8n({ para, cc, asunto, html, texto, adjuntos }) {
   const c = env.correo;
-  const form = new FormData();
-  form.append('para', para.join(','));
-  form.append('cc', cc.join(','));
-  form.append('responderA', responderA || '');
-  form.append('asunto', asunto);
-  form.append('html', html || '');
-  form.append('texto', texto || '');
-  form.append('deNombre', c.fromNombre);
-  const campos = [];
-  const enLinea = [];
-  for (const [i, a] of adjuntos.entries()) {
+  const attachments = [];
+  for (const a of adjuntos) {
     const contenido = a.content ?? (await fs.readFile(a.path));
-    const campo = `adjunto${i}`;
-    form.append(campo, new Blob([contenido], { type: a.contentType || 'application/octet-stream' }), a.filename);
-    campos.push(campo);
-    if (a.cid) enLinea.push(`${campo}=${a.cid}`);
+    attachments.push({
+      filename: a.filename,
+      contentType: a.contentType || 'application/octet-stream',
+      data: Buffer.from(contenido).toString('base64'),
+      ...(a.cid ? { isInline: true, contentId: a.cid } : {}),
+    });
   }
-  form.append('adjuntos', campos.join(','));
-  form.append('enLinea', enLinea.join(','));
+  const cuerpoJson = {
+    email_to: para.join(','),
+    email_cc: cc.join(','),
+    email_subject: asunto,
+    email_html: html || `<pre>${escaparHtml(texto || '')}</pre>`,
+    attachments,
+  };
 
   try {
     const res = await fetch(c.n8nUrl, {
       method: 'POST',
-      headers: c.n8nToken ? { [c.n8nHeader]: c.n8nToken } : undefined,
-      body: form,
+      headers: { 'Content-Type': 'application/json', ...(c.n8nToken ? { [c.n8nHeader]: c.n8nToken } : {}) },
+      body: JSON.stringify(cuerpoJson),
       signal: AbortSignal.timeout(c.n8nTimeoutMs),
     });
     const cuerpo = await res.text();
@@ -102,6 +100,8 @@ async function enviarPorN8n({ para, cc, responderA, asunto, html, texto, adjunto
     throw badGateway(MSG_FALLO, { code: 'CORREO_FALLO' });
   }
 }
+
+const escaparHtml = (t) => t.replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]);
 
 /** Para el log: cuántos destinatarios y de qué dominios, sin las direcciones (datos personales). */
 export function resumenDestinatarios(direcciones) {
@@ -119,7 +119,7 @@ export async function enviarCorreo({ para, cc = [], responderA, asunto, html, te
     logger.warn({ ...resumenDestinatarios([...para, ...cc]), adjuntos: adjuntos.length }, 'Correo NO enviado: MAIL_DESACTIVADO=true');
     throw serviceUnavailable(MSG_DESACTIVADO, { code: 'CORREO_DESACTIVADO' });
   }
-  if (env.correo.n8nUrl) return enviarPorN8n({ para, cc, responderA, asunto, html, texto, adjuntos });
+  if (env.correo.n8nUrl) return enviarPorN8n({ para, cc, asunto, html, texto, adjuntos });
   const t = obtenerTransporte();
   try {
     const info = await t.sendMail({
