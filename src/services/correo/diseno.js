@@ -159,7 +159,7 @@ export const bloque = (html, opciones) => fila(html, opciones);
 
 /**
  * El correo completo.
- * @param modulo     «PRODUCTOS DAÑADOS», «RECLAMOS», «PORTAL»
+ * @param modulo     «PRODUCTOS DAÑADOS», «RECLAMOS», «RECLAMOS · CONTABILIDAD»
  * @param titulo     título grande de la franja
  * @param subtitulo  número del caso · producto/proveedor · estado
  * @param vistaPrevia texto que muestra la bandeja junto al asunto
