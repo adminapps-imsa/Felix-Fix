@@ -53,16 +53,16 @@ export const MSG_DESACTIVADO = 'El envío de correos está apagado en este servi
 /** true si MAIL_DESACTIVADO=true: ningún correo sale del portal. */
 export const correoDesactivado = () => env.correo.desactivado;
 
+const escaparHtml = (s) => String(s).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]);
+
 /**
  * Entrega el correo al webhook de n8n («Respuesta Felix Fix») como JSON:
- *   email_to, email_cc (separados por coma), email_subject, email_html,
+ *   email_to, email_cc (separados por coma), email_reply_to, email_subject, email_html,
  *   attachments [{ filename, contentType, data (base64), isInline, contentId }]
- * isInline/contentId van en los adjuntos incrustados en el html (el logo, cid:).
- * El workflow manda por Graph sendMail cuando hay adjuntos y por el nodo
- * Outlook cuando no. Sin email_to o email_html no envía nada, así que el html
- * nunca va vacío.
+ * Los incrustados en el html (logo, foto) van con isInline y su cid como contentId.
+ * Sin email_html n8n descarta el correo, así que el texto plano se envuelve en html.
  */
-async function enviarPorN8n({ para, cc, asunto, html, texto, adjuntos }) {
+async function enviarPorN8n({ para, cc, responderA, asunto, html, texto, adjuntos }) {
   const c = env.correo;
   const attachments = [];
   for (const a of adjuntos) {
@@ -74,11 +74,12 @@ async function enviarPorN8n({ para, cc, asunto, html, texto, adjuntos }) {
       ...(a.cid ? { isInline: true, contentId: a.cid } : {}),
     });
   }
-  const cuerpoJson = {
+  const cuerpoCorreo = {
     email_to: para.join(','),
     email_cc: cc.join(','),
+    email_reply_to: responderA || '',
     email_subject: asunto,
-    email_html: html || `<pre>${escaparHtml(texto || '')}</pre>`,
+    email_html: html || `<pre style="font-family:inherit;white-space:pre-wrap">${escaparHtml(texto || '')}</pre>`,
     attachments,
   };
 
@@ -86,7 +87,7 @@ async function enviarPorN8n({ para, cc, asunto, html, texto, adjuntos }) {
     const res = await fetch(c.n8nUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(c.n8nToken ? { [c.n8nHeader]: c.n8nToken } : {}) },
-      body: JSON.stringify(cuerpoJson),
+      body: JSON.stringify(cuerpoCorreo),
       signal: AbortSignal.timeout(c.n8nTimeoutMs),
     });
     const cuerpo = await res.text();
@@ -100,8 +101,6 @@ async function enviarPorN8n({ para, cc, asunto, html, texto, adjuntos }) {
     throw badGateway(MSG_FALLO, { code: 'CORREO_FALLO' });
   }
 }
-
-const escaparHtml = (t) => t.replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]);
 
 /** Para el log: cuántos destinatarios y de qué dominios, sin las direcciones (datos personales). */
 export function resumenDestinatarios(direcciones) {
@@ -119,7 +118,7 @@ export async function enviarCorreo({ para, cc = [], responderA, asunto, html, te
     logger.warn({ ...resumenDestinatarios([...para, ...cc]), adjuntos: adjuntos.length }, 'Correo NO enviado: MAIL_DESACTIVADO=true');
     throw serviceUnavailable(MSG_DESACTIVADO, { code: 'CORREO_DESACTIVADO' });
   }
-  if (env.correo.n8nUrl) return enviarPorN8n({ para, cc, asunto, html, texto, adjuntos });
+  if (env.correo.n8nUrl) return enviarPorN8n({ para, cc, responderA, asunto, html, texto, adjuntos });
   const t = obtenerTransporte();
   try {
     const info = await t.sendMail({
