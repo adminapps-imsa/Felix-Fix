@@ -109,7 +109,8 @@ export async function previsualizarExcel(multerFile) {
     division: parsed.division || null,
     documentosSap: parsed.documentosSap || [],
     comentario: parsed.comentario || null,
-    fechaRegistro: parsed.fechaRegistro,
+    // La FECHA del Excel es la de llegada de la mercancía; la de registro es hoy.
+    fechaLlegadaMercancia: parsed.fechaRegistro,
     numeroEmbarqueFactura: parsed.numeroEmbarqueFactura,
     ...auto,
     tipoSugerido: parsed.tipoSugerido,
@@ -227,14 +228,16 @@ function validarCampos(body) {
   }
   const data = result.data;
 
-  const fechaLlegada = motivoFechaLlegadaInvalida(data.fechaLlegadaMercancia, diaPanama(new Date()));
+  const hoy = diaPanama(new Date());
+  const fechaLlegada = motivoFechaLlegadaInvalida(data.fechaLlegadaMercancia, hoy);
   if (fechaLlegada) throw badRequest(fechaLlegada.mensaje, { code: fechaLlegada.code });
 
   // Al menos 1 documento SAP entre los 3 fijos + los extra. Se compactan en
   // orden: los 3 primeros llenos van a SapDoc1..3, el resto a SapDocsExtra.
   const docs = [data.sapDoc1, data.sapDoc2, data.sapDoc3, ...data.sapDocsExtra].filter(Boolean);
   if (!docs.length && !SAP_DOC_OPCIONAL) throw badRequest('Ingresa al menos un documento SAP.');
-  return { ...data, sapDoc1: docs[0], sapDoc2: docs[1], sapDoc3: docs[2], sapDocsExtra: docs.slice(3) };
+  // La fecha de registro es siempre el día en que se crea el reclamo (la del Excel es la de llegada).
+  return { ...data, fechaRegistro: hoy, sapDoc1: docs[0], sapDoc2: docs[1], sapDoc3: docs[2], sapDocsExtra: docs.slice(3) };
 }
 
 /**

@@ -16,7 +16,7 @@ import { cn } from '../../../lib/cn';
 import { normalizarTexto } from '../../../lib/texto';
 import type { Tienda } from '../../../types/productoDanado';
 import type { CatalogosReclamo, DocumentoSapUsado, OrigenReclamo, PreviewExcel, Reclamo, RelacionProveedor, TipoReclamo } from '../../../types/reclamo';
-import { TIPOS, TIPO_LABEL, TIPO_LABEL_CORTO, TIPOS_SOLO_NOTIFICACION, categoriaTipo } from '../lib/tipos';
+import { TIPOS, TIPO_LABEL, TIPO_LABEL_CORTO, TIPOS_SOLO_NOTIFICACION, categoriaTipo, formatFechaCorta } from '../lib/tipos';
 import { TipoBadge } from './Badges';
 import { ExcelPreviewModal, PdfPreviewModal } from './VisoresLazy';
 import { ImagenPreviewModal } from './ImagenPreviewModal';
@@ -151,7 +151,7 @@ export function NuevoReclamoForm({
   // Gof no hace reclamos de CEDI: solo ve Tienda, ya elegida.
   const soloTienda = useAuth().puede(P.recSoloTienda);
   const origenes: OrigenReclamo[] = soloTienda ? ['tienda'] : ['tienda', 'cedi'];
-  const [campos, setCampos] = useState<Campos>(() => (soloTienda ? { ...CAMPOS_VACIOS, origen: 'tienda', fechaRegistro: hoyIso() } : CAMPOS_VACIOS));
+  const [campos, setCampos] = useState<Campos>(() => ({ ...CAMPOS_VACIOS, fechaRegistro: hoyIso(), ...(soloTienda ? { origen: 'tienda' as const } : {}) }));
   // Último estado dibujado, para leerlo tras un await (procesarExcel) sin hacerlo dentro de un updater.
   const camposRef = useRef(campos);
   camposRef.current = campos;
@@ -261,7 +261,7 @@ export function NuevoReclamoForm({
   const procesarExcel = async (file: File | null) => {
     // Todo lo que vino del archivo anterior se descarta ANTES de leer el nuevo.
     // Lo que eligió el usuario (no viene del Excel) se conserva.
-    setCampos((c) => ({ ...CAMPOS_VACIOS, origen: c.origen, compradora: c.compradora, division: c.division, comentario: c.comentario, fechaLlegadaMercancia: c.fechaLlegadaMercancia }));
+    setCampos((c) => ({ ...CAMPOS_VACIOS, fechaRegistro: hoyIso(), origen: c.origen, compradora: c.compradora, division: c.division, comentario: c.comentario, fechaLlegadaMercancia: c.fechaLlegadaMercancia }));
     setTipo('');
     setModoManual(false);
     setPreview(null);
@@ -279,7 +279,7 @@ export function NuevoReclamoForm({
       const delExcel = {
         origen: soloTienda ? 'tienda' : p.origen,
         sucursal: p.sucursal || '',
-        fechaRegistro: p.fechaRegistro || '',
+        fechaLlegadaMercancia: p.fechaLlegadaMercancia || '',
         numeroEmbarqueFactura: p.numeroEmbarqueFactura || '',
         mundo: p.mundo || '',
         departamento: p.departamento || '',
@@ -300,8 +300,8 @@ export function NuevoReclamoForm({
         ...delExcel,
         // La división del encabezado CEDI manda; sin ella se conserva la elegida.
         division: divisionExcel || c.division,
-        // Sin fecha en el Excel (la plantilla CEDI suele venir sin ella): hoy.
-        fechaRegistro: delExcel.fechaRegistro || hoyIso(),
+        // Sin fecha en el Excel (la plantilla CEDI suele venir sin ella) se conserva la escrita a mano.
+        fechaLlegadaMercancia: delExcel.fechaLlegadaMercancia || c.fechaLlegadaMercancia,
         compradora: c.compradora || p.compradora || '',
         comentario: c.comentario || p.comentario || '',
       }));
@@ -792,15 +792,21 @@ export function NuevoReclamoForm({
                   {campoMarca}
                 </>
               )}
-              <Field label="Fecha de registro" tag={tag('fechaRegistro')} resaltar={autos.has('fechaRegistro')}>
-                <CampoFecha required value={campos.fechaRegistro} onChange={(v) => set('fechaRegistro', v)} />
-              </Field>
-              <Field label="Llegada de la mercancía">
-                <CampoFecha required max={hoyIso()} value={campos.fechaLlegadaMercancia} onChange={(v) => set('fechaLlegadaMercancia', v)} />
+              <Field label="Fecha de registro">
+                <Input readOnly value={formatFechaCorta(campos.fechaRegistro)} title="Es el día en que se crea el reclamo." />
               </Field>
               {campoCompradora}
               {campoMundo}
               {campoDepartamento}
+              {/* Debajo de Departamento (columna derecha), para que no quede pegada a las demás. */}
+              <Field
+                label="Llegada de la mercancía"
+                tag={tag('fechaLlegadaMercancia')}
+                resaltar={autos.has('fechaLlegadaMercancia')}
+                className="sm:col-start-2"
+              >
+                <CampoFecha required max={hoyIso()} value={campos.fechaLlegadaMercancia} onChange={(v) => set('fechaLlegadaMercancia', v)} />
+              </Field>
             </div>
           </SeccionForm>
         )}
