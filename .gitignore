@@ -1,6 +1,7 @@
 node_modules/
 .env
 .env.prod
+.env.antes-*
 uploads/*
 !uploads/.gitkeep
 portal/node_modules/
