@@ -55,7 +55,7 @@ export function plantillaBienvenida({ nombre, username, roles = [], permisos = n
     asunto,
     modulo: 'PORTAL',
     titulo: 'Te damos la bienvenida a Felix Fix',
-    subtitulo: 'Productos Dañados · Reclamos · Contabilidad',
+    subtitulo: 'Productos Dañados · Reclamos',
     vistaPrevia: 'Ya tienes acceso al portal Felix Fix. Te contamos qué puedes hacer y cómo entrar.',
     bloques: [
       parrafo(`${esc(saludo(nombre))}<br />Ya tienes acceso al portal. ${esc(frase)}`, { arriba: 22 }),
