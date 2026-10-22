@@ -8,6 +8,7 @@ import { UserMenu } from './UserMenu';
 import { VistaPor } from './VistaPor';
 import { nombreRol } from '../../lib/roles';
 import { useIndicador } from '../../lib/useIndicador';
+import { useAmbiente } from '../../lib/useAmbiente';
 
 const navClass = ({ isActive }: { isActive: boolean }) =>
   cn(
@@ -55,6 +56,9 @@ function useDarkMode() {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { dark, toggle } = useDarkMode();
   const { puede, user, cambiarVista } = useAuth();
+  const ambiente = useAmbiente();
+  // Todo lo que no sea Prod (QA) lleva el encabezado en rojo, para no confundir los ambientes.
+  const esPrueba = !!ambiente && ambiente.toLowerCase() !== 'prod';
   const enlaces = (
     <>
       {puede(...ACCESO_PRODUCTOS, ...ACCESO_RECLAMOS, ...ACCESO_CONTABILIDAD) && (
@@ -90,14 +94,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-dvh overflow-x-clip">
-      <header className="sticky top-0 z-20 border-b border-brand-500/10 bg-[var(--page-bg)]/80 pt-[env(safe-area-inset-top)] backdrop-blur-md">
+      <header
+        className={cn(
+          'sticky top-0 z-20 border-b pt-[env(safe-area-inset-top)] backdrop-blur-md',
+          esPrueba
+            ? 'border-danger/40 bg-[color-mix(in_srgb,var(--color-danger)_18%,var(--page-bg))]/90'
+            : 'border-brand-500/10 bg-[var(--page-bg)]/80'
+        )}
+      >
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
           <div className="flex items-center gap-2 font-extrabold text-lg">
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand-500 text-white" aria-label="Felix Fix">
+            <span
+              className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-xl text-white', esPrueba ? 'bg-danger' : 'bg-brand-500')}
+              aria-label="Felix Fix"
+            >
               <PackageX size={20} />
             </span>
             {/* En celulares angostos solo el logo: con "Vista por" y el nombre no cabe en una línea. */}
             <span className="numero-caso hidden whitespace-nowrap text-xl sm:inline">Felix Fix</span>
+            {esPrueba && (
+              <span
+                title="Ambiente de pruebas: los datos no son reales"
+                className="shrink-0 rounded-full bg-danger px-2 py-0.5 text-xs font-bold tracking-wide text-white"
+              >
+                {ambiente}
+              </span>
+            )}
             <MenuDeslizante className="ml-4 hidden items-center gap-1 font-normal md:flex">{enlaces}</MenuDeslizante>
           </div>
           <div className="flex items-center gap-3">
