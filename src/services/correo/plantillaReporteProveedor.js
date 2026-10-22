@@ -38,7 +38,7 @@ export function plantillaReporteProveedor(r, { remitente, conFoto, adjuntos = []
   const filas = datos(r);
   const contacto = remitente?.correo ? `${remitente.nombre || remitente.correo} (${remitente.correo})` : remitente?.nombre || 'la compradora';
 
-  // Las dos respuestas posibles, como etiquetas índigo (colores del portal).
+  // Las dos respuestas posibles, como etiquetas azules (colores del portal).
   const opcion = (etiqueta, texto) =>
     `<tr><td style="padding:5px 0;font-family:${FUENTE};font-size:14px;line-height:1.5;color:${COLOR.texto};"><span style="display:inline-block;background:${COLOR.marca};color:#ffffff;font-weight:700;border-radius:999px;padding:2px 10px;font-size:12px;">${esc(etiqueta)}</span>&nbsp; ${esc(texto)}</td></tr>`;
 

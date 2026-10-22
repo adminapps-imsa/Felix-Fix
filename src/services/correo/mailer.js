@@ -6,6 +6,7 @@ import nodemailer from 'nodemailer';
 import { env, isCorreoConfigured } from '../../config/env.js';
 import { badGateway, badRequest, serviceUnavailable } from '../../utils/httpError.js';
 import { logger } from '../../utils/logger.js';
+import { LOGO_CID, logoAdjunto } from './diseno.js';
 
 let transporte = null;
 
@@ -55,7 +56,8 @@ export const correoDesactivado = () => env.correo.desactivado;
 /**
  * Entrega el correo al webhook de n8n como multipart/form-data:
  *   campos  para, cc (separados por coma), responderA, asunto, html, texto,
- *           deNombre, adjuntos (nombres de los campos de archivo, separados por coma)
+ *           deNombre, adjuntos (nombres de los campos de archivo, separados por coma),
+ *           enLinea (campo=cid de los adjuntos incrustados en el html, separados por coma)
  *   archivos adjunto0, adjunto1, … (con su nombre original)
  * n8n debe responder 2xx cuando Outlook ya lo envió (Webhook con
  * "Respond: When last node finishes" o un nodo "Respond to Webhook").
@@ -71,13 +73,16 @@ async function enviarPorN8n({ para, cc, responderA, asunto, html, texto, adjunto
   form.append('texto', texto || '');
   form.append('deNombre', c.fromNombre);
   const campos = [];
+  const enLinea = [];
   for (const [i, a] of adjuntos.entries()) {
     const contenido = a.content ?? (await fs.readFile(a.path));
     const campo = `adjunto${i}`;
     form.append(campo, new Blob([contenido], { type: a.contentType || 'application/octet-stream' }), a.filename);
     campos.push(campo);
+    if (a.cid) enLinea.push(`${campo}=${a.cid}`);
   }
   form.append('adjuntos', campos.join(','));
+  form.append('enLinea', enLinea.join(','));
 
   try {
     const res = await fetch(c.n8nUrl, {
@@ -107,6 +112,8 @@ export function resumenDestinatarios(direcciones) {
 /** Envía y devuelve el messageId. Errores de SMTP o n8n -> 502 con un mensaje genérico (el detalle va al log). */
 export async function enviarCorreo({ para, cc = [], responderA, asunto, html, texto, adjuntos = [] }) {
   validarDestinatarios([...para, ...cc]);
+  // El logo del encabezado va incrustado (cid) en todos los correos del diseño común.
+  if (html?.includes(`cid:${LOGO_CID}`)) adjuntos = [...adjuntos, logoAdjunto()];
   // Antes de tocar n8n o SMTP: con el interruptor de pruebas no sale nada.
   if (correoDesactivado()) {
     logger.warn({ ...resumenDestinatarios([...para, ...cc]), adjuntos: adjuntos.length }, 'Correo NO enviado: MAIL_DESACTIVADO=true');

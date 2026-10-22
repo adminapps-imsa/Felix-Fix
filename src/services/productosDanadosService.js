@@ -9,6 +9,7 @@ import { nombresDeUsuarios, datosDeUsuario } from './acceso/keycloakAdmin.js';
 import { plantillaReporteProveedor } from './correo/plantillaReporteProveedor.js';
 import { enviarCorreo, correoConfigurado, correoDesactivado, validarDestinatarios, MSG_DESACTIVADO } from './correo/mailer.js';
 import { avisarEtapa } from './correo/avisosProductosDanados.js';
+import { conLogoEnLinea } from './correo/diseno.js';
 import { env } from '../config/env.js';
 import * as historialRepo from '../repositories/historialRepository.js';
 import { saveEvidence, getEvidenceStream } from './evidenceStorage/index.js';
@@ -629,7 +630,7 @@ export async function vistaPreviaCorreo(reporteId, usuario) {
   }
   return {
     asunto,
-    html,
+    html: conLogoEnLinea(html),
     para: correos,
     cc: remitente.correo ? [remitente.correo] : [],
     responderA: remitente.correo,

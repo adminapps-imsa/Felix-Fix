@@ -1,12 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { esc, saludo, conDato } from '../../src/services/correo/diseno.js';
+import { esc, saludo, conDato, LOGO_CID } from '../../src/services/correo/diseno.js';
 import { plantillaAvisoReclamo } from '../../src/services/correo/avisosReclamos.js';
 import { plantillaReporteProveedor, numeroReporte } from '../../src/services/correo/plantillaReporteProveedor.js';
 
 // Lo que escribe un usuario (comentario, proveedor, nombre…) nunca debe llegar
 // como HTML al correo.
 const MALICIOSO = '<img src=x onerror="alert(1)">';
+
+// El único <img> permitido es el logo del encabezado (cid fijo); fuera de él no debe quedar ninguno.
+const sinLogo = (html) => html.replaceAll(`<img src="cid:${LOGO_CID}"`, '');
 
 test('esc escapa los caracteres de HTML', () => {
   assert.equal(esc(`<a href="x">'&'</a>`), '&lt;a href=&quot;x&quot;&gt;&#39;&amp;&#39;&lt;/a&gt;');
@@ -47,7 +50,7 @@ for (const evento of ['nuevo', 'devuelto', 'reenviado', 'cerrado']) {
         fecha: new Date('2026-10-21T15:00:00Z'),
         para,
       });
-      assert.ok(!html.includes('<img'), `${evento}/${para}: HTML sin escapar`);
+      assert.ok(!sinLogo(html).includes('<img'), `${evento}/${para}: HTML sin escapar`);
       assert.ok(html.includes('&lt;img'), `${evento}/${para}: no aparece el texto escapado`);
       assert.ok(asunto.includes('RC-000123'));
       // El texto plano lleva el contenido tal cual (no es HTML).
@@ -77,5 +80,5 @@ test('correo al proveedor: datos del reporte escapados y número con ceros', () 
   };
   const { asunto, html } = plantillaReporteProveedor(r, { remitente: { nombre: MALICIOSO, correo: 'x@y.com' }, conFoto: false, adjuntos: [MALICIOSO] });
   assert.ok(asunto.startsWith('Reporte de producto dañado PD-000042'));
-  assert.ok(!html.includes('<img'), 'HTML sin escapar');
+  assert.ok(!sinLogo(html).includes('<img'), 'HTML sin escapar');
 });

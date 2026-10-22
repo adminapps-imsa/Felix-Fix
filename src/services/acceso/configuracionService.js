@@ -7,6 +7,7 @@ import { CORREOS } from '../correo/catalogoCorreos.js';
 import { plantillaBienvenida } from '../correo/plantillaBienvenida.js';
 import { enviarCorreo, correoConfigurado, resumenDestinatarios } from '../correo/mailer.js';
 import { deUsuario } from '../correo/destinatarios.js';
+import { conLogoEnLinea } from '../correo/diseno.js';
 import { logger } from '../../utils/logger.js';
 
 const quien = (usuario) => usuario.username || usuario.sub;
@@ -120,7 +121,8 @@ function correoPorId(id) {
 /** Vista previa con datos de ejemplo: { asunto, html, texto }. */
 export function vistaCorreo(id) {
   const c = correoPorId(id);
-  return { id: c.id, ...c.generar() };
+  const correo = c.generar();
+  return { id: c.id, ...correo, html: conLogoEnLinea(correo.html) };
 }
 
 const exigirCorreo = () => {

@@ -1,7 +1,7 @@
 // Diseño común de todos los correos del portal (avisos internos, correo al
-// proveedor y envío a contabilidad): fondo blanco, franja índigo de la marca
-// arriba, tarjeta blanca, botón «a prueba de balas» y pie. Solo colores del
-// portal: índigo, blanco y grises.
+// proveedor y envío a contabilidad): fondo blanco, encabezado azul marino de la
+// marca con el logo, tarjeta blanca, botón «a prueba de balas» y pie. Solo
+// colores del portal: azul marino, blanco y grises.
 //
 // Pensado para clientes de correo (Outlook incluido): tablas, estilos en
 // línea, ancho máximo 600 px, y «solo modo claro» para que los clientes que lo
@@ -9,16 +9,28 @@
 //
 // Cada plantilla arma su contenido con los bloques de abajo (cada bloque es
 // una fila <tr> de la tarjeta) y lo envuelve con documento().
+import { readFileSync } from 'node:fs';
 
 export const COLOR = {
-  marca: '#4f46e5',
-  marcaSuave: '#eef2ff',
-  marcaClara: '#c7d2fe',
-  texto: '#1e1b4b',
+  marca: '#030C44',
+  // Final del degradado del encabezado (Outlook de escritorio solo pinta `marca`).
+  marcaDegradado: '#0B1D6E',
+  marcaSuave: '#e8eaf4',
+  marcaClara: '#b6bcdd',
+  texto: '#111634',
   suave: '#64748b',
   borde: '#e2e8f0',
   celda: '#f8fafc',
 };
+
+// Logo del portal (el mismo del navegador, en PNG: Outlook no muestra SVG). Va
+// incrustado en el correo con este cid; mailer.js lo adjunta solo si el html lo usa.
+export const LOGO_CID = 'felix-logo';
+const LOGO_PNG = readFileSync(new URL('./felix-fix-logo.png', import.meta.url));
+export const logoAdjunto = () => ({ filename: 'felix-fix.png', content: LOGO_PNG, contentType: 'image/png', cid: LOGO_CID });
+
+/** Para mostrar el correo en el portal: el logo como data: en vez de cid: (la CSP lo permite). */
+export const conLogoEnLinea = (html) => html.replaceAll(`cid:${LOGO_CID}`, `data:image/png;base64,${LOGO_PNG.toString('base64')}`);
 export const FUENTE = "'Segoe UI', Helvetica, Arial, sans-serif";
 
 export const esc = (v) =>
@@ -50,7 +62,7 @@ export const parrafo = (html, opciones) =>
 export const tituloSeccion = (texto) =>
   fila(`<div style="font-family:${FUENTE};font-size:13px;font-weight:700;color:${COLOR.texto};">${esc(texto)}</div>`, { arriba: 26 });
 
-/** Recuadro índigo claro con línea a la izquierda: un comentario o un dato a destacar. */
+/** Recuadro azul claro con línea a la izquierda: un comentario o un dato a destacar. */
 export function recuadro({ etiqueta, texto, pie, comillas = false }) {
   if (!String(texto ?? '').trim()) return '';
   const cuerpo = comillas ? `«${esc(String(texto).trim())}»` : esc(String(texto).trim());
@@ -85,7 +97,7 @@ export function pasos(lista, titulo = 'Qué tienes que hacer') {
   );
 }
 
-/** Lista con viñetas índigo («Lo que puedes hacer»). */
+/** Lista con viñetas azules («Lo que puedes hacer»). */
 export function lista(items, titulo) {
   if (!items?.length) return '';
   const filas = items
@@ -180,11 +192,22 @@ export function documento({ asunto, modulo, titulo, subtitulo, vistaPrevia, bloq
       <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;">
         <tr><td>
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#ffffff" style="background:#ffffff;border:1px solid ${COLOR.borde};border-radius:16px;overflow:hidden;">
-            <!-- Franja de la marca. -->
-            <tr><td class="pad" bgcolor="${COLOR.marca}" style="background:${COLOR.marca};padding:18px 32px;">
-              <div style="font-family:${FUENTE};font-size:12px;color:${COLOR.marcaClara};font-weight:600;letter-spacing:.04em;">FELIX FIX · ${esc(modulo)}</div>
-              <div class="titulo" style="font-family:${FUENTE};font-size:22px;line-height:1.3;font-weight:800;color:#ffffff;margin-top:4px;">${esc(titulo)}</div>
-              ${subtitulo ? `<div style="font-family:${FUENTE};font-size:14px;font-weight:600;color:${COLOR.marcaClara};margin-top:4px;">${esc(subtitulo)}</div>` : ''}
+            <!-- Encabezado de la marca: logo, nombre, título y subtítulo. -->
+            <tr><td class="pad" bgcolor="${COLOR.marca}" style="background-color:${COLOR.marca};background:linear-gradient(135deg,${COLOR.marcaDegradado} 0%,${COLOR.marca} 100%);padding:32px;text-align:center;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto 18px auto;">
+                <tr>
+                  <td style="padding-right:12px;vertical-align:middle;">
+                    <img src="cid:${LOGO_CID}" width="44" height="44" alt="" style="display:block;border:0;border-radius:10px;" />
+                  </td>
+                  <td style="vertical-align:middle;text-align:left;">
+                    <p style="margin:0;font-family:${FUENTE};font-size:20px;font-weight:700;color:#ffffff;line-height:1.2;">Felix Fix</p>
+                    <p style="margin:2px 0 0 0;font-family:${FUENTE};font-size:11px;color:${COLOR.marcaClara};letter-spacing:2px;text-transform:uppercase;">Importadora Maduro</p>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:0 0 6px 0;font-family:${FUENTE};font-size:11px;font-weight:600;color:${COLOR.marcaClara};letter-spacing:1.5px;">${esc(modulo)}</p>
+              <h1 class="titulo" style="margin:0;font-family:${FUENTE};font-size:22px;line-height:1.3;font-weight:700;color:#ffffff;">${esc(titulo)}</h1>
+              ${subtitulo ? `<p style="margin:8px 0 0 0;font-family:${FUENTE};font-size:13px;color:${COLOR.marcaClara};">${esc(subtitulo)}</p>` : ''}
             </td></tr>${bloques.filter(Boolean).join('')}
             <tr><td style="padding:0 0 28px;"></td></tr>
           </table>
