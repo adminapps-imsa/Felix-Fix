@@ -153,7 +153,7 @@ export function plantillaReclamoContabilidad(r, lineas, { remitente, archivos = 
 
   const html = documento({
     asunto,
-    modulo: 'RECLAMOS · CONTABILIDAD',
+    modulo: 'RECLAMOS',
     titulo: `Reclamo ${r.Numero} para contabilidad`,
     subtitulo: [r.Proveedor, STATUS_LABEL[r.Status] || r.Status].filter(Boolean).join(' · '),
     vistaPrevia: `${de} te envía el reclamo ${r.Numero} ya revisado, con sus productos y archivos.`,
