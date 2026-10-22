@@ -53,42 +53,41 @@ export const MSG_DESACTIVADO = 'El envío de correos está apagado en este servi
 /** true si MAIL_DESACTIVADO=true: ningún correo sale del portal. */
 export const correoDesactivado = () => env.correo.desactivado;
 
+const escaparHtml = (s) => String(s).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]);
+
 /**
- * Entrega el correo al webhook de n8n como multipart/form-data:
- *   campos  para, cc (separados por coma), responderA, asunto, html, texto,
- *           deNombre, adjuntos (nombres de los campos de archivo, separados por coma),
- *           enLinea (campo=cid de los adjuntos incrustados en el html, separados por coma)
- *   archivos adjunto0, adjunto1, … (con su nombre original)
- * n8n debe responder 2xx cuando Outlook ya lo envió (Webhook con
- * "Respond: When last node finishes" o un nodo "Respond to Webhook").
+ * Entrega el correo al webhook de n8n («Respuesta Felix Fix») como JSON:
+ *   email_to, email_cc (separados por coma), email_reply_to, email_subject, email_html,
+ *   attachments [{ filename, contentType, data (base64), isInline, contentId }]
+ * Los incrustados en el html (logo, foto) van con isInline y su cid como contentId.
+ * Sin email_html n8n descarta el correo, así que el texto plano se envuelve en html.
  */
 async function enviarPorN8n({ para, cc, responderA, asunto, html, texto, adjuntos }) {
   const c = env.correo;
-  const form = new FormData();
-  form.append('para', para.join(','));
-  form.append('cc', cc.join(','));
-  form.append('responderA', responderA || '');
-  form.append('asunto', asunto);
-  form.append('html', html || '');
-  form.append('texto', texto || '');
-  form.append('deNombre', c.fromNombre);
-  const campos = [];
-  const enLinea = [];
-  for (const [i, a] of adjuntos.entries()) {
+  const attachments = [];
+  for (const a of adjuntos) {
     const contenido = a.content ?? (await fs.readFile(a.path));
-    const campo = `adjunto${i}`;
-    form.append(campo, new Blob([contenido], { type: a.contentType || 'application/octet-stream' }), a.filename);
-    campos.push(campo);
-    if (a.cid) enLinea.push(`${campo}=${a.cid}`);
+    attachments.push({
+      filename: a.filename,
+      contentType: a.contentType || 'application/octet-stream',
+      data: Buffer.from(contenido).toString('base64'),
+      ...(a.cid ? { isInline: true, contentId: a.cid } : {}),
+    });
   }
-  form.append('adjuntos', campos.join(','));
-  form.append('enLinea', enLinea.join(','));
+  const cuerpoCorreo = {
+    email_to: para.join(','),
+    email_cc: cc.join(','),
+    email_reply_to: responderA || '',
+    email_subject: asunto,
+    email_html: html || `<pre style="font-family:inherit;white-space:pre-wrap">${escaparHtml(texto || '')}</pre>`,
+    attachments,
+  };
 
   try {
     const res = await fetch(c.n8nUrl, {
       method: 'POST',
-      headers: c.n8nToken ? { [c.n8nHeader]: c.n8nToken } : undefined,
-      body: form,
+      headers: { 'Content-Type': 'application/json', ...(c.n8nToken ? { [c.n8nHeader]: c.n8nToken } : {}) },
+      body: JSON.stringify(cuerpoCorreo),
       signal: AbortSignal.timeout(c.n8nTimeoutMs),
     });
     const cuerpo = await res.text();
