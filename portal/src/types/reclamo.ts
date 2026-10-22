@@ -138,7 +138,8 @@ export interface PreviewExcel {
   sucursal: string | null;
   /** Encabezado DIVISIÓN de la plantilla CEDI. */
   division: string | null;
-  fechaRegistro: string | null;
+  /** Columna/encabezado FECHA del Excel: la llegada de la mercancía. */
+  fechaLlegadaMercancia: string | null;
   numeroEmbarqueFactura: string | null;
   /** Columna DOCUMENTO del Excel, sin repetidos. */
   documentosSap: string[];
