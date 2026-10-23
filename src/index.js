@@ -2,11 +2,16 @@ import { createApp } from './app.js';
 import { env } from './config/env.js';
 import { closePool } from './config/db.js';
 import { logger } from './utils/logger.js';
+import { prepararEvidencia } from './services/evidenceStorage/index.js';
+import { mapaRoles } from './services/acceso/keycloakAdmin.js';
 
 const app = createApp();
 
 const server = app.listen(env.port, () => {
   logger.info(`Felix Fix API escuchando en el puerto ${env.port} (${env.nodeEnv})`);
+  prepararEvidencia();
+  // Los roles de Keycloak listos antes de la primera pantalla (si falla, se arma al primer pedido).
+  mapaRoles().catch((err) => logger.warn({ err: err.message }, 'No se pudieron cargar los roles de Keycloak al arrancar'));
 });
 
 // Una promesa sin catch no debe pasar en silencio: queda en el log para corregirla.

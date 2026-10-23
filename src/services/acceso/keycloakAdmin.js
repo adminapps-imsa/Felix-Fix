@@ -128,33 +128,48 @@ export async function rolesCliente() {
 // Mapa usuario -> roles del cliente, cacheado.
 //
 // Se arma pidiendo, por cada rol, la lista de sus usuarios (pocos pedidos,
-// sin importar cuántos usuarios haya). Lo usa cada petición autenticada para
-// saber los roles ACTUALES del usuario, así un cambio de rol aplica en menos
-// de un minuto sin volver a iniciar sesión.
+// sin importar cuántos usuarios haya; todos los roles a la vez). Lo usa cada
+// petición autenticada para saber los roles ACTUALES del usuario, así un
+// cambio de rol aplica en un par de minutos sin volver a iniciar sesión.
+//
+// Vencido el minuto, se sigue usando el mapa anterior mientras se arma el
+// nuevo en segundo plano: ninguna petición espera a Keycloak salvo la primera
+// (o tras invalidarMapa). Armarlo tarda segundos y antes congelaba la pantalla
+// que llegaba en ese momento (/api/auth/me en ~5 s cada 1-2 min).
 // ------------------------------------------------------------------
 
 const MAPA_TTL_MS = 60 * 1000;
 let mapa = null; // { at, porUsuario: Map<userId, Set<rol>>, deshabilitados: Set<userId>, roles }
 let armando = null;
 
+/** Usuarios de un rol del cliente (de 500 en 500). */
+async function usuariosDelRol(cid, rol) {
+  const todos = [];
+  for (let first = 0; ; first += 500) {
+    const usuarios = await kc(`/clients/${cid}/roles/${encodeURIComponent(rol)}/users?first=${first}&max=500&briefRepresentation=true`);
+    todos.push(...usuarios);
+    if (usuarios.length < 500) return todos;
+  }
+}
+
 async function armarMapa() {
+  const inicio = Date.now();
   const cid = await uuidCliente();
   const roles = await rolesCliente();
   const porUsuario = new Map();
   // Usuarios con enabled=false en Keycloak: siguen en porUsuario (Configuración
   // muestra sus roles) pero se tratan como sin roles (sin permisos ni avisos).
   const deshabilitados = new Set();
-  for (const r of roles) {
-    for (let first = 0; ; first += 500) {
-      const usuarios = await kc(`/clients/${cid}/roles/${encodeURIComponent(r.name)}/users?first=${first}&max=500&briefRepresentation=true`);
-      for (const u of usuarios) {
-        if (!porUsuario.has(u.id)) porUsuario.set(u.id, new Set());
-        porUsuario.get(u.id).add(r.name);
-        if (u.enabled === false) deshabilitados.add(u.id);
-      }
-      if (usuarios.length < 500) break;
+  const usuariosPorRol = await Promise.all(roles.map((r) => usuariosDelRol(cid, r.name)));
+  roles.forEach((r, i) => {
+    for (const u of usuariosPorRol[i]) {
+      if (!porUsuario.has(u.id)) porUsuario.set(u.id, new Set());
+      porUsuario.get(u.id).add(r.name);
+      if (u.enabled === false) deshabilitados.add(u.id);
     }
-  }
+  });
+  const ms = Date.now() - inicio;
+  if (ms > 2000) logger.info({ ms, roles: roles.length }, 'Roles de Keycloak: el mapa tardó en armarse');
   return { at: Date.now(), porUsuario, deshabilitados, roles };
 }
 
@@ -173,6 +188,11 @@ export async function mapaRoles() {
       .finally(() => {
         armando = null;
       });
+  }
+  // Vencido: el anterior sirve mientras se arma el nuevo (sin esperar a Keycloak).
+  if (mapa) {
+    armando.catch(() => {});
+    return mapa;
   }
   return armando;
 }

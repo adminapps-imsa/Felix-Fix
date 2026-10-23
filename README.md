@@ -68,9 +68,12 @@ contra la base de datos del portal (`node sql/migrate.js`).
    (ver `src/services/productosDanadosService.js`).
 3. **Evidencia (fotos)**: implementada con disco local por defecto
    (`EVIDENCE_STORAGE_PROVIDER=local`), detrás de una abstracción en
-   `src/services/evidenceStorage/`. La integración con Paperless-ngx queda
-   en `paperlessStorage.js` como stub sin terminar — falta que confirmes
-   URL/API/token de tu instancia y cómo se debe recuperar el archivo después.
+   `src/services/evidenceStorage/`. Con `EVIDENCE_STORAGE_PROVIDER=paperless`
+   las fotos nuevas van a Paperless-ngx (`PAPERLESS_URL`, `PAPERLESS_TOKEN`,
+   ver `.env.example`); si Paperless falla, la foto queda en disco. Cada
+   reporte guarda dónde está su foto, así que las de disco se siguen viendo.
+   Los PDF (reclamos y adjuntos de Productos Dañados) se quedan en disco y
+   además se copian a Paperless en segundo plano (`evidenceStorage/copiasPdf.js`).
 4. **Keycloak**: variables de entorno vacías (`.env.example` y
    `portal/.env.example`); roles esperados nombrados
    `productos-danados:crear/aprobar/procesar` — confirmar cómo están

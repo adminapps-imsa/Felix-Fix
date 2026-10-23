@@ -2,6 +2,7 @@
 import * as repo from '../../repositories/reclamosRepository.js';
 import { parseJsonArray } from '../../repositories/reclamosRepository.js';
 import { borrarArchivos } from './excelImages.js';
+import { borrarCopiasPdf } from '../evidenceStorage/copiasPdf.js';
 import * as dominio from '../../domain/reclamo.js';
 import { notFound } from '../../utils/httpError.js';
 import { logger } from '../../utils/logger.js';
@@ -22,6 +23,7 @@ export async function eliminar(token, usuario) {
     ...parseJsonArray(borrado.AdjuntosExtra).map((a) => a.filename),
     borrado.RetiroProveedorFoto,
   ]);
+  borrarCopiasPdf(parseJsonArray(borrado.AdjuntosExtra).filter((a) => a.tipo === 'pdf').map((a) => a.filename));
   logger.info(
     { reclamo: numeroReclamo(borrado.ReclamoId), usuario: nombreUsuario(usuario), status: borrado.Status, enContabilidad: Boolean(borrado.EnviadoContabilidadAt), forzado },
     'Reclamo eliminado'
