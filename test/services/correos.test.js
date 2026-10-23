@@ -85,7 +85,7 @@ test('correo al proveedor: datos del reporte escapados y número con ceros', () 
 
 test('bienvenida: el aviso de inicio del portal solo sale hasta el lunes 26 de octubre de 2026 (hora de Panamá)', async () => {
   const { plantillaBienvenida } = await import('../../src/services/correo/plantillaBienvenida.js');
-  const aviso = 'El portal se empieza a usar el lunes 26 de octubre de 2026.';
+  const aviso = 'A partir del lunes 26 de octubre, podrá utilizar el portal Felix Fix para registrar reclamos y reportar productos dañados.';
   const con = (iso) => plantillaBienvenida({ nombre: 'Ana Pérez', username: 'aperez', roles: ['Compradora'], hoy: new Date(iso) });
   for (const iso of ['2026-10-23T15:00:00Z', '2026-10-27T04:59:00Z']) {
     assert.ok(con(iso).html.includes(aviso), iso);

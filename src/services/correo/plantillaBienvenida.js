@@ -6,7 +6,7 @@ import { documento, parrafo, recuadro, boton, datos, saludo, esc, datosTexto } f
 // Aviso del arranque del portal: solo sale en los correos enviados hasta ese
 // día (hora de Panamá). Desde el día siguiente desaparece solo.
 const INICIO_PORTAL = '2026-10-26';
-const AVISO_INICIO = 'El portal se empieza a usar el lunes 26 de octubre de 2026.';
+const AVISO_INICIO = 'A partir del lunes 26 de octubre, podrá utilizar el portal Felix Fix para registrar reclamos y reportar productos dañados.';
 const diaPanama = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Panama' }).format(d);
 export const conAvisoInicio = (hoy = new Date()) => diaPanama(hoy) <= INICIO_PORTAL;
 
