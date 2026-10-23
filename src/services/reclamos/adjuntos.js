@@ -12,6 +12,7 @@ import { cruzar } from '../contabilidad/validarDocumento.js';
 import { badRequest, conflict, forbidden, notFound } from '../../utils/httpError.js';
 import { logger } from '../../utils/logger.js';
 import { reclamoArchivoPath } from '../../config/almacenamiento.js';
+import { copiarPdf, borrarCopiasPdf, TIPO_RECLAMO } from '../evidenceStorage/copiasPdf.js';
 import { parseJsonArray } from '../../repositories/reclamosRepository.js';
 import {
   validarToken,
@@ -176,7 +177,11 @@ export async function agregarAdjunto(token, multerFile, usuario) {
     });
     if (!res) throw notFound('Reclamo no encontrado.');
     creados.length = 0;
-    return detalle(token);
+    const dto = await detalle(token);
+    if (adj.tipo === 'pdf') {
+      copiarPdf(reclamoArchivoPath(adj.filename), { filename: adj.filename, titulo: `${dto.Numero} — ${adj.originalname}`, tipoDocumento: TIPO_RECLAMO });
+    }
+    return dto;
   } catch (err) {
     await borrarArchivos(creados);
     throw err;
@@ -212,6 +217,7 @@ export async function eliminarAdjunto(token, idx, usuario, f) {
   if (!aBorrar.length) throw notFound('Adjunto no encontrado.');
   // Solo después del commit: si la BD falla, los archivos siguen referenciados.
   await borrarArchivos(aBorrar);
+  if (borrado.adj.tipo === 'pdf') borrarCopiasPdf([borrado.adj.filename]);
   const dto = await detalle(token);
   logger.info(
     { reclamo: dto.Numero, posicion: borrado.posicion, archivo: borrado.adj.filename, nombre: borrado.adj.originalname, usuario: nombreUsuario(usuario) },

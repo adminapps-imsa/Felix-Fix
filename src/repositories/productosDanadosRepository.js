@@ -594,3 +594,23 @@ export async function revertirReservaEnvioProveedor(reporteId, antes) {
 
 /** Evento de historial del envío ya reservado y enviado. */
 export const registrarEventoEnvioProveedor = (reporteId, evento) => registrarEvento({ reporteId, ...evento });
+
+/**
+ * La foto pasó de disco a Paperless: cambia dónde está, solo si el reporte
+ * sigue con esa misma foto en disco (no la cambiaron ni lo borraron mientras
+ * se subía). Devuelve true si la cambió.
+ */
+export async function cambiarEvidencia(reporteId, keyEnDisco, nueva) {
+  const pool = await getPool();
+  const result = await pool
+    .request()
+    .input('reporteId', sql.BigInt, reporteId)
+    .input('antes', sql.NVarChar(500), keyEnDisco)
+    .input('proveedor', sql.VarChar(20), nueva.provider)
+    .input('key', sql.NVarChar(500), nueva.key).query(`
+      UPDATE ${S}.ReportesProductoDanado
+      SET EvidenciaProveedor = @proveedor, EvidenciaKey = @key
+      WHERE ReporteId = @reporteId AND EvidenciaProveedor = 'local' AND EvidenciaKey = @antes
+    `);
+  return result.rowsAffected[0] > 0;
+}

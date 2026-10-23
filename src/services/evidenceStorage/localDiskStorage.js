@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import fsp from 'node:fs/promises';
 import { evidenciaAbsolutePath } from '../../config/almacenamiento.js';
 
 /**
@@ -14,4 +15,10 @@ export async function getEvidenceStream(key) {
   const filePath = evidenciaAbsolutePath(key);
   if (!fs.existsSync(filePath)) return null;
   return fs.createReadStream(filePath);
+}
+
+export async function deleteEvidence(key) {
+  await fsp.unlink(evidenciaAbsolutePath(key)).catch((err) => {
+    if (err.code !== 'ENOENT') throw err;
+  });
 }

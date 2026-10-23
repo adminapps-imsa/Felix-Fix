@@ -4,7 +4,7 @@ import { detectarTipoArchivo } from '../utils/tipoArchivo.js';
 import * as repo from '../repositories/productosDanadosRepository.js';
 import { parseJsonArray } from '../repositories/productosDanadosRepository.js';
 import { listarCatalogo } from '../repositories/reclamosRepository.js';
-import { reporteAdjuntoPath, evidenciaAbsolutePath } from '../config/almacenamiento.js';
+import { reporteAdjuntoPath } from '../config/almacenamiento.js';
 import { nombresDeUsuarios, datosDeUsuario } from './acceso/keycloakAdmin.js';
 import { plantillaReporteProveedor } from './correo/plantillaReporteProveedor.js';
 import { enviarCorreo, correoConfigurado, correoDesactivado, validarDestinatarios, MSG_DESACTIVADO } from './correo/mailer.js';
@@ -12,7 +12,9 @@ import { avisarEtapa } from './correo/avisosProductosDanados.js';
 import { conLogoEnLinea } from './correo/diseno.js';
 import { env } from '../config/env.js';
 import * as historialRepo from '../repositories/historialRepository.js';
-import { saveEvidence, getEvidenceStream } from './evidenceStorage/index.js';
+import { saveEvidence, getEvidenceStream, deleteEvidence, moverAPaperless } from './evidenceStorage/index.js';
+import { numeroReporte } from './correo/plantillaReporteProveedor.js';
+import { copiarPdf, borrarCopiasPdf, TIPO_PRODUCTO_DANADO } from './evidenceStorage/copiasPdf.js';
 import { darDeBajaInventario, SapBajaError, SapNoImplementadoError } from './sapBajaService.js';
 import { documentoMaterialSap } from './sapProductosService.js';
 import { parsePagination, buildPaginationMeta } from '../utils/pagination.js';
@@ -173,6 +175,7 @@ export async function crearReporte(data, multerFile, usuario) {
   );
   // Ya referenciada en la BD: errorHandler no debe borrarla si algo falla después.
   marcarGuardado(multerFile);
+  moverAPaperless(evidencia.key, `${numeroReporte(reporteId)} — ${data.nombreProducto}`, (nueva) => repo.cambiarEvidencia(reporteId, evidencia.key, nueva));
   const detalle = await obtenerDetalle(reporteId);
   avisarEtapa('nuevo', detalle);
   return detalle;
@@ -259,10 +262,9 @@ export async function corregirReporte(reporteId, data, multerFile, usuario) {
 
   // La foto anterior ya no la usa nadie (solo después del commit).
   const vieja = res.fila;
-  if (evidencia && vieja.EvidenciaKey && vieja.EvidenciaProveedor === 'local') {
-    await fs.unlink(evidenciaAbsolutePath(vieja.EvidenciaKey)).catch((err) => {
-      if (err.code !== 'ENOENT') logger.error({ err, reporteId }, 'No se pudo borrar la foto anterior de un reporte corregido');
-    });
+  if (evidencia) {
+    await deleteEvidence(vieja.EvidenciaProveedor, vieja.EvidenciaKey);
+    moverAPaperless(evidencia.key, `${numeroReporte(reporteId)} — ${datos.nombreProducto}`, (nueva) => repo.cambiarEvidencia(reporteId, evidencia.key, nueva));
   }
   const detalle = await obtenerDetalle(reporteId);
   logger.info({ reporteId, usuario: autor(usuario) }, 'Reporte corregido y reenviado a la compradora');
@@ -466,12 +468,13 @@ async function tipoAdjunto(multerFile) {
  */
 export async function agregarAdjunto(reporteId, multerFile, usuario, { etapa } = {}) {
   if (!multerFile) throw badRequest('Selecciona un archivo PDF o Excel.');
+  let adj;
   try {
     // Los documentos de Gof tienen su propio permiso (documentar), validado en la ruta.
     if (etapa !== 'gof') await exigirEdicion(reporteId, usuario);
     const tipo = await tipoAdjunto(multerFile);
     if (!tipo) throw badRequest('El archivo no es un PDF o Excel válido.');
-    const adj = {
+    adj = {
       filename: multerFile.filename,
       originalname: path.basename(multerFile.originalname || multerFile.filename).slice(0, 255),
       tipo,
@@ -496,7 +499,11 @@ export async function agregarAdjunto(reporteId, multerFile, usuario, { etapa } =
     throw err;
   }
   marcarGuardado(multerFile);
-  return obtenerDetalle(reporteId);
+  const detalle = await obtenerDetalle(reporteId);
+  if (adj.tipo === 'pdf') {
+    copiarPdf(reporteAdjuntoPath(adj.filename), { filename: adj.filename, titulo: `${numeroReporte(reporteId)} — ${adj.originalname}`, tipoDocumento: TIPO_PRODUCTO_DANADO });
+  }
+  return detalle;
 }
 
 function indice(idx) {
@@ -561,6 +568,7 @@ export async function eliminarAdjunto(reporteId, idx, usuario, f) {
   await fs.unlink(reporteAdjuntoPath(borrado.filename)).catch((err) => {
     if (err.code !== 'ENOENT') logger.error({ err, archivo: borrado.filename }, 'No se pudo borrar un adjunto de reporte');
   });
+  if (borrado.tipo === 'pdf') borrarCopiasPdf([borrado.filename]);
   return obtenerDetalle(reporteId);
 }
 
@@ -730,8 +738,10 @@ export async function eliminarReporte(reporteId, usuario) {
   if (res.bloqueado) throw conflict(res.bloqueado);
   const { fila } = res;
   // Solo después del commit: si la BD falla, los archivos siguen referenciados.
-  const archivos = parseJsonArray(fila.Adjuntos).map((a) => reporteAdjuntoPath(a.filename));
-  if (fila.EvidenciaKey && fila.EvidenciaProveedor === 'local') archivos.push(evidenciaAbsolutePath(fila.EvidenciaKey));
+  const adjuntos = parseJsonArray(fila.Adjuntos);
+  const archivos = adjuntos.map((a) => reporteAdjuntoPath(a.filename));
+  await deleteEvidence(fila.EvidenciaProveedor, fila.EvidenciaKey);
+  borrarCopiasPdf(adjuntos.filter((a) => a.tipo === 'pdf').map((a) => a.filename));
   await Promise.all(
     archivos.map((ruta) =>
       fs.unlink(ruta).catch((err) => {

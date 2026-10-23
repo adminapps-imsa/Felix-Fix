@@ -69,10 +69,20 @@ export const env = {
   },
 
   evidence: {
-    provider: process.env.EVIDENCE_STORAGE_PROVIDER || 'local',
+    provider: (process.env.EVIDENCE_STORAGE_PROVIDER || 'local').trim(),
     // Una carpeta por esquema (uploads/QA, uploads/Prod) para no mezclar fotos entre ambientes.
     localDir: process.env.EVIDENCE_LOCAL_DIR || `./uploads/${dbSchema}/productos-danados`,
     maxSizeMb: Number(process.env.EVIDENCE_MAX_SIZE_MB) || 5,
+    // Con EVIDENCE_STORAGE_PROVIDER=paperless: las fotos nuevas van a Paperless-ngx.
+    paperless: {
+      // Sin espacios ni «/» al final (un espacio pegado al copiar rompe la URL).
+      url: (process.env.PAPERLESS_URL || '').trim().replace(/\/+$/, ''),
+      token: (process.env.PAPERLESS_TOKEN || '').trim(),
+      tipoDocumento: process.env.PAPERLESS_TIPO_DOCUMENTO || 'Evidencia Producto Dañado',
+      // La del ambiente (QA / Prod) separa las pruebas de lo real.
+      etiquetas: (process.env.PAPERLESS_ETIQUETAS || `Felix Fix,${dbSchema}`).split(',').map((t) => t.trim()).filter(Boolean),
+      esperaMs: (Number(process.env.PAPERLESS_ESPERA_SEG) || 30) * 1000,
+    },
   },
 
   reclamos: {

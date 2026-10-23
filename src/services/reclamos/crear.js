@@ -29,6 +29,8 @@ import { logger } from '../../utils/logger.js';
 import { normalizarDocSap, motivoDocsRepetidos, motivoDocsEnOtrosReclamos, documentosUsados, motivoFechaLlegadaInvalida } from '../../domain/reclamo.js';
 import { diaPanama } from '../../domain/tablero.js';
 import { tipoReal, tipoRealDeArchivo, nombreUsuario, detalle, exigir, conDocumentos } from './comun.js';
+import { reclamoArchivoPath } from '../../config/almacenamiento.js';
+import { copiarPdf, TIPO_RECLAMO } from '../evidenceStorage/copiasPdf.js';
 
 export const ORIGEN_PRINCIPAL = 'principal';
 /** Filas que se mandan al formulario en la vista previa (= máx. de líneas editables). */
@@ -371,6 +373,9 @@ export async function crear(body, multerFile, usuario, pdfs = []) {
     }
 
     const dto = await detalle(token);
+    for (const a of adjuntosSap) {
+      copiarPdf(reclamoArchivoPath(a.filename), { filename: a.filename, titulo: `${dto.Numero} — ${a.originalname}`, tipoDocumento: TIPO_RECLAMO });
+    }
     // Aviso a las compradoras: solo si espera su decisión (los «notificados» son solo informativos).
     if (dto.Status === 'pendiente') avisarReclamo('nuevo', dto, { comentario: dto.Comentario, de: usuario.name || nombreUsuario(usuario) });
     return dto;
