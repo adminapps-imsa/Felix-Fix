@@ -82,3 +82,18 @@ test('correo al proveedor: datos del reporte escapados y número con ceros', () 
   assert.ok(asunto.startsWith('Reporte de producto dañado PD-000042'));
   assert.ok(!sinLogo(html).includes('<img'), 'HTML sin escapar');
 });
+
+test('bienvenida: el aviso de inicio del portal solo sale hasta el lunes 26 de octubre de 2026 (hora de Panamá)', async () => {
+  const { plantillaBienvenida } = await import('../../src/services/correo/plantillaBienvenida.js');
+  const aviso = 'El portal se empieza a usar el lunes 26 de octubre de 2026.';
+  const con = (iso) => plantillaBienvenida({ nombre: 'Ana Pérez', username: 'aperez', roles: ['Compradora'], hoy: new Date(iso) });
+  for (const iso of ['2026-10-23T15:00:00Z', '2026-10-27T04:59:00Z']) {
+    assert.ok(con(iso).html.includes(aviso), iso);
+    assert.ok(con(iso).texto.includes(aviso), iso);
+  }
+  // 27-oct 00:00 en Panamá (UTC-5) y después: ya no sale.
+  for (const iso of ['2026-10-27T05:00:00Z', '2027-01-15T12:00:00Z']) {
+    assert.ok(!con(iso).html.includes(aviso), iso);
+    assert.ok(!con(iso).texto.includes(aviso), iso);
+  }
+});

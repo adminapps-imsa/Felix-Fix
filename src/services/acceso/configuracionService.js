@@ -1,7 +1,7 @@
 import * as kc from './keycloakAdmin.js';
 import * as repo from '../../repositories/accesoRepository.js';
 import { PERMISOS, ASIGNABLES, CODIGOS, PERMISO_CONFIGURACION } from './permisos.js';
-import { esSuperAdminRol, invalidarPermisos, permisosGuardados, permisosDeRoles } from './acceso.js';
+import { esSuperAdminRol, invalidarPermisos, permisosGuardados } from './acceso.js';
 import { badRequest, conflict, notFound, serviceUnavailable } from '../../utils/httpError.js';
 import { CORREOS } from '../correo/catalogoCorreos.js';
 import { plantillaBienvenida } from '../correo/plantillaBienvenida.js';
@@ -174,7 +174,7 @@ export async function enviarBienvenida(userIds, usuario) {
       continue;
     }
     try {
-      const { asunto, html, texto } = plantillaBienvenida({ nombre: u.nombre, username: u.username, roles, permisos: await permisosDeRoles(new Set(roles)) });
+      const { asunto, html, texto } = plantillaBienvenida({ nombre: u.nombre, username: u.username, roles });
       await enviarCorreo({ para, asunto, html, texto });
       await auditar('bienvenida', `Bienvenida → ${u.username} (${u.nombre})`, usuario);
       resultados.push({ ...base, enviado: true });
