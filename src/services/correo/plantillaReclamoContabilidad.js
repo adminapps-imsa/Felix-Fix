@@ -76,22 +76,17 @@ export function plantillaReclamoContabilidad(r, lineas, { remitente, archivos = 
   const enlace = env.correo.portalUrl ? `${env.correo.portalUrl}/reclamos/${r.Token}` : '';
   const de = remitente?.nombre || remitente?.correo || 'La compradora';
 
+  // Toda la información, agrupada: lo que va junto comparte fila.
+  const junto = (...v) => v.filter((x) => x !== null && x !== undefined && String(x).trim() !== '').join(' · ');
   const datos = conDato([
-    ['Número de reclamo', r.Numero],
-    ['Tipo', TIPO_LABEL[r.Tipo] || r.Tipo],
-    ['Origen', r.Origen === 'cedi' ? 'CEDI' : 'Tienda'],
-    ['Sucursal', r.Origen === 'tienda' ? r.Sucursal : null],
-    ['División', r.Division],
-    ['Motivo', r.Motivo],
-    ['Fecha de registro', fechaCorta(r.FechaRegistro)],
-    ['Llegada de la mercancía', fechaCorta(r.FechaLlegadaMercancia)],
-    ['Proveedor', r.Proveedor],
-    ['Marca', r.Marca],
-    ['Mundo', r.Mundo],
-    ['Departamento', r.Departamento],
+    ['Proveedor', junto(r.Proveedor, r.Marca)],
+    ['Tipo', junto(TIPO_LABEL[r.Tipo] || r.Tipo, r.Motivo)],
+    ['Origen', junto(r.Origen === 'cedi' ? 'CEDI' : 'Tienda', r.Origen === 'tienda' ? r.Sucursal : null)],
+    ['Mundo / Departamento', junto(r.Mundo, r.Departamento, r.Division)],
     ['Compradora', r.Compradora],
     ['N° embarque / factura', r.NumeroEmbarqueFactura],
     ['Documento(s) SAP', (r.SapDocs || []).join(', ')],
+    ['Fechas', junto(r.FechaRegistro && `Registro ${fechaCorta(r.FechaRegistro)}`, r.FechaLlegadaMercancia && `Llegada ${fechaCorta(r.FechaLlegadaMercancia)}`)],
     ['Creado por', `${r.CreatedByNombre || r.CreatedBy} · ${fecha(r.CreatedAt)}`],
   ]);
   const aprobados = lineas.filter((l) => l.DecStatus === 'aprobado').length;
@@ -183,6 +178,7 @@ export function plantillaReclamoContabilidad(r, lineas, { remitente, archivos = 
     `Reclamo ${r.Numero} para contabilidad · ${STATUS_LABEL[r.Status] || r.Status}`,
     '',
     `${de} te envía este reclamo ya revisado, con sus productos y los archivos del reclamo adjuntos.`,
+    ...(enlace ? ['', `Abrir el reclamo en el portal: ${enlace}`] : []),
     '',
     'DATOS DEL RECLAMO',
     ...datos.map(([k, v]) => `${k}: ${v}`),
@@ -212,7 +208,6 @@ export function plantillaReclamoContabilidad(r, lineas, { remitente, archivos = 
     '',
     'ARCHIVOS ADJUNTOS DEL RECLAMO',
     ...(archivos.length ? archivos.map((a) => `- ${a.filename}${a.descripcion ? ` — ${a.descripcion}` : ''}`) : ['(sin archivos)']),
-    ...(enlace ? ['', `Abrir el reclamo en el portal: ${enlace}`] : []),
   ].join('\n');
 
   return { asunto, html, texto };

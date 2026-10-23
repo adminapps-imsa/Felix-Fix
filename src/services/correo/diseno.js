@@ -76,46 +76,6 @@ export function recuadro({ etiqueta, texto, pie, comillas = false }) {
               </table>`);
 }
 
-/** Pasos numerados («Qué tienes que hacer»). */
-export function pasos(lista, titulo = 'Qué tienes que hacer') {
-  if (!lista?.length) return '';
-  const filas = lista
-    .map(
-      (p, i) => `
-                <tr>
-                  <td width="30" style="padding:0 0 10px;vertical-align:top;">
-                    <div style="width:22px;height:22px;line-height:22px;border-radius:11px;background:${COLOR.marcaSuave};color:${COLOR.marca};font-family:${FUENTE};font-size:12px;font-weight:700;text-align:center;">${i + 1}</div>
-                  </td>
-                  <td style="padding:2px 0 10px;font-family:${FUENTE};font-size:14px;line-height:1.5;color:${COLOR.texto};vertical-align:top;">${esc(p)}</td>
-                </tr>`
-    )
-    .join('');
-  return (
-    tituloSeccion(titulo) +
-    fila(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${filas}
-              </table>`, { arriba: 12 })
-  );
-}
-
-/** Lista con viñetas azules («Lo que puedes hacer»). */
-export function lista(items, titulo) {
-  if (!items?.length) return '';
-  const filas = items
-    .map(
-      (t) => `
-                <tr>
-                  <td width="20" style="padding:0 0 8px;vertical-align:top;font-family:${FUENTE};font-size:16px;line-height:1.4;color:${COLOR.marca};">&bull;</td>
-                  <td style="padding:0 0 8px;font-family:${FUENTE};font-size:14px;line-height:1.5;color:${COLOR.texto};vertical-align:top;">${esc(t)}</td>
-                </tr>`
-    )
-    .join('');
-  return (
-    (titulo ? tituloSeccion(titulo) : '') +
-    fila(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${filas}
-              </table>`, { arriba: 12 })
-  );
-}
-
 /** Botón «a prueba de balas» (el fondo va en la celda: Outlook también lo pinta) y el enlace por si no funciona. */
 export function boton({ texto, enlace }) {
   if (!enlace) return '';
@@ -229,7 +189,3 @@ export const datosTexto = (titulo, filas) => {
   const lista = conDato(filas);
   return lista.length ? ['', `${titulo}:`, ...lista.map(([k, v]) => `  ${k}: ${v}`)] : [];
 };
-
-export const pasosTexto = (lista, titulo = 'Qué tienes que hacer') => (lista?.length ? ['', `${titulo}:`, ...lista.map((p, i) => `  ${i + 1}. ${p}`)] : []);
-
-export const listaTexto = (items, titulo) => (items?.length ? ['', `${titulo}:`, ...items.map((t) => `  • ${t}`)] : []);

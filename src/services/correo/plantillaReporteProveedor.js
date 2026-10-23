@@ -47,11 +47,21 @@ export function plantillaReporteProveedor(r, { remitente, conFoto, adjuntos = []
     modulo: 'PRODUCTOS DAÑADOS',
     titulo: `Reporte de producto dañado ${numero}`,
     subtitulo: [r.NombreProducto, r.TiendaNombre].filter(Boolean).join(' · '),
-    vistaPrevia: `Producto dañado ${r.NombreProducto} (${r.TiendaNombre}). Le pedimos indicar si aprueba la devolución.`,
+    vistaPrevia: `Producto dañado ${r.NombreProducto} (${r.TiendaNombre}). ¿Aprueba la devolución?`,
+    // Primero la pregunta y cómo responder; el detalle va debajo.
     bloques: [
       parrafo(
-        `Estimado proveedor:<br />Le compartimos el reporte de un producto que llegó dañado o con problemas a nuestra tienda <strong>${esc(r.TiendaNombre)}</strong>. Le pedimos revisarlo y respondernos si aprueba la devolución.`,
+        `Estimado proveedor:<br />Un producto llegó dañado o con problemas a nuestra tienda <strong>${esc(r.TiendaNombre)}</strong>. ¿Aprueba la devolución?`,
         { arriba: 22 }
+      ),
+      bloque(
+        `<div style="font-family:${FUENTE};font-size:14px;line-height:1.6;color:${COLOR.texto};">Responda a este correo con una de estas opciones:</div>
+              <table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:8px;">
+                ${opcion('DEVOLUCIÓN APROBADA', 'el proveedor se hace responsable del producto.')}
+                ${opcion('NF', 'no aprueba la devolución.')}
+              </table>
+              <div style="font-family:${FUENTE};font-size:13px;line-height:1.5;color:${COLOR.suave};margin-top:8px;">Su respuesta le llega a ${esc(contacto)}.</div>`,
+        { arriba: 14 }
       ),
       seccionDatos('Detalle del producto', filas),
       recuadro({ etiqueta: 'Descripción', texto: r.Descripcion }),
@@ -66,16 +76,7 @@ export function plantillaReporteProveedor(r, { remitente, conFoto, adjuntos = []
         ? tituloSeccion(`Documentos adjuntos (${adjuntos.length})`) +
           bloque(adjuntos.map((a) => `<div style="font-family:${FUENTE};font-size:14px;color:${COLOR.texto};padding:3px 0;">&bull;&nbsp; ${esc(a)}</div>`).join(''), { arriba: 8 })
         : '',
-      tituloSeccion('¿Qué necesitamos de usted?'),
-      bloque(
-        `<div style="font-family:${FUENTE};font-size:14px;line-height:1.6;color:${COLOR.texto};">Responda a este correo indicando una de estas opciones:</div>
-              <table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:8px;">
-                ${opcion('DEVOLUCIÓN APROBADA', 'el proveedor se hace responsable del producto.')}
-                ${opcion('NF', 'no aprueba la devolución.')}
-              </table>`,
-        { arriba: 10 }
-      ),
-      parrafo(`Al responder, su mensaje le llega a ${esc(contacto)}.<br />Gracias por su atención.`, { arriba: 22 }),
+      parrafo('Gracias por su atención.', { arriba: 22 }),
     ],
     pie: [`Correo generado por Felix Fix para el reporte ${numero}.`, 'Por favor no cambie el asunto al responder.'],
   });
@@ -84,18 +85,17 @@ export function plantillaReporteProveedor(r, { remitente, conFoto, adjuntos = []
     `Reporte ${numero} — Felix Fix · Productos Dañados`,
     '',
     'Estimado proveedor:',
-    `Le compartimos el reporte de un producto que llegó dañado o con problemas a nuestra tienda ${r.TiendaNombre}.`,
-    'Le pedimos revisarlo y respondernos si aprueba la devolución.',
+    `Un producto llegó dañado o con problemas a nuestra tienda ${r.TiendaNombre}. ¿Aprueba la devolución?`,
+    '',
+    'Responda a este correo con una de estas opciones:',
+    '  - DEVOLUCIÓN APROBADA: el proveedor se hace responsable del producto.',
+    '  - NF: no aprueba la devolución.',
+    `Su respuesta le llega a ${contacto}.`,
     ...datosTexto('Detalle del producto', filas),
     ...(r.Descripcion ? ['', `Descripción: ${r.Descripcion}`] : []),
     ...(adjuntos.length ? ['', `Documentos adjuntos: ${adjuntos.join(', ')}`] : []),
     ...(conFoto ? ['Se adjunta la foto de evidencia.'] : []),
     '',
-    'Responda a este correo indicando:',
-    '  - DEVOLUCIÓN APROBADA: el proveedor se hace responsable del producto.',
-    '  - NF: no aprueba la devolución.',
-    '',
-    `Al responder, su mensaje le llega a ${contacto}.`,
     'Gracias por su atención.',
   ].join('\n');
 

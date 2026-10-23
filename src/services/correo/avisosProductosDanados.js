@@ -21,7 +21,7 @@ import { logger } from '../../utils/logger.js';
 import { enviarCorreo, correoConfigurado, resumenDestinatarios } from './mailer.js';
 import { numeroReporte } from './plantillaReporteProveedor.js';
 import { destinatarios, filtrarDominios, deUsuario, PERMISOS_COMPRADORA, correosDeAsignadas } from './destinatarios.js';
-import { documento, parrafo, recuadro, pasos, boton, datos, saludo, esc, datosTexto, pasosTexto } from './diseno.js';
+import { documento, parrafo, recuadro, boton, datos, saludo, esc, datosTexto } from './diseno.js';
 
 // Se mantiene para quien la importaba desde aquí.
 export { destinatarios };
@@ -42,7 +42,7 @@ const ESTADO = {
  *   - otro permiso/área: cambia `permiso` (o pon `area: null` para no avisar)
  *   - correos fijos:     agrega `correos: ['alguien@maduro.com.pa']` al área
  *   - no avisar al creador: pon `creador: null`
- * `pasos`: lo que tiene que hacer quien recibe el aviso del área.
+ * `frase`: qué pasó y qué tiene que hacer quien lo recibe, en una o dos frases cortas.
  * `detalle`: cómo se llama el dato extra del evento (motivo del NF, referencia…).
  */
 export const EVENTOS = {
@@ -51,8 +51,7 @@ export const EVENTOS = {
     area: {
       permiso: 'productos_danados.enviar',
       titulo: 'Nuevo reporte pendiente',
-      frase: 'Se registró un reporte de producto dañado que espera tu gestión.',
-      pasos: ['Abre el reporte y revisa la foto y los datos.', 'Envíalo al proveedor desde el portal.', 'Cuando responda, registra si es Devolución aprobada o NF.'],
+      frase: 'Hay un reporte de producto dañado que espera tu gestión. Revísalo y envíalo al proveedor.',
     },
     creador: null,
   },
@@ -62,8 +61,7 @@ export const EVENTOS = {
     area: null,
     creador: {
       titulo: 'Tu reporte necesita una corrección',
-      frase: 'La compradora te devolvió el reporte antes de enviarlo al proveedor. Corrige lo que indica y reenvíalo.',
-      pasos: ['Abre el reporte y lee el comentario de la compradora.', 'Pulsa «Corregir y reenviar», cambia lo que haga falta y guarda.'],
+      frase: 'La compradora te devolvió el reporte. Corrige lo que indica y reenvíalo.',
     },
   },
   // La tienda lo corrigió -> compradora (vuelve a su bandeja de pendientes).
@@ -72,8 +70,7 @@ export const EVENTOS = {
     area: {
       permiso: 'productos_danados.enviar',
       titulo: 'Reporte corregido por la tienda',
-      frase: 'La tienda corrigió el reporte que devolviste y volvió a quedar pendiente.',
-      pasos: ['Abre el reporte y revisa los cambios.', 'Envíalo al proveedor o devuélvelo otra vez si falta algo.'],
+      frase: 'La tienda corrigió el reporte que devolviste. Revísalo y envíalo al proveedor.',
     },
     creador: null,
   },
@@ -82,8 +79,7 @@ export const EVENTOS = {
     area: {
       permiso: 'productos_danados.documentar',
       titulo: 'Devolución aprobada',
-      frase: 'El proveedor aprobó la devolución de este reporte.',
-      pasos: ['Sube el documento (PDF o Excel) en el reporte.', 'Pulsa «Enviar a contabilidad».'],
+      frase: 'El proveedor aprobó la devolución. Sube el documento en el reporte y envíalo a contabilidad.',
     },
     creador: null,
   },
@@ -93,8 +89,7 @@ export const EVENTOS = {
     area: {
       permiso: 'productos_danados.nf_documento',
       titulo: 'Reporte NF: falta el documento 1700',
-      frase: 'El proveedor no aprobó la devolución de este reporte (NF).',
-      pasos: ['Haz el documento 1700 en SAP.', 'En el reporte, marca el check «Documento 1700».', 'Así pasa al supervisor GOF para validarlo.'],
+      frase: 'El proveedor no aprobó la devolución (NF). Haz el documento 1700 en SAP y márcalo en el reporte.',
     },
     creador: null,
   },
@@ -103,8 +98,7 @@ export const EVENTOS = {
     area: {
       permiso: 'productos_danados.nf',
       titulo: 'NF por validar',
-      frase: 'Gof marcó el documento 1700 de este reporte NF.',
-      pasos: ['Escribe el número del «Documento salida de NF».', 'Valida el reporte para cerrarlo.'],
+      frase: 'Gof marcó el documento 1700. Escribe el número del «Documento salida de NF» y valida el reporte.',
     },
     creador: null,
   },
@@ -114,8 +108,7 @@ export const EVENTOS = {
     area: {
       permiso: 'productos_danados.pago',
       titulo: 'Reporte en contabilidad',
-      frase: 'Gof envió a contabilidad esta devolución aprobada, con su documento.',
-      pasos: ['Cuando el proveedor pague, abre el reporte.', 'Marca «Pago recibido» con la referencia.'],
+      frase: 'Gof envió a contabilidad esta devolución aprobada. Cuando el proveedor pague, marca «Pago recibido».',
       // Contabilidad trabaja los pagos desde su apartado, no desde Productos Dañados.
       enlace: '/contabilidad?seccion=productos',
     },
@@ -135,8 +128,7 @@ export const EVENTOS = {
   },
 };
 
-const PIE_AREA = 'Lo recibes porque tu rol tiene este paso asignado en Configuración.';
-const PIE_CREADOR = 'Lo recibes porque creaste este reporte.';
+const PIE = 'Aviso automático de Felix Fix. No respondas este correo.';
 
 async function correosDelArea(area) {
   const porPermiso = area.permiso ? await destinatarios(area.permiso) : [];
@@ -145,25 +137,21 @@ async function correosDelArea(area) {
 
 /**
  * HTML y texto de un aviso.
- * @param aviso  { titulo, frase, pasos?, enlace? } (área o creador)
+ * @param aviso  { titulo, frase, enlace? } (área o creador)
  * @param r      reporte (detalle)
- * @param opts   { detalle, etiquetaDetalle, pie, nombre }
+ * @param opts   { detalle, etiquetaDetalle, nombre }
  */
-export function plantillaAviso(aviso, r, { detalle, etiquetaDetalle = 'Detalle', pie = PIE_AREA, nombre } = {}) {
+export function plantillaAviso(aviso, r, { detalle, etiquetaDetalle = 'Detalle', nombre } = {}) {
   const numero = numeroReporte(r.ReporteId);
   const asunto = `${aviso.titulo}: ${numero} — ${r.NombreProducto}`;
   const base = env.correo.portalUrl;
   const enlace = base ? `${base}${aviso.enlace || `/productos-danados?estado=${encodeURIComponent(r.Estado || '')}&reporte=${r.ReporteId}`}` : '';
   const estado = ESTADO[r.Estado] || r.Estado;
+  // Solo lo necesario para ubicar el caso; el resto está en el portal.
   const filas = [
-    ['Tienda', r.TiendaNombre],
     ['Producto', r.NombreProducto],
-    ['Código de barras', r.CodigoBarras || r.Sku],
-    ['Marca', r.Marca],
-    ['División', r.Division],
-    ['Motivo', r.Motivo],
-    ['Cantidad', r.Cantidad],
-    ['Reportado por', r.EmpleadoReportaNombre],
+    ['Tienda', r.TiendaNombre],
+    ['Motivo', [r.Motivo, r.Cantidad != null && r.Cantidad !== '' ? `Cant. ${r.Cantidad}` : null].filter(Boolean).join(' · ')],
   ];
 
   const html = documento({
@@ -175,26 +163,22 @@ export function plantillaAviso(aviso, r, { detalle, etiquetaDetalle = 'Detalle',
     bloques: [
       parrafo(`${esc(saludo(nombre))}<br />${esc(aviso.frase)}`, { arriba: 22 }),
       recuadro({ etiqueta: etiquetaDetalle, texto: detalle }),
-      pasos(aviso.pasos),
-      boton({ texto: aviso.pasos ? `Abrir ${numero}` : `Ver ${numero}`, enlace }),
+      boton({ texto: `Abrir ${numero}`, enlace }),
       datos('Datos del reporte', filas),
     ],
-    pie: [`Aviso automático del portal Felix Fix. ${pie}`, 'No respondas a este correo: escribe tus comentarios en el reporte.'],
+    pie: [PIE],
   });
 
   const texto = [
     `${aviso.titulo} — ${numero} · ${r.NombreProducto}`,
-    ...(estado ? [`Estado: ${estado}`] : []),
     '',
     saludo(nombre),
     aviso.frase,
     ...(detalle ? ['', `${etiquetaDetalle}: ${detalle}`] : []),
-    ...pasosTexto(aviso.pasos),
     ...(enlace ? ['', `Abrir el reporte: ${enlace}`] : []),
     ...datosTexto('Datos del reporte', filas),
     '',
-    `Aviso automático del portal Felix Fix. ${pie}`,
-    'No respondas a este correo: escribe tus comentarios en el reporte.',
+    PIE,
   ].join('\n');
 
   return { asunto, html, texto };
@@ -221,7 +205,7 @@ export function avisarEtapa(evento, r, opts = {}) {
     const envios = [];
     // Al área va a varias personas a la vez: saludo sin nombre.
     if (area.length) envios.push({ quien: 'area', para: area, ...plantillaAviso(ev.area, r, comunes) });
-    if (paraCreador.length) envios.push({ quien: 'creador', para: paraCreador, ...plantillaAviso(ev.creador, r, { ...comunes, pie: PIE_CREADOR, nombre: creador.nombre }) });
+    if (paraCreador.length) envios.push({ quien: 'creador', para: paraCreador, ...plantillaAviso(ev.creador, r, { ...comunes, nombre: creador.nombre }) });
     if (ev.area && !area.length) {
       logger.info({ evento, reporteId: r.ReporteId }, 'Aviso al área sin destinatarios (ningún rol con ese permiso tiene usuarios con correo)');
     }
