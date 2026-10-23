@@ -179,13 +179,12 @@ const BIENVENIDA = {
   grupo: 'Portal',
   nombre: 'Bienvenida al portal',
   cuando: 'El administrador la envía desde aquí a las personas que elija.',
-  quien: 'Las personas elegidas (cada una ve lo que puede hacer según sus roles)',
+  quien: 'Las personas elegidas (cada una con su usuario y sus roles)',
   generar: () =>
     plantillaBienvenida({
       nombre: 'Ana Pérez',
       username: 'aperez',
       roles: ['Compradora'],
-      permisos: new Set(['productos_danados.ver', 'productos_danados.enviar', 'productos_danados.aprobar', 'reclamos.ver', 'reclamos.decidir']),
     }),
 };
 
