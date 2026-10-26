@@ -13,8 +13,8 @@ ExecStart=/opt/node-22/bin/node src/index.js
 EnvironmentFile=/opt/Belleza/.env
 Restart=on-failure
 RestartSec=5
-User=www-data
-Group=www-data
+User=felixops
+Group=felixops
 # Evita reinicios infinitos si el proceso crashea muy rápido en bucle:
 StartLimitIntervalSec=60
 StartLimitBurst=5
