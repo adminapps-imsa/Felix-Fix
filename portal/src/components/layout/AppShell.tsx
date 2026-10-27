@@ -7,7 +7,7 @@ import { cn } from '../../lib/cn';
 import { UserMenu } from './UserMenu';
 import { VistaPor } from './VistaPor';
 import { nombreRol } from '../../lib/roles';
-import { BanderaPanama, FranjaTricolor, useFiestaPatria } from '../../lib/fiestasPatrias';
+import { BanderaPanama, ConfetiFiesta, FranjaTricolor, useFiestaPatria } from '../../lib/fiestasPatrias';
 import { useIndicador } from '../../lib/useIndicador';
 
 const navClass = ({ isActive }: { isActive: boolean }) =>
@@ -136,6 +136,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         )}
         {fiesta && <FranjaTricolor />}
       </header>
+      {fiesta && <ConfetiFiesta />}
       <main className="mx-auto max-w-7xl px-4 pt-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] sm:px-6">{children}</main>
     </div>
   );
