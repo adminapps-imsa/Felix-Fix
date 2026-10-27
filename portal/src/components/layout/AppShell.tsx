@@ -61,6 +61,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // Todo lo que no sea Prod (QA) lleva el encabezado en rojo, para no confundir los ambientes.
   const esPrueba = !!ambiente && ambiente.toLowerCase() !== 'prod';
   const fiesta = useFiestaPatria();
+  // En las fiestas patrias todo el portal toma los colores de Panamá (ver index.css, data-fiesta).
+  useEffect(() => {
+    if (!fiesta) return;
+    document.documentElement.dataset.fiesta = 'panama';
+    return () => {
+      delete document.documentElement.dataset.fiesta;
+    };
+  }, [fiesta]);
   const enlaces = (
     <>
       {puede(...ACCESO_PRODUCTOS, ...ACCESO_RECLAMOS, ...ACCESO_CONTABILIDAD) && (

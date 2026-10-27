@@ -519,72 +519,127 @@ body {
   }
 }
 
-/* Bandera vertical colgada en la banda de Inicio: varilla con remates, tela con pliegues y un vaivén lento. */
-.bandera-colgante {
-  width: 64px;
-  transform-origin: 50% 0;
-  animation: vaiven 6s ease-in-out infinite;
-  filter: drop-shadow(0 12px 14px rgb(15 10 60 / 0.4));
+/* ---------- Fiestas patrias: el portal con los colores de Panamá (data-fiesta en <html>) ---------- */
+
+/* La marca pasa de morado a azul panameño; los acentos de las bandas, a rojo. */
+:root[data-fiesta='panama'] {
+  --color-brand-50: #ecf4fc;
+  --color-brand-100: #d6e7f8;
+  --color-brand-400: #4c9be3;
+  --color-brand-500: #1a6fc4;
+  --color-brand-600: #005293;
+  --color-brand-700: #003f73;
+  --glass-border: rgba(0, 82, 147, 0.14);
+  --glass-shadow-hover: 0 2px 4px rgba(15, 31, 54, 0.05), 0 14px 36px -8px rgba(0, 82, 147, 0.2);
+  --page-bg: #f3f6fb;
+  --page-fg: #0f1f36;
+  --viz-1: #1a6fc4;
+  --viz-edad-0: #c4dcf3;
+  --viz-edad-1: #84b2e1;
+  --viz-edad-2: #1a6fc4;
+  --viz-edad-3: #003f73;
 }
-.bandera-colgante-varilla {
-  position: relative;
-  display: block;
-  height: 5px;
-  margin: 0 -8px;
-  border-radius: 3px;
-  background: linear-gradient(to bottom, #fef3c7, #d4a017 55%, #92650a);
+:root.dark[data-fiesta='panama'] {
+  --glass-bg: #0e1622;
+  --glass-border: rgba(76, 155, 227, 0.22);
+  --glass-shadow-hover: 0 2px 4px rgba(0, 0, 0, 0.35), 0 14px 36px -8px rgba(26, 111, 196, 0.3);
+  --page-bg: #070c14;
+  --page-fg: #e4edf8;
+  --viz-1: #4c9be3;
+  --viz-edad-0: #0b3560;
+  --viz-edad-1: #005293;
+  --viz-edad-2: #4c9be3;
+  --viz-edad-3: #c4dcf3;
 }
-.bandera-colgante-varilla::before,
-.bandera-colgante-varilla::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  width: 9px;
-  height: 9px;
-  translate: 0 -50%;
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, #fef9c3, #eab308 60%, #a16207);
+[data-fiesta='panama'] .banda-pagina {
+  background:
+    radial-gradient(40rem 18rem at 88% -25%, rgb(210 16 52 / 0.38), transparent 60%),
+    radial-gradient(30rem 16rem at 8% 125%, rgb(76 155 227 / 0.4), transparent 65%),
+    linear-gradient(120deg, #003f73 0%, #005293 45%, #1a6fc4 100%);
 }
-.bandera-colgante-varilla::before {
-  left: -5px;
+.dark[data-fiesta='panama'] .banda-pagina {
+  background:
+    radial-gradient(40rem 18rem at 88% -25%, rgb(210 16 52 / 0.28), transparent 60%),
+    radial-gradient(30rem 16rem at 8% 125%, rgb(26 111 196 / 0.3), transparent 65%),
+    linear-gradient(120deg, #04203d 0%, #072d55 50%, #0b3a6b 100%);
 }
-.bandera-colgante-varilla::after {
-  right: -5px;
+
+/* Banda de Inicio = la bandera como tela colgada de una varilla, con el ruedo ondulado y sombra sobre la página. */
+.en-banda .banda-pagina.banda-panama {
+  background: none;
+  box-shadow: none;
+  filter: drop-shadow(0 12px 16px rgb(0 20 50 / 0.25));
 }
-.bandera-colgante-tela {
-  position: relative;
-  display: block;
-  height: 96px;
-  overflow: hidden;
-  border-radius: 0 0 3px 3px;
+.en-banda .banda-pagina.banda-panama.banda-pagina--corta {
+  /* Más alta: el ruedo ondulado se come el borde de abajo. */
+  bottom: -1.5rem;
 }
-.bandera-colgante-tela svg {
-  display: block;
-  width: 100%;
-  height: 100%;
+.banda-panama::after {
+  display: none;
 }
-/* Pliegues: luces y sombras verticales sobre la tela. */
-.bandera-colgante-tela::after {
-  content: '';
+.bandera-tela {
+  --ruedo: 14px;
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    90deg,
-    rgb(0 0 0 / 0.1),
-    rgb(255 255 255 / 0.14) 22%,
-    rgb(0 0 0 / 0.08) 45%,
-    rgb(255 255 255 / 0.12) 68%,
-    rgb(0 0 0 / 0.12)
-  );
+  overflow: hidden;
+  background:
+    linear-gradient(to bottom, #fff 50%, #005293 50%) left / 50% 100% no-repeat,
+    linear-gradient(to bottom, #d21034 50%, #fff 50%) right / 50% 100% no-repeat;
+  mask:
+    linear-gradient(#000 0 0) top / 100% calc(100% - var(--ruedo)) no-repeat,
+    radial-gradient(50% 100% at 50% 0, #000 98%, #0000 101%) bottom / 140px var(--ruedo) repeat-x;
 }
-@keyframes vaiven {
-  0%,
-  100% {
-    rotate: -1.5deg;
+.dark .bandera-tela {
+  filter: brightness(0.86) saturate(1.05);
+}
+.bandera-tela-estrella {
+  position: absolute;
+  height: 30%;
+  aspect-ratio: 1;
+  translate: -50% -50%;
+}
+/* Pliegues que corren despacio, como tela movida por el viento, y la sombra que deja la varilla. */
+.bandera-tela-pliegues {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(to bottom, rgb(0 0 0 / 0.2), transparent 14px),
+    repeating-linear-gradient(90deg, rgb(0 0 0 / 0.08) 0, rgb(255 255 255 / 0.12) 110px, rgb(0 0 0 / 0.08) 220px);
+  background-size:
+    100% 100%,
+    220px 100%;
+  animation: pliegues 9s linear infinite;
+}
+@keyframes pliegues {
+  to {
+    background-position:
+      0 0,
+      220px 0;
   }
-  50% {
-    rotate: 1.5deg;
-  }
+}
+/* Sombra azul a la izquierda: el saludo blanco se lee también sobre el cuartel blanco. */
+.bandera-tela-sombra {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgb(3 22 50 / 0.68) 0%, rgb(3 22 50 / 0.5) 30%, rgb(3 22 50 / 0.12) 52%, transparent 62%);
+}
+.bandera-tela-varilla {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 5px;
+  background: linear-gradient(to bottom, #fef3c7, #d4a017 55%, #8a5d07);
+  box-shadow: 0 2px 4px rgb(0 0 0 / 0.25);
+}
+.en-banda--panama :is(.titulo-pagina, .bajada-pagina) {
+  text-shadow:
+    0 1px 2px rgb(0 0 0 / 0.35),
+    0 2px 16px rgb(0 20 50 / 0.5);
+}
+.en-banda--panama [data-variant='primary'] {
+  box-shadow:
+    0 0 0 1px rgb(0 63 115 / 0.25),
+    0 1px 2px rgb(0 20 50 / 0.25),
+    0 8px 20px -6px rgb(0 20 50 / 0.5);
 }
 
 /* Confeti de las fiestas: cae girando y se va; no recibe clics. */
@@ -612,7 +667,7 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bandera-colgante,
+  .bandera-tela-pliegues,
   .anim-ondear,
   .anim-pagina,
   .anim-fila,

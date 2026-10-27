@@ -1,5 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '../../lib/cn';
+import { TelaBandera } from '../../lib/fiestasPatrias';
 
 /**
  * Título de un módulo con su icono en el cuadro del logo. Va dentro de una
@@ -27,13 +28,28 @@ export function TituloPagina({ icono: Icono, titulo, children }: { icono: Lucide
  * decorativa y absoluta: la distribución de la página no cambia.
  * `solape`: la franja sigue por debajo del encabezado para que la fila
  * siguiente (los indicadores) quede montada sobre su borde.
+ * `panama`: en las fiestas patrias la banda es la bandera de Panamá, como tela colgada.
  * `detalle`: en las pantallas de detalle la franja va detrás del enlace de
  * regreso y la tarjeta principal queda montada sobre su borde.
  */
-export function BandaPagina({ solape = false, detalle = false, className, children }: { solape?: boolean; detalle?: boolean; className?: string; children: React.ReactNode }) {
+export function BandaPagina({
+  solape = false,
+  detalle = false,
+  panama = false,
+  className,
+  children,
+}: {
+  solape?: boolean;
+  detalle?: boolean;
+  panama?: boolean;
+  className?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div className={cn('en-banda relative', className)}>
-      <div aria-hidden className={cn('banda-pagina', detalle ? 'banda-pagina--detalle' : solape ? 'banda-pagina--solape' : 'banda-pagina--corta')} />
+    <div className={cn('en-banda relative', panama && 'en-banda--panama', className)}>
+      <div aria-hidden className={cn('banda-pagina', detalle ? 'banda-pagina--detalle' : solape ? 'banda-pagina--solape' : 'banda-pagina--corta', panama && 'banda-panama')}>
+        {panama && <TelaBandera />}
+      </div>
       {children}
     </div>
   );
