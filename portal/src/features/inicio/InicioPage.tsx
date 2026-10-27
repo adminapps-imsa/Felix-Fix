@@ -10,7 +10,7 @@ import { useAuth } from '../../auth/useAuth';
 import { ACCESO_PRODUCTOS, ACCESO_RECLAMOS, P } from '../../auth/permisos';
 import { cn } from '../../lib/cn';
 import { formatCantidad } from '../../lib/formatters';
-import { BanderaPanama, hoyPanama, useFiestaPatria } from '../../lib/fiestasPatrias';
+import { BanderaColgante, BanderaPanama, hoyPanama, useFiestaPatria } from '../../lib/fiestasPatrias';
 import * as apiProductos from '../../api/productosDanados';
 import * as apiReclamos from '../../api/reclamos';
 import * as apiContabilidad from '../../api/contabilidad';
@@ -43,6 +43,7 @@ const saludo = () => {
  */
 export function InicioPage() {
   const { puede, user } = useAuth();
+  const fiesta = useFiestaPatria();
   // Contabilidad (solo "Confirmar pago") necesita los conteos, pero no tiene la pantalla de Productos Dañados.
   const pedirProductos = puede(...ACCESO_PRODUCTOS, P.pdPago);
   const verProductos = puede(...ACCESO_PRODUCTOS);
@@ -130,7 +131,9 @@ export function InicioPage() {
         <TituloPagina icono={House} titulo={`${saludo()}${nombre ? `, ${nombre}` : ''}`}>
           <p className="bajada-pagina">{bajada}</p>
         </TituloPagina>
-        <div className="flex flex-wrap gap-2">
+        {/* La bandera cuelga del borde de arriba de la banda (1.5rem sobre el contenido), a la izquierda de los atajos. */}
+        <div className="relative flex flex-wrap items-center gap-2 sm:self-stretch">
+          {fiesta && <BanderaColgante className="absolute -top-6 right-[calc(100%+1.5rem)] hidden sm:block" />}
           {puede(P.pdCrear) && <Atajo to="/productos-danados?nuevo=1">Nuevo reporte</Atajo>}
           {puede(P.recCrear) && <Atajo to="/reclamos?nuevo=1">Nuevo reclamo</Atajo>}
         </div>
