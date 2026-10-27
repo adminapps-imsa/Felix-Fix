@@ -519,34 +519,6 @@ body {
   }
 }
 
-/* Fiestas patrias: la franja de Inicio es la bandera (blanco|rojo arriba, azul|blanco abajo) con un brillo de tela que pasa. */
-.banda-pagina.banda-panama {
-  overflow: hidden;
-  background:
-    linear-gradient(to bottom, #fff 50%, #005293 50%) left / 50% 100% no-repeat,
-    linear-gradient(to bottom, #d21034 50%, #fff 50%) right / 50% 100% no-repeat;
-}
-.banda-panama::after {
-  background-image: linear-gradient(100deg, transparent 30%, rgb(255 255 255 / 0.22) 45%, rgb(0 0 0 / 0.06) 55%, transparent 70%);
-  background-size: 250% 100%;
-  mask-image: none;
-  animation: brillo-tela 7s ease-in-out infinite;
-}
-@keyframes brillo-tela {
-  from {
-    background-position: 120% 0;
-  }
-  to {
-    background-position: -120% 0;
-  }
-}
-.banda-panama-estrella {
-  position: absolute;
-  height: 34%;
-  aspect-ratio: 1;
-  translate: -50% -50%;
-}
-
 /* Confeti de las fiestas: cae girando y se va; no recibe clics. */
 .confeti {
   position: fixed;
@@ -572,7 +544,6 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .banda-panama::after,
   .anim-ondear,
   .anim-pagina,
   .anim-fila,

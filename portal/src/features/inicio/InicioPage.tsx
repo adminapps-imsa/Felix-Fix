@@ -43,7 +43,6 @@ const saludo = () => {
  */
 export function InicioPage() {
   const { puede, user } = useAuth();
-  const fiesta = useFiestaPatria();
   // Contabilidad (solo "Confirmar pago") necesita los conteos, pero no tiene la pantalla de Productos Dañados.
   const pedirProductos = puede(...ACCESO_PRODUCTOS, P.pdPago);
   const verProductos = puede(...ACCESO_PRODUCTOS);
@@ -127,13 +126,10 @@ export function InicioPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <BandaPagina panama={!!fiesta} className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        {/* Sobre la bandera el texto blanco no se leería en los cuarteles blancos: va en un recuadro azul. */}
-        <div className={cn(fiesta && 'self-start rounded-2xl bg-[#0a1f44]/65 px-4 py-3 shadow-lg ring-1 ring-white/20 backdrop-blur-md')}>
-          <TituloPagina icono={House} titulo={`${saludo()}${nombre ? `, ${nombre}` : ''}`}>
-            <p className="bajada-pagina">{bajada}</p>
-          </TituloPagina>
-        </div>
+      <BandaPagina className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <TituloPagina icono={House} titulo={`${saludo()}${nombre ? `, ${nombre}` : ''}`}>
+          <p className="bajada-pagina">{bajada}</p>
+        </TituloPagina>
         <div className="flex flex-wrap gap-2">
           {puede(P.pdCrear) && <Atajo to="/productos-danados?nuevo=1">Nuevo reporte</Atajo>}
           {puede(P.recCrear) && <Atajo to="/reclamos?nuevo=1">Nuevo reclamo</Atajo>}

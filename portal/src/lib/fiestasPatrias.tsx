@@ -43,20 +43,6 @@ export function BanderaPanama({ className, ondear }: { className?: string; ondea
   );
 }
 
-/** Las dos estrellas de la franja-bandera (BandaPagina con `panama`): cuadradas, en el centro de su cuartel. */
-export function EstrellasBanda() {
-  return (
-    <>
-      <svg viewBox="-1 -1 2 2" className="banda-panama-estrella" style={{ left: '25%', top: '25%' }}>
-        <path d={ESTRELLA} fill="#005293" />
-      </svg>
-      <svg viewBox="-1 -1 2 2" className="banda-panama-estrella" style={{ left: '75%', top: '75%' }}>
-        <path d={ESTRELLA} fill="#d21034" />
-      </svg>
-    </>
-  );
-}
-
 /** Franja rojo-blanco-azul al pie del encabezado. */
 export function FranjaTricolor() {
   return <div aria-hidden className="franja-tricolor h-[3px]" />;
