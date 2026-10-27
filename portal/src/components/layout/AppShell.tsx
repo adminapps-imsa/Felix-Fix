@@ -7,6 +7,7 @@ import { cn } from '../../lib/cn';
 import { UserMenu } from './UserMenu';
 import { VistaPor } from './VistaPor';
 import { nombreRol } from '../../lib/roles';
+import { BanderaPanama, FranjaTricolor, useFiestaPatria } from '../../lib/fiestasPatrias';
 import { useIndicador } from '../../lib/useIndicador';
 
 const navClass = ({ isActive }: { isActive: boolean }) =>
@@ -55,6 +56,7 @@ function useDarkMode() {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { dark, toggle } = useDarkMode();
   const { puede, user, cambiarVista } = useAuth();
+  const fiesta = useFiestaPatria();
   const enlaces = (
     <>
       {puede(...ACCESO_PRODUCTOS, ...ACCESO_RECLAMOS, ...ACCESO_CONTABILIDAD) && (
@@ -98,6 +100,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </span>
             {/* En celulares angostos solo el logo: con "Vista por" y el nombre no cabe en una línea. */}
             <span className="numero-caso hidden whitespace-nowrap text-xl sm:inline">Felix Fix</span>
+            {fiesta && (
+              <span title={fiesta.titulo} className="inline-flex">
+                <BanderaPanama ondear className="h-5 w-[30px]" />
+              </span>
+            )}
             <MenuDeslizante className="ml-4 hidden items-center gap-1 font-normal md:flex">{enlaces}</MenuDeslizante>
           </div>
           <div className="flex items-center gap-3">
@@ -127,6 +134,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         )}
+        {fiesta && <FranjaTricolor />}
       </header>
       <main className="mx-auto max-w-7xl px-4 pt-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] sm:px-6">{children}</main>
     </div>

@@ -495,7 +495,32 @@ body {
   }
 }
 
+/* Fiestas patrias: franja rojo-blanco-azul y la bandera que ondea una vez al aparecer. */
+.franja-tricolor {
+  background: linear-gradient(90deg, #d21034 0 33.33%, #fff 33.33% 66.66%, #005293 66.66%);
+}
+.anim-ondear {
+  transform-origin: left center;
+  animation: ondear 1.4s ease-in-out 300ms 1 both;
+}
+@keyframes ondear {
+  0%,
+  100% {
+    transform: none;
+  }
+  20% {
+    transform: perspective(60px) rotateY(-14deg) skewY(-3deg);
+  }
+  45% {
+    transform: perspective(60px) rotateY(8deg) skewY(2deg);
+  }
+  70% {
+    transform: perspective(60px) rotateY(-4deg) skewY(-1deg);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .anim-ondear,
   .anim-pagina,
   .anim-fila,
   .anim-crecer,

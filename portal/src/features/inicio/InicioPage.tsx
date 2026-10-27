@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, CheckCircle2, ChevronRight, House, Plus } from 'lucide-react';
+import { ArrowRight, CheckCircle2, ChevronRight, House, Plus, X } from 'lucide-react';
 import { BandaPagina, TituloPagina } from '../../components/ui/TituloPagina';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { Cifra } from '../../components/ui/Cifra';
@@ -10,6 +10,7 @@ import { useAuth } from '../../auth/useAuth';
 import { ACCESO_PRODUCTOS, ACCESO_RECLAMOS, P } from '../../auth/permisos';
 import { cn } from '../../lib/cn';
 import { formatCantidad } from '../../lib/formatters';
+import { BanderaPanama, hoyPanama, useFiestaPatria } from '../../lib/fiestasPatrias';
 import * as apiProductos from '../../api/productosDanados';
 import * as apiReclamos from '../../api/reclamos';
 import * as apiContabilidad from '../../api/contabilidad';
@@ -134,6 +135,8 @@ export function InicioPage() {
           {puede(P.recCrear) && <Atajo to="/reclamos?nuevo=1">Nuevo reclamo</Atajo>}
         </div>
       </BandaPagina>
+
+      <SaludoFiesta />
 
       {error && (
         <div role="alert" className="anim-aparecer flex flex-wrap items-center justify-between gap-2 rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-sm">
@@ -273,6 +276,41 @@ export function InicioPage() {
         </section>
       )}
     </div>
+  );
+}
+
+/** Saludo de las fiestas patrias. Quien lo cierra no lo vuelve a ver ese día. */
+function SaludoFiesta() {
+  const fiesta = useFiestaPatria();
+  const clave = `felix-fiesta-cerrada-${hoyPanama()}-${fiesta?.dia}`;
+  const [cerrado, setCerrado] = useState(() => {
+    try {
+      return localStorage.getItem(clave) === '1';
+    } catch {
+      return false;
+    }
+  });
+  if (!fiesta || cerrado) return null;
+  const cerrar = () => {
+    setCerrado(true);
+    try {
+      localStorage.setItem(clave, '1');
+    } catch {
+      /* sin almacenamiento solo se cierra por ahora */
+    }
+  };
+  return (
+    <GlassCard role="status" className="anim-aparecer relative flex items-center gap-4 overflow-hidden">
+      <BanderaPanama ondear className="h-10 w-[60px] sm:h-12 sm:w-[72px]" />
+      <div className="min-w-0 flex-1">
+        <p className="font-semibold">{fiesta.titulo}</p>
+        <p className="text-sm opacity-65">{fiesta.detalle}</p>
+      </div>
+      <button type="button" onClick={cerrar} aria-label="Cerrar saludo" className="grid size-8 shrink-0 place-items-center rounded-full opacity-60 hover:bg-black/5 hover:opacity-100 dark:hover:bg-white/10">
+        <X size={16} aria-hidden />
+      </button>
+      <span aria-hidden className="franja-tricolor absolute inset-x-0 bottom-0 h-[3px]" />
+    </GlassCard>
   );
 }
 
