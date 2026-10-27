@@ -10,7 +10,7 @@ import { useAuth } from '../../auth/useAuth';
 import { ACCESO_PRODUCTOS, ACCESO_RECLAMOS, P } from '../../auth/permisos';
 import { cn } from '../../lib/cn';
 import { formatCantidad } from '../../lib/formatters';
-import { BanderaOndeando, BanderaPanama, hoyPanama, useFiestaPatria } from '../../lib/fiestasPatrias';
+import { BanderaPanama, hoyPanama, useFiestaPatria } from '../../lib/fiestasPatrias';
 import * as apiProductos from '../../api/productosDanados';
 import * as apiReclamos from '../../api/reclamos';
 import * as apiContabilidad from '../../api/contabilidad';
@@ -127,12 +127,14 @@ export function InicioPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <BandaPagina className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <TituloPagina icono={House} titulo={`${saludo()}${nombre ? `, ${nombre}` : ''}`}>
-          <p className="bajada-pagina">{bajada}</p>
-        </TituloPagina>
-        <div className="flex flex-wrap items-center gap-2 sm:gap-5">
-          {fiesta && <BanderaOndeando className="hidden sm:flex" />}
+      <BandaPagina panama={!!fiesta} className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        {/* Sobre la bandera el texto blanco no se leería en los cuarteles blancos: va en un recuadro azul. */}
+        <div className={cn(fiesta && 'self-start rounded-2xl bg-[#0a1f44]/65 px-4 py-3 shadow-lg ring-1 ring-white/20 backdrop-blur-md')}>
+          <TituloPagina icono={House} titulo={`${saludo()}${nombre ? `, ${nombre}` : ''}`}>
+            <p className="bajada-pagina">{bajada}</p>
+          </TituloPagina>
+        </div>
+        <div className="flex flex-wrap gap-2">
           {puede(P.pdCrear) && <Atajo to="/productos-danados?nuevo=1">Nuevo reporte</Atajo>}
           {puede(P.recCrear) && <Atajo to="/reclamos?nuevo=1">Nuevo reclamo</Atajo>}
         </div>

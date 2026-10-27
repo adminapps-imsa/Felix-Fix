@@ -29,36 +29,37 @@ export function useFiestaPatria(): Fiesta | null {
 }
 
 /** Bandera de Panamá: cuartel blanco con estrella azul, rojo, azul y blanco con estrella roja. */
+const ESTRELLA = 'M0,-1 L0.2245,-0.309 L0.951,-0.309 L0.3633,0.118 L0.5878,0.809 L0,0.382 L-0.5878,0.809 L-0.3633,0.118 L-0.951,-0.309 L-0.2245,-0.309 Z';
+
 export function BanderaPanama({ className, ondear }: { className?: string; ondear?: boolean }) {
-  const estrella = 'M0,-1 L0.2245,-0.309 L0.951,-0.309 L0.3633,0.118 L0.5878,0.809 L0,0.382 L-0.5878,0.809 L-0.3633,0.118 L-0.951,-0.309 L-0.2245,-0.309 Z';
   return (
     <svg viewBox="0 0 30 20" role="img" aria-label="Bandera de Panamá" className={cn('shrink-0 overflow-hidden rounded-[3px] shadow-sm ring-1 ring-black/10', ondear && 'anim-ondear', className)}>
       <rect width="30" height="20" fill="#fff" />
       <rect x="15" width="15" height="10" fill="#d21034" />
       <rect y="10" width="15" height="10" fill="#005293" />
-      <path d={estrella} transform="translate(7.5 5) scale(3.2)" fill="#005293" />
-      <path d={estrella} transform="translate(22.5 15) scale(3.2)" fill="#d21034" />
+      <path d={ESTRELLA} transform="translate(7.5 5) scale(3.2)" fill="#005293" />
+      <path d={ESTRELLA} transform="translate(22.5 15) scale(3.2)" fill="#d21034" />
     </svg>
+  );
+}
+
+/** Las dos estrellas de la franja-bandera (BandaPagina con `panama`): cuadradas, en el centro de su cuartel. */
+export function EstrellasBanda() {
+  return (
+    <>
+      <svg viewBox="-1 -1 2 2" className="banda-panama-estrella" style={{ left: '25%', top: '25%' }}>
+        <path d={ESTRELLA} fill="#005293" />
+      </svg>
+      <svg viewBox="-1 -1 2 2" className="banda-panama-estrella" style={{ left: '75%', top: '75%' }}>
+        <path d={ESTRELLA} fill="#d21034" />
+      </svg>
+    </>
   );
 }
 
 /** Franja rojo-blanco-azul al pie del encabezado. */
 export function FranjaTricolor() {
   return <div aria-hidden className="franja-tricolor h-[3px]" />;
-}
-
-/** Bandera grande con asta, para la franja de color: la tela ondea en tiras desfasadas. */
-export function BanderaOndeando({ className }: { className?: string }) {
-  return (
-    <div role="img" aria-label="Bandera de Panamá" className={cn('bandera-ondeando', className)}>
-      <span aria-hidden className="bandera-asta" />
-      <span aria-hidden className="bandera-tela">
-        {Array.from({ length: 24 }, (_, i) => (
-          <span key={i} style={{ ['--i' as string]: i }} />
-        ))}
-      </span>
-    </div>
-  );
 }
 
 const COLORES_CONFETI = ['#d21034', '#005293', '#ffffff'];

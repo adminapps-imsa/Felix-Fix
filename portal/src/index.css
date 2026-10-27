@@ -519,58 +519,32 @@ body {
   }
 }
 
-/* Bandera grande en la franja de Inicio: asta con remate dorado y tela en 24 tiras que ondean desfasadas. */
-.bandera-ondeando {
-  --ancho: 96px;
-  --alto: 64px;
-  position: relative;
-  align-items: flex-start;
-  padding-top: 8px;
-  filter: drop-shadow(0 10px 16px rgb(15 10 60 / 0.35));
+/* Fiestas patrias: la franja de Inicio es la bandera (blanco|rojo arriba, azul|blanco abajo) con un brillo de tela que pasa. */
+.banda-pagina.banda-panama {
+  overflow: hidden;
+  background:
+    linear-gradient(to bottom, #fff 50%, #005293 50%) left / 50% 100% no-repeat,
+    linear-gradient(to bottom, #d21034 50%, #fff 50%) right / 50% 100% no-repeat;
 }
-.bandera-asta {
-  position: relative;
-  width: 4px;
-  height: calc(var(--alto) + 30px);
-  border-radius: 2px;
-  background: linear-gradient(90deg, #cbd5e1, #fff 45%, #94a3b8);
+.banda-panama::after {
+  background-image: linear-gradient(100deg, transparent 30%, rgb(255 255 255 / 0.22) 45%, rgb(0 0 0 / 0.06) 55%, transparent 70%);
+  background-size: 250% 100%;
+  mask-image: none;
+  animation: brillo-tela 7s ease-in-out infinite;
 }
-.bandera-asta::before {
-  content: '';
+@keyframes brillo-tela {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -120% 0;
+  }
+}
+.banda-panama-estrella {
   position: absolute;
-  top: -7px;
-  left: 50%;
-  width: 10px;
-  height: 10px;
-  translate: -50% 0;
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, #fef9c3, #eab308 60%, #a16207);
-}
-.bandera-tela {
-  display: flex;
-  width: var(--ancho);
-  height: var(--alto);
-  margin-top: 2px;
-}
-.bandera-tela > span {
-  flex: 1;
-  background: url('/bandera-panama.svg') no-repeat;
-  background-size: var(--ancho) var(--alto);
-  background-position: calc(var(--ancho) / -24 * var(--i)) 0;
-  --a: calc(var(--i) * 0.28px);
-  animation: ola 2.6s ease-in-out infinite;
-  animation-delay: calc(var(--i) * -0.09s);
-}
-@keyframes ola {
-  0%,
-  100% {
-    transform: translateY(calc(var(--a) * -1));
-    filter: brightness(1.08);
-  }
-  50% {
-    transform: translateY(var(--a));
-    filter: brightness(0.88);
-  }
+  height: 34%;
+  aspect-ratio: 1;
+  translate: -50% -50%;
 }
 
 /* Confeti de las fiestas: cae girando y se va; no recibe clics. */
@@ -598,7 +572,7 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bandera-tela > span,
+  .banda-panama::after,
   .anim-ondear,
   .anim-pagina,
   .anim-fila,
