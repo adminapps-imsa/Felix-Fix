@@ -1,3 +1,4 @@
+import { useAuth } from '../auth/useAuth';
 import { cn } from './cn';
 
 export interface Fiesta {
@@ -19,9 +20,29 @@ export function hoyPanama(): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Panama' }).format(new Date());
 }
 
-/** La fiesta de hoy, o null. La ven todos; pasado el día desaparece sola. */
+/**
+ * Solo QA: la temática la ven únicamente estos usuarios, y todos los días, para
+ * revisarla antes de la fecha. Si hoy no es fiesta se simula el 3 de noviembre;
+ * `?fiesta=4` o `?fiesta=5` en la dirección cambia el día simulado.
+ */
+const PREVIA_QA = ['maltamiranda'];
+
+function diaSimulado(): string {
+  const param = new URLSearchParams(window.location.search).get('fiesta');
+  try {
+    if (param) sessionStorage.setItem('felix-fiesta-previa', param);
+    return `11-0${sessionStorage.getItem('felix-fiesta-previa') || '3'}`;
+  } catch {
+    return `11-0${param || '3'}`;
+  }
+}
+
+/** La fiesta de hoy, o null. Solo QA: únicamente para PREVIA_QA. */
 export function useFiestaPatria(): Fiesta | null {
-  return FIESTAS.find((f) => f.dia === hoyPanama().slice(5)) ?? null;
+  const { user } = useAuth();
+  if (!user || !PREVIA_QA.includes(user.username.toLowerCase())) return null;
+  const hoy = hoyPanama().slice(5);
+  return FIESTAS.find((f) => f.dia === hoy) ?? FIESTAS.find((f) => f.dia === diaSimulado()) ?? FIESTAS[0];
 }
 
 /** Bandera de Panamá: cuartel blanco con estrella azul, rojo, azul y blanco con estrella roja. */
