@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../auth/useAuth';
 import { cn } from './cn';
 
@@ -14,6 +15,9 @@ const FIESTAS: Fiesta[] = [
   { dia: '11-04', titulo: '¡Feliz Día de los Símbolos Patrios!', detalle: 'La bandera, el escudo y el himno: orgullo panameño.' },
   { dia: '11-05', titulo: '¡Feliz Día de Colón!', detalle: 'El 5 de noviembre de 1903 Colón consolidó la separación.' },
 ];
+
+/** Confeti una vez al día por persona (false), o en cada carga de la página (true). */
+const CONFETI_CADA_CARGA = false;
 
 /** Fecha de hoy en Panamá, como 'YYYY-MM-DD' (no la del equipo, que puede tener otra zona). */
 export function hoyPanama(): string {
@@ -62,4 +66,79 @@ export function BanderaPanama({ className, ondear }: { className?: string; ondea
 /** Franja rojo-blanco-azul al pie del encabezado. */
 export function FranjaTricolor() {
   return <div aria-hidden className="franja-tricolor h-[3px]" />;
+}
+
+/** Bandera grande con asta, para la franja de color: la tela ondea en tiras desfasadas. */
+export function BanderaOndeando({ className }: { className?: string }) {
+  return (
+    <div role="img" aria-label="Bandera de Panamá" className={cn('bandera-ondeando', className)}>
+      <span aria-hidden className="bandera-asta" />
+      <span aria-hidden className="bandera-tela">
+        {Array.from({ length: 24 }, (_, i) => (
+          <span key={i} style={{ ['--i' as string]: i }} />
+        ))}
+      </span>
+    </div>
+  );
+}
+
+const COLORES_CONFETI = ['#d21034', '#005293', '#ffffff'];
+
+/** Lluvia corta de confeti tricolor al entrar. Sin «reducir movimiento»; nunca tapa clics. */
+export function ConfetiFiesta() {
+  const clave = `felix-confeti-${hoyPanama()}`;
+  const [ver, setVer] = useState(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false;
+    if (CONFETI_CADA_CARGA) return true;
+    try {
+      return !localStorage.getItem(clave);
+    } catch {
+      return true;
+    }
+  });
+  const piezas = useMemo(
+    () =>
+      Array.from({ length: 90 }, (_, i) => ({
+        x: Math.random() * 100,
+        retraso: Math.random() * 0.5,
+        duracion: 1.6 + Math.random() * 0.8,
+        deriva: (Math.random() - 0.5) * 160,
+        giro: (Math.random() - 0.5) * 1080,
+        ancho: 6 + Math.random() * 5,
+        color: COLORES_CONFETI[i % 3],
+      })),
+    []
+  );
+
+  useEffect(() => {
+    if (!ver) return;
+    try {
+      localStorage.setItem(clave, '1');
+    } catch {
+      /* sin almacenamiento puede volver a salir */
+    }
+    const t = setTimeout(() => setVer(false), 3200);
+    return () => clearTimeout(t);
+  }, [ver, clave]);
+
+  if (!ver) return null;
+  return (
+    <div aria-hidden className="confeti">
+      {piezas.map((p, i) => (
+        <span
+          key={i}
+          style={{
+            left: `${p.x}%`,
+            width: p.ancho,
+            height: p.ancho * 1.5,
+            background: p.color,
+            animationDuration: `${p.duracion}s`,
+            animationDelay: `${p.retraso}s`,
+            ['--deriva' as string]: `${p.deriva}px`,
+            ['--giro' as string]: `${p.giro}deg`,
+          }}
+        />
+      ))}
+    </div>
+  );
 }
