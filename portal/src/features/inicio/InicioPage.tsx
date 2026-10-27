@@ -10,7 +10,7 @@ import { useAuth } from '../../auth/useAuth';
 import { ACCESO_PRODUCTOS, ACCESO_RECLAMOS, P } from '../../auth/permisos';
 import { cn } from '../../lib/cn';
 import { formatCantidad } from '../../lib/formatters';
-import { BanderaColgante, BanderaPanama, hoyPanama, useFiestaPatria } from '../../lib/fiestasPatrias';
+import { BanderaPanama, hoyPanama, useFiestaPatria } from '../../lib/fiestasPatrias';
 import * as apiProductos from '../../api/productosDanados';
 import * as apiReclamos from '../../api/reclamos';
 import * as apiContabilidad from '../../api/contabilidad';
@@ -127,13 +127,11 @@ export function InicioPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <BandaPagina className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <BandaPagina panama={!!fiesta} className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <TituloPagina icono={House} titulo={`${saludo()}${nombre ? `, ${nombre}` : ''}`}>
           <p className="bajada-pagina">{bajada}</p>
         </TituloPagina>
-        {/* La bandera cuelga del borde de arriba de la banda (1.5rem sobre el contenido), a la izquierda de los atajos. */}
-        <div className="relative flex flex-wrap items-center gap-2 sm:self-stretch">
-          {fiesta && <BanderaColgante className="absolute -top-6 right-[calc(100%+1.5rem)] hidden sm:block" />}
+        <div className="flex flex-wrap gap-2">
           {puede(P.pdCrear) && <Atajo to="/productos-danados?nuevo=1">Nuevo reporte</Atajo>}
           {puede(P.recCrear) && <Atajo to="/reclamos?nuevo=1">Nuevo reclamo</Atajo>}
         </div>

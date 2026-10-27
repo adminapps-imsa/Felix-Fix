@@ -44,23 +44,25 @@ export function BanderaPanama({ className, ondear }: { className?: string; ondea
 }
 
 /**
- * Bandera vertical colgada de una varilla, para la banda de Inicio. En vertical
- * el cuartel blanco con la estrella azul queda arriba a la izquierda; el rojo, abajo.
+ * La bandera horizontal como tela colgada, de borde a borde de la banda de Inicio
+ * (BandaPagina con `panama`): varilla arriba, pliegues que se mueven y el ruedo ondulado.
+ * Las estrellas van aparte para no deformarse con el ancho.
  */
-export function BanderaColgante({ className }: { className?: string }) {
+export function TelaBandera() {
   return (
-    <div aria-hidden className={cn('bandera-colgante', className)}>
-      <span className="bandera-colgante-varilla" />
-      <span className="bandera-colgante-tela">
-        <svg viewBox="0 0 20 30" preserveAspectRatio="none">
-          <rect width="20" height="30" fill="#fff" />
-          <rect x="10" width="10" height="15" fill="#005293" />
-          <rect y="15" width="10" height="15" fill="#d21034" />
-          <path d={ESTRELLA} transform="translate(5 7.5) scale(3.2)" fill="#005293" />
-          <path d={ESTRELLA} transform="translate(15 22.5) scale(3.2)" fill="#d21034" />
+    <>
+      <span className="bandera-tela">
+        <svg viewBox="-1 -1 2 2" className="bandera-tela-estrella" style={{ left: '25%', top: '25%' }}>
+          <path d={ESTRELLA} fill="#005293" />
         </svg>
+        <svg viewBox="-1 -1 2 2" className="bandera-tela-estrella" style={{ left: '75%', top: '72%' }}>
+          <path d={ESTRELLA} fill="#d21034" />
+        </svg>
+        <span className="bandera-tela-pliegues" />
+        <span className="bandera-tela-sombra" />
       </span>
-    </div>
+      <span className="bandera-tela-varilla" />
+    </>
   );
 }
 
