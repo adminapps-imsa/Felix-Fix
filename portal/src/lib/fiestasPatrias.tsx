@@ -17,7 +17,7 @@ const FIESTAS: Fiesta[] = [
 ];
 
 /** Confeti una vez al día por persona (false), o en cada carga de la página (true). */
-const CONFETI_CADA_CARGA = false;
+const CONFETI_CADA_CARGA = true; // Solo QA: para probarlo, sale en cada carga.
 
 /** Fecha de hoy en Panamá, como 'YYYY-MM-DD' (no la del equipo, que puede tener otra zona). */
 export function hoyPanama(): string {
