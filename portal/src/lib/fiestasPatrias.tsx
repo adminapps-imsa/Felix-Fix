@@ -43,6 +43,27 @@ export function BanderaPanama({ className, ondear }: { className?: string; ondea
   );
 }
 
+/**
+ * Bandera vertical colgada de una varilla, para la banda de Inicio. En vertical
+ * el cuartel blanco con la estrella azul queda arriba a la izquierda; el rojo, abajo.
+ */
+export function BanderaColgante({ className }: { className?: string }) {
+  return (
+    <div aria-hidden className={cn('bandera-colgante', className)}>
+      <span className="bandera-colgante-varilla" />
+      <span className="bandera-colgante-tela">
+        <svg viewBox="0 0 20 30" preserveAspectRatio="none">
+          <rect width="20" height="30" fill="#fff" />
+          <rect x="10" width="10" height="15" fill="#005293" />
+          <rect y="15" width="10" height="15" fill="#d21034" />
+          <path d={ESTRELLA} transform="translate(5 7.5) scale(3.2)" fill="#005293" />
+          <path d={ESTRELLA} transform="translate(15 22.5) scale(3.2)" fill="#d21034" />
+        </svg>
+      </span>
+    </div>
+  );
+}
+
 /** Franja rojo-blanco-azul al pie del encabezado. */
 export function FranjaTricolor() {
   return <div aria-hidden className="franja-tricolor h-[3px]" />;
