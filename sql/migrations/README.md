@@ -58,6 +58,8 @@ sí mismo en `dbo.SchemaMigrations` al terminar.
    `productos_danados.solo_propios` («Solo los reportes que creó») para el rol
    Tienda: cada usuario de tienda ve solo los reportes que creó. Solo agrega esa
    fila en `RolPermisos`; no toca los demás permisos.
+24. `023_rol_vista.sql` — rol `Vista` (solo ver): «Ver reportes» y «Ver
+   reclamos». Solo si el rol aún no tiene permisos guardados.
 
 ## Esquemas QA y Prod
 
