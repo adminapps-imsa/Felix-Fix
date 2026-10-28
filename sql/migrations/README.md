@@ -60,6 +60,8 @@ sí mismo en `dbo.SchemaMigrations` al terminar.
    fila en `RolPermisos`; no toca los demás permisos.
 24. `023_rol_vista.sql` — rol `Vista` (solo ver): «Ver reportes» y «Ver
    reclamos». Solo si el rol aún no tiene permisos guardados.
+25. `024_prod_reclamos_1_2_devolucion.sql` — solo Prod: REC-000001 y
+   REC-000002 pasan a «Devolución al proveedor» (reclamo y productos).
 
 ## Esquemas QA y Prod
 
