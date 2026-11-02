@@ -5,6 +5,8 @@
 #
 #   felix-desplegar estado     -> solo muestra la versión y el health (no cambia nada)
 #   felix-desplegar desplegar  -> despliega lo que haya nuevo en origin/main
+#   felix-desplegar reclamo REC-000006 -> muestra ese reclamo de Prod (solo lectura,
+#                                         deploy/prod/ver-reclamo.js)
 #
 # Pasos al desplegar (se detiene en el primer error):
 #   1. Revisa que Prod esté limpio, en `main`, y que lo nuevo avance sin conflictos.
@@ -40,8 +42,11 @@ if [ "$ACCION" = estado ]; then
   echo "Health: $(curl -s -m 5 "$HEALTH" || echo 'sin respuesta')"
   exit 0
 fi
+if [[ "$ACCION" =~ ^reclamo\ ((REC-?)?[0-9]{1,9})$ ]]; then
+  exec node deploy/prod/ver-reclamo.js "${BASH_REMATCH[1]}"
+fi
 if [ "$ACCION" != desplegar ]; then
-  echo "Acción no permitida: «$ACCION». Solo «estado» o «desplegar»."
+  echo "Acción no permitida: «$ACCION». Solo «estado», «desplegar» o «reclamo REC-000006»."
   exit 2
 fi
 
