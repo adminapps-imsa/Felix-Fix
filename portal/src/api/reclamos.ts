@@ -11,6 +11,7 @@ import type {
   ReclamoLinea,
   RelacionProveedor,
   StatusReclamo,
+  TipoReclamo,
 } from '../types/reclamo';
 
 const BASE = '/reclamos';
@@ -94,6 +95,17 @@ export const imagenPath = (token: string, idx: number) => `${ruta(token)}/imagen
 
 // Devolución a quien lo creó: la compradora lo devuelve con un comentario; quien lo creó corrige y lo reenvía.
 export const devolverReclamo = (token: string, comentario: string) => api.post<Reclamo>(`${ruta(token)}/devolver`, { comentario });
+export const devolverReclamoSupervisor = (token: string, comentario: string) => api.post<Reclamo>(`${ruta(token)}/devolver-supervisor`, { comentario });
+
+/** Productos corregidos de un reclamo devuelto: `lineaId` en los que ya estaban; sin él, los nuevos. */
+export interface LineaCorregida {
+  lineaId?: number | null;
+  codigoBarra: string;
+  descripcion: string;
+  cantidad: number | null;
+  tipo: TipoReclamo;
+}
+export const corregirLineasReclamo = (token: string, lineas: LineaCorregida[]) => api.put<Reclamo>(`${ruta(token)}/lineas`, { lineas });
 export const reenviarReclamo = (token: string, comentario: string) => api.post<Reclamo>(`${ruta(token)}/reenviar`, { comentario });
 
 export interface DatosCorregibles {
@@ -111,12 +123,13 @@ export interface DatosCorregibles {
 }
 export const corregirDatosReclamo = (token: string, datos: DatosCorregibles) => api.patch<Reclamo>(`${ruta(token)}/datos`, datos);
 
-// Retiro del proveedor (reclamos de devolución): día + foto. No cambia el flujo.
+// Entrega al proveedor (reclamos que el proveedor retira): día + foto.
 export function registrarRetiro(token: string, fecha: string, foto: File) {
   const form = new FormData();
   form.set('fecha', fecha);
   form.set('foto', foto);
   return api.postForm<Reclamo>(`${ruta(token)}/retiro`, form);
 }
+export const cambiarRetiro = (token: string, requerido: boolean) => api.put<Reclamo>(`${ruta(token)}/retiro/requerido`, { requerido });
 export const quitarRetiro = (token: string) => api.del<Reclamo>(`${ruta(token)}/retiro`);
 export const fotoRetiroPath = (token: string) => `${ruta(token)}/retiro/foto`;

@@ -4,6 +4,10 @@
 //   nuevo     -> compradoras (reclamos.decidir): hay un reclamo por revisar.
 //   devuelto  -> quien lo creó: la compradora lo devolvió con un comentario.
 //   reenviado -> la compradora que lo devolvió: ya está corregido.
+//   devuelto_supervisor  -> quien lo creó: el supervisor GOF lo devolvió con el motivo.
+//   reenviado_supervisor -> el supervisor GOF que lo devolvió: ya está corregido.
+//   reabierto -> la compradora: un reclamo cerrado volvió a pendiente porque
+//                quien lo creó cambió productos (hay que decidirlos otra vez).
 //   cerrado   -> quien lo envía a contabilidad (reclamos.enviar_contabilidad):
 //                la compradora lo confirmó o rechazó. A quien lo creó ya no
 //                se le avisa (solo informaba; quitado el 2026-10-21).
@@ -54,6 +58,34 @@ const EVENTOS = {
       estado: 'Pendiente de tu revisión',
       frase: (de) => `${de} corrigió el reclamo que devolviste. Revísalo y ciérralo.`,
       etiquetaComentario: 'Su respuesta',
+      boton: 'Abrir y revisar',
+    },
+  },
+  devuelto_supervisor: {
+    persona: {
+      titulo: 'Reclamo devuelto por el supervisor GOF',
+      estado: 'Devuelto por supervisor GOF',
+      frase: (de) => `${de} (supervisor GOF) te devolvió este reclamo. Corrige lo que indica y reenvíalo.`,
+      etiquetaComentario: 'Motivo de la devolución',
+      boton: 'Abrir y corregir',
+    },
+  },
+  reenviado_supervisor: {
+    persona: {
+      titulo: 'Reclamo corregido y reenviado',
+      estado: 'Corregido',
+      frase: (de) => `${de} corrigió el reclamo que devolviste. Ya siguió su curso; revísalo si hace falta.`,
+      etiquetaComentario: 'Su respuesta',
+      boton: 'Abrir',
+    },
+  },
+  reabierto: {
+    area: {
+      permiso: 'reclamos.decidir',
+      titulo: 'Reclamo con productos corregidos',
+      estado: 'Pendiente',
+      frase: (de) => `${de} corrigió productos de este reclamo, que ya estaba cerrado. Decide los productos que cambiaron y vuelve a cerrarlo.`,
+      etiquetaComentario: 'Comentario de quien lo corrigió',
       boton: 'Abrir y revisar',
     },
   },
@@ -139,7 +171,7 @@ export function plantillaAvisoReclamo(evento, r, { comentario, de, nombre, fecha
 
 /**
  * Manda los avisos del evento. No espera ni lanza: se llama después de guardar.
- * @param evento 'nuevo' | 'devuelto' | 'reenviado' | 'cerrado'
+ * @param evento 'nuevo' | 'devuelto' | 'reenviado' | 'devuelto_supervisor' | 'reenviado_supervisor' | 'reabierto' | 'cerrado'
  * @param r      detalle del reclamo
  * @param opts   { para: username de la persona (por defecto quien lo creó), comentario, de: nombre de quien actuó }
  */

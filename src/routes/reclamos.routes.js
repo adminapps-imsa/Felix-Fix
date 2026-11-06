@@ -6,13 +6,13 @@ import { uploadExcelReclamo, uploadExcelPreview, uploadPdfPreview, uploadAdjunto
 import { validateBody, validateQuery } from '../validators/validate.js';
 import { borrarSiFalla } from '../middleware/upload.js';
 import { exigirAlcance } from '../services/acceso/alcanceCompradora.js';
-import { devolverSchema, reenviarSchema, retiroSchema, decisionReclamoSchema, decisionLineaSchema, decisionLineasSchema, listarQuerySchema, proveedorQuerySchema, documentosSapQuerySchema, adjuntoQuerySchema } from '../validators/reclamos.schema.js';
+import { devolverSchema, reenviarSchema, corregirLineasSchema, retiroSchema, cambiarRetiroSchema, decisionReclamoSchema, decisionLineaSchema, decisionLineasSchema, listarQuerySchema, proveedorQuerySchema, documentosSapQuerySchema, adjuntoQuerySchema } from '../validators/reclamos.schema.js';
 
 const router = Router();
 
 // Cualquier permiso de Reclamos incluye verlos (no se puede crear ni decidir
 // lo que no se ve). Crear, decidir y eliminar se exigen en cada ruta.
-router.use(requireAuth, requirePermiso('reclamos.ver', 'reclamos.crear', 'reclamos.adjuntar', 'reclamos.decidir', 'reclamos.eliminar', 'reclamos.contabilidad', 'reclamos.enviar_contabilidad', 'reclamos.retiro_proveedor'));
+router.use(requireAuth, requirePermiso('reclamos.ver', 'reclamos.crear', 'reclamos.adjuntar', 'reclamos.decidir', 'reclamos.eliminar', 'reclamos.contabilidad', 'reclamos.enviar_contabilidad', 'reclamos.retiro_proveedor', 'reclamos.devolver_supervisor'));
 // Cada compradora solo abre (y decide) los reclamos de sus mundos y marcas: los demás responden 404.
 router.param('token', exigirAlcance('reclamo'));
 const crear = requirePermiso('reclamos.crear');
@@ -52,10 +52,16 @@ router.post('/:token/enviar-contabilidad', enviarContabilidad, envioLimiter, con
 const avisoLimiter = rateLimit({ windowMs: 60_000, max: 10, message: { error: 'HttpError', message: 'Demasiados envíos seguidos. Espera un minuto.' } });
 router.post('/:token/devolver', decidir, avisoLimiter, validateBody(devolverSchema), controller.devolver);
 router.patch('/:token/datos', crear, controller.corregirDatos);
+// Supervisor GOF: devuelve en cualquier estado antes de contabilidad (las reglas, en el servicio).
+router.post('/:token/devolver-supervisor', requirePermiso('reclamos.devolver_supervisor'), avisoLimiter, validateBody(devolverSchema), controller.devolverSupervisor);
+// Quien lo creó corrige los productos del reclamo devuelto.
+router.put('/:token/lineas', crear, validateBody(corregirLineasSchema), controller.corregirLineas);
 router.post('/:token/reenviar', crear, avisoLimiter, validateBody(reenviarSchema), controller.reenviar);
 
-// Retiro del proveedor (reclamos de devolución): lo marca Gof. No cambia el flujo.
+// Retiro del proveedor (los que el proveedor retira): Gof marca la entrega.
+// Quien lo creó (o el super administrador) puede corregir si lo retira o no.
 const retiro = requirePermiso('reclamos.retiro_proveedor');
+router.put('/:token/retiro/requerido', requirePermiso('reclamos.crear', 'configuracion.administrar'), validateBody(cambiarRetiroSchema), controller.cambiarRetiro);
 router.post('/:token/retiro', retiro, uploadFotoRetiro, borrarSiFalla, validateBody(retiroSchema), controller.registrarRetiro);
 router.delete('/:token/retiro', retiro, controller.quitarRetiro);
 router.get('/:token/retiro/foto', controller.fotoRetiro);

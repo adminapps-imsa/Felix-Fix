@@ -26,7 +26,7 @@ import { exigirDivision } from '../divisiones.js';
 import { avisarReclamo } from '../correo/avisosReclamos.js';
 import { env } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
-import { normalizarDocSap, motivoDocsRepetidos, motivoDocsEnOtrosReclamos, documentosUsados, motivoFechaLlegadaInvalida } from '../../domain/reclamo.js';
+import { normalizarDocSap, motivoDocsRepetidos, motivoDocsEnOtrosReclamos, documentosUsados, motivoFechaLlegadaInvalida, esDevolucion } from '../../domain/reclamo.js';
 import { diaPanama } from '../../domain/tablero.js';
 import { tipoReal, tipoRealDeArchivo, nombreUsuario, detalle, exigir, conDocumentos } from './comun.js';
 import { reclamoArchivoPath } from '../../config/almacenamiento.js';
@@ -346,6 +346,8 @@ export async function crear(body, multerFile, usuario, pdfs = []) {
         adjuntosExtra: adjuntosSap,
         token,
         status: TIPOS_SOLO_NOTIFICACION.has(data.tipo) ? 'notificado' : 'pendiente',
+        // Las devoluciones (del tipo o con algún producto de ese motivo) siempre las retira el proveedor.
+        retiroProveedor: data.retiroProveedor === 'si' || esDevolucion({ Tipo: data.tipo, LineasDevolucion: lineas.filter((l) => l.tipo === 'devolucion').length }),
         archivoExcel: multerFile ? multerFile.filename : null,
         archivoExcelNombre: multerFile ? path.basename(multerFile.originalname || '').slice(0, 255) : null,
         createdBy: nombreUsuario(usuario),

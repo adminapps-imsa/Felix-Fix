@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { AlertTriangle, ArrowLeft, Building2, CheckCircle2, ClipboardList, FileText, Landmark, Send, Trash2, Undo2, XCircle } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Building2, CheckCircle2, ClipboardList, FileText, Landmark, Send, ShieldAlert, Trash2, Undo2, XCircle } from 'lucide-react';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { BandaPagina } from '../../../components/ui/TituloPagina';
 import { Dato, SeccionDatos } from '../../../components/ui/DatosDetalle';
@@ -21,7 +21,7 @@ import { ConfirmModal } from '../components/ConfirmModal';
 import { DevolucionReclamo, DevolverModal } from '../components/DevolucionReclamo';
 import { RetiroProveedor } from '../components/RetiroProveedor';
 import { usePermisosReclamos } from '../lib/usePermisosReclamos';
-import { TIPO_LABEL, formatFechaCorta, esDevolucion } from '../lib/tipos';
+import { STATUS_LABEL, TIPO_LABEL, formatFechaCorta, llevaRetiro } from '../lib/tipos';
 
 export function ReclamoDetallePage() {
   const { token = '' } = useParams();
@@ -84,6 +84,15 @@ export function ReclamoDetallePage() {
     setLineas(ls);
     recargarReclamo();
   };
+  /** Después de corregir productos: el encabezado ya viene en la respuesta; los productos se vuelven a pedir. */
+  const productosCorregidos = (r: Reclamo) => {
+    setReclamo(r);
+    const pedido = token;
+    apiReclamos
+      .obtenerLineas(pedido)
+      .then((ls) => tokenActual.current === pedido && setLineas(ls))
+      .catch(() => {});
+  };
 
   if (error) {
     return (
@@ -122,6 +131,11 @@ export function ReclamoDetallePage() {
   const devuelto = reclamo.Status === 'devuelto';
   const puedeCorregir =
     devuelto && Boolean(permisos?.puedeCrear) && (permisos?.username === reclamo.CreatedBy || Boolean(permisos?.puedeCorregirCualquiera));
+  // «¿Lo retira el proveedor?»: lo corrige quien lo creó o el super administrador.
+  const puedeCambiarRetiro = (Boolean(permisos?.puedeCrear) && permisos?.username === reclamo.CreatedBy) || Boolean(permisos?.puedeCorregirCualquiera);
+  // Supervisor GOF: lo devuelve a quien lo creó en cualquier estado mientras no se haya enviado a contabilidad (el backend lo vuelve a revisar).
+  const puedeDevolverSupervisor =
+    Boolean(permisos?.puedeDevolverSupervisor) && Boolean(reclamo.CreatedBy) && !devuelto && !reclamo.EnviadoContabilidadAt;
 
   return (
     <div className="flex flex-col gap-6">
@@ -138,7 +152,7 @@ export function ReclamoDetallePage() {
         <span className="etiqueta">Reclamo</span>
         <h1 className="numero-caso text-5xl">{reclamo.Numero}</h1>
         <div className="mt-1 flex flex-wrap justify-center gap-2">
-          <StatusReclamoBadge status={reclamo.Status} />
+          <StatusReclamoBadge status={reclamo.Status} devueltoPor={reclamo.DevueltoPor} />
           <RetiroBadge reclamo={reclamo} />
         </div>
         <RutaCaso pasos={rutaReclamo(reclamo)} className="mt-5 w-full max-w-3xl text-left" />
@@ -146,10 +160,20 @@ export function ReclamoDetallePage() {
       {/* Debajo de la tarjeta principal: sobre la franja de color no se leería. */}
       {aviso && <div className="rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-sm">{aviso}</div>}
 
-      <DevolucionReclamo reclamo={reclamo} puedeCorregir={puedeCorregir} onActualizado={setReclamo} />
+      <DevolucionReclamo
+        reclamo={reclamo}
+        lineas={lineas}
+        puedeCorregir={puedeCorregir}
+        onActualizado={setReclamo}
+        onProductosCorregidos={productosCorregidos}
+      />
 
-      {/* Devolución al proveedor: Gof marca cuándo retiró el producto (no cambia el flujo). */}
-      {esDevolucion(reclamo) && <RetiroProveedor reclamo={reclamo} puedeRegistrar={Boolean(permisos?.puedeRegistrarRetiro)} onActualizado={setReclamo} />}
+      {puedeDevolverSupervisor && <RevisionSupervisor reclamo={reclamo} onDevuelto={setReclamo} />}
+
+      {/* Lo retira el proveedor: Gof marca «Entregado al proveedor»; hasta entonces no está terminado. */}
+      {(llevaRetiro(reclamo) || puedeCambiarRetiro) && (
+        <RetiroProveedor reclamo={reclamo} puedeRegistrar={Boolean(permisos?.puedeRegistrarRetiro)} puedeCambiar={puedeCambiarRetiro} onActualizado={setReclamo} />
+      )}
 
       <GlassCard className="flex flex-col gap-5">
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3 lg:gap-0 lg:divide-x lg:divide-black/5 dark:lg:divide-white/5">
@@ -325,6 +349,34 @@ function EnvioContabilidad({
   );
 }
 
+/**
+ * Supervisor GOF: si algo está mal (adjunto, datos o productos), devuelve el
+ * reclamo a quien lo creó con el motivo. Al reenviarlo vuelve al estado que
+ * tenía, así que no se pierde el avance del flujo.
+ */
+function RevisionSupervisor({ reclamo, onDevuelto }: { reclamo: Reclamo; onDevuelto: (r: Reclamo) => void }) {
+  const [abierto, setAbierto] = useState(false);
+  const creador = reclamo.CreatedByNombre || reclamo.CreatedBy;
+  return (
+    <GlassCard className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex items-start gap-2 text-sm">
+        <ShieldAlert size={18} className="mt-0.5 shrink-0 text-warning" />
+        <div>
+          <h2 className="text-base font-bold">Revisión del supervisor GOF</h2>
+          <p className="opacity-75">
+            ¿Algo está mal en la creación (un adjunto, los datos o los productos)? Devuélvelo a {creador} con el motivo. Cuando lo corrija y lo
+            reenvíe, vuelve a «{STATUS_LABEL[reclamo.Status]}».
+          </p>
+        </div>
+      </div>
+      <Button variant="aviso" tamano="grande" className="shrink-0" onClick={() => setAbierto(true)} title="Devolver a quien lo creó, con el motivo">
+        <Undo2 size={18} /> Devolver a {creador}
+      </Button>
+      {abierto && <DevolverModal reclamo={reclamo} supervisor onClose={() => setAbierto(false)} onDevuelto={(r) => (onDevuelto(r), setAbierto(false))} />}
+    </GlassCard>
+  );
+}
+
 function DecisionReclamo({
   reclamo,
   pendientes,
@@ -387,6 +439,26 @@ function DecisionReclamo({
 
 /** Ruta del reclamo: creado → decisión de la compradora → enviado a contabilidad. */
 function rutaReclamo(r: Reclamo): PasoRuta[] {
+  // Si lo retira el proveedor, el último paso es la entrega: hasta entonces no está terminado.
+  const entrega: PasoRuta[] = !llevaRetiro(r)
+    ? []
+    : r.RetiroProveedorFecha
+      ? [
+          {
+            titulo: 'Entregado al proveedor',
+            estado: 'hecho',
+            tono: 'ok',
+            // RetiroProveedorFecha es solo el día: va como nota; la fecha con hora es la del registro.
+            nota: `El ${formatFechaCorta(r.RetiroProveedorFecha)}`,
+            fecha: r.RetiroProveedorRegistradoAt,
+            quien: r.RetiroProveedorPorNombre || r.RetiroProveedorPor,
+          },
+        ]
+      : [{ titulo: 'Entregado al proveedor', estado: 'actual', nota: 'Esperando que el proveedor lo retire' }];
+  return [...rutaFlujo(r), ...entrega];
+}
+
+function rutaFlujo(r: Reclamo): PasoRuta[] {
   const creado: PasoRuta = { titulo: 'Creado', estado: 'hecho', fecha: r.CreatedAt, quien: r.CreatedByNombre || r.CreatedBy };
   // Notificado: solo informa; no lleva decisión ni va a contabilidad.
   if (r.Status === 'notificado') return [creado, { titulo: 'Notificado', estado: 'hecho', nota: 'Solo informativo' }];
@@ -403,7 +475,11 @@ function rutaReclamo(r: Reclamo): PasoRuta[] {
           quien: r.DecisionByNombre || r.DecisionBy,
         }
       : r.Status === 'devuelto'
-        ? { titulo: 'Con comentario de compradora', estado: 'actual', nota: `Esperando la corrección de ${r.CreatedByNombre || r.CreatedBy}` }
+        ? {
+            titulo: r.DevueltoPor === 'supervisor_gof' ? 'Devuelto por supervisor GOF' : 'Con comentario de compradora',
+            estado: 'actual',
+            nota: `Esperando la corrección de ${r.CreatedByNombre || r.CreatedBy}`,
+          }
         : {
           titulo: 'Decisión de la compradora',
           estado: 'actual',

@@ -11,7 +11,8 @@ const SELECT_BASE = `
     r.ArchivoExcel, r.ArchivoExcelNombre, r.ImagenesExcel, r.AdjuntosExtra,
     r.Status, r.Comentario, r.CreatedAt, r.CreatedBy, r.DecisionAt, r.DecisionBy,
     r.EnviadoContabilidadAt, r.EnviadoContabilidadBy, r.EnviadoContabilidadA,
-    r.RetiroProveedorFecha, r.RetiroProveedorFoto, r.RetiroProveedorPor, r.RetiroProveedorRegistradoAt,
+    r.RetiroProveedor, r.RetiroProveedorFecha, r.RetiroProveedorFoto, r.RetiroProveedorPor, r.RetiroProveedorRegistradoAt,
+    r.StatusAntesDevolucion, r.DevueltoPor,
     (SELECT COUNT(*) FROM ${S}.ReclamoLineas l WHERE l.ReclamoToken = r.Token) AS LineasTotal,
     (SELECT COUNT(*) FROM ${S}.ReclamoLineas l WHERE l.ReclamoToken = r.Token AND l.DecStatus = 'pendiente') AS LineasPendientes,
     (SELECT COUNT(*) FROM ${S}.ReclamoLineas l WHERE l.ReclamoToken = r.Token AND l.DecStatus = 'aprobado') AS LineasAprobadas,
@@ -192,15 +193,16 @@ export async function crear(data, lineas, { docsSap = [], motivoBloqueo } = {}) 
       .input('status', sql.VarChar(15), data.status)
       .input('comentario', sql.NVarChar(1000), data.comentario || null)
       .input('adjuntosExtra', sql.NVarChar(sql.MAX), JSON.stringify(data.adjuntosExtra || []))
+      .input('retiroProveedor', sql.Bit, data.retiroProveedor)
       .input('createdBy', sql.VarChar(150), data.createdBy).query(`
         INSERT INTO ${S}.Reclamos
           (Token, Tipo, Origen, Sucursal, NumeroEmbarqueFactura, FechaRegistro, FechaLlegadaMercancia, Mundo, Departamento, Marca,
            Proveedor, Compradora, Division, Motivo, SapDoc1, SapDoc2, SapDoc3, SapDocsExtra, ArchivoExcel, ArchivoExcelNombre,
-           ImagenesExcel, AdjuntosExtra, Status, Comentario, CreatedBy)
+           ImagenesExcel, AdjuntosExtra, Status, Comentario, RetiroProveedor, CreatedBy)
         VALUES
           (@token, @tipo, @origen, @sucursal, @numeroEmbarqueFactura, @fechaRegistro, @fechaLlegada, @mundo, @departamento, @marca,
            @proveedor, @compradora, @division, @motivo, @sapDoc1, @sapDoc2, @sapDoc3, @sapDocsExtra, @archivoExcel, @archivoExcelNombre,
-           '[]', @adjuntosExtra, @status, @comentario, @createdBy)
+           '[]', @adjuntosExtra, @status, @comentario, @retiroProveedor, @createdBy)
       `);
 
     for (let i = 0; i < lineas.length; i += LINEAS_POR_INSERT) {
@@ -564,9 +566,11 @@ export async function listarComentarios(reclamoId) {
 /**
  * Cambio de estado con su comentario en una sola transacción, con la fila
  * bloqueada. `verificar(fila)` (regla del dominio) devuelve el motivo si no se
- * puede, o null. Devuelve null (no existe), { bloqueado } o { ok: true }.
+ * puede, o null. `hacia(fila)`: el estado nuevo. `devolucion`: true al
+ * devolver (guarda el estado de antes y quién devolvió), false al reenviar
+ * (los limpia). Devuelve null (no existe), { bloqueado } o { ok: true, desde, hacia }.
  */
-async function cambiarConComentario(token, { desde, hacia, tipo, texto, usuario, verificar }) {
+async function cambiarConComentario(token, { hacia, tipo, texto, usuario, verificar, devolucion, devueltoPor = null }) {
   const pool = await getPool();
   const transaction = new sql.Transaction(pool);
   await transaction.begin();
@@ -574,8 +578,10 @@ async function cambiarConComentario(token, { desde, hacia, tipo, texto, usuario,
     const { recordset } = await new sql.Request(transaction)
       .input('token', sql.UniqueIdentifier, token)
       .query(`
-        SELECT ReclamoId, Status, CreatedBy, SapDoc1, SapDoc2, SapDoc3, SapDocsExtra, AdjuntosExtra
-        FROM ${S}.Reclamos WITH (UPDLOCK, HOLDLOCK) WHERE Token = @token`);
+        SELECT r.ReclamoId, r.Status, r.CreatedBy, r.SapDoc1, r.SapDoc2, r.SapDoc3, r.SapDocsExtra, r.AdjuntosExtra,
+               r.EnviadoContabilidadAt, r.StatusAntesDevolucion, r.DevueltoPor,
+               (SELECT COUNT(*) FROM ${S}.ReclamoLineas l WHERE l.ReclamoToken = r.Token AND l.DecStatus = 'pendiente') AS LineasPendientes
+        FROM ${S}.Reclamos r WITH (UPDLOCK, HOLDLOCK) WHERE r.Token = @token`);
     const fila = recordset[0];
     if (!fila) {
       await transaction.rollback();
@@ -586,16 +592,20 @@ async function cambiarConComentario(token, { desde, hacia, tipo, texto, usuario,
       await transaction.rollback();
       return { bloqueado: motivo };
     }
+    const estadoNuevo = hacia(fila);
     const r = await new sql.Request(transaction)
       .input('token', sql.UniqueIdentifier, token)
-      .input('desde', sql.VarChar(15), desde)
-      .input('hacia', sql.VarChar(15), hacia)
+      .input('desde', sql.VarChar(15), fila.Status)
+      .input('hacia', sql.VarChar(15), estadoNuevo)
+      .input('antes', sql.VarChar(15), devolucion ? fila.Status : null)
+      .input('devueltoPor', sql.VarChar(20), devolucion ? devueltoPor : null)
       .input('reclamoId', sql.BigInt, fila.ReclamoId)
       .input('tipo', sql.VarChar(15), tipo)
       .input('texto', sql.NVarChar(1000), texto || null)
       .input('usuario', sql.VarChar(150), usuario).query(`
         DECLARE @n INT;
-        UPDATE ${S}.Reclamos SET Status = @hacia WHERE Token = @token AND Status = @desde;
+        UPDATE ${S}.Reclamos SET Status = @hacia, StatusAntesDevolucion = @antes, DevueltoPor = @devueltoPor
+        WHERE Token = @token AND Status = @desde AND EnviadoContabilidadAt IS NULL;
         SET @n = @@ROWCOUNT;
         IF @n = 1
           INSERT INTO ${S}.ReclamoComentarios (ReclamoId, Tipo, Texto, Usuario) VALUES (@reclamoId, @tipo, @texto, @usuario);
@@ -606,20 +616,103 @@ async function cambiarConComentario(token, { desde, hacia, tipo, texto, usuario,
       return { bloqueado: { mensaje: 'El reclamo cambió mientras tanto. Recarga el detalle.' } };
     }
     await transaction.commit();
-    return { ok: true };
+    return { ok: true, desde: fila.Status, hacia: estadoNuevo, antes: fila.StatusAntesDevolucion, devueltoPor: fila.DevueltoPor };
   } catch (err) {
     await transaction.rollback().catch(() => {});
     throw err;
   }
 }
 
-/** Compradora: pendiente → devuelto, con su comentario. */
-export const devolver = (token, { comentario, usuario, verificar }) =>
-  cambiarConComentario(token, { desde: 'pendiente', hacia: 'devuelto', tipo: 'devuelto', texto: comentario, usuario, verificar });
+/** Compradora (desde pendiente) o supervisor GOF (desde cualquier estado que permita la regla): → devuelto, con su comentario. */
+export const devolver = (token, { comentario, usuario, verificar, devueltoPor }) =>
+  cambiarConComentario(token, { hacia: () => 'devuelto', tipo: 'devuelto', texto: comentario, usuario, verificar, devolucion: true, devueltoPor });
 
-/** Quien lo creó: devuelto → pendiente, con su respuesta (opcional). */
-export const reenviar = (token, { comentario, usuario, verificar }) =>
-  cambiarConComentario(token, { desde: 'devuelto', hacia: 'pendiente', tipo: 'reenviado', texto: comentario, usuario, verificar });
+/** Quien lo creó: devuelto → `hacia(fila)` (el estado de antes, ver dominio.estadoAlReenviar), con su respuesta (opcional). */
+export const reenviar = (token, { comentario, usuario, verificar, hacia }) =>
+  cambiarConComentario(token, { hacia, tipo: 'reenviado', texto: comentario, usuario, verificar, devolucion: false });
+
+/**
+ * Quien lo creó corrige los productos del reclamo devuelto. `plan(fila,
+ * lineasActuales)` (regla del dominio) devuelve { motivo } o { quitar, cambiar,
+ * agregar }; todo se aplica en una transacción con el reclamo bloqueado.
+ * Devuelve null (no existe), { bloqueado } o { ok: true, quitados, cambiados, agregados }.
+ */
+export async function corregirLineas(token, { verificar, plan }) {
+  const pool = await getPool();
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+  try {
+    const { recordset } = await new sql.Request(transaction)
+      .input('token', sql.UniqueIdentifier, token)
+      .query(`SELECT ReclamoId, Status, CreatedBy FROM ${S}.Reclamos WITH (UPDLOCK, HOLDLOCK) WHERE Token = @token`);
+    const fila = recordset[0];
+    if (!fila) {
+      await transaction.rollback();
+      return null;
+    }
+    const motivo = verificar(fila);
+    if (motivo) {
+      await transaction.rollback();
+      return { bloqueado: motivo };
+    }
+    const { recordset: actuales } = await new sql.Request(transaction)
+      .input('token', sql.UniqueIdentifier, token)
+      .query(`SELECT LineaId, Posicion, CodigoBarra, Cantidad, Tipo, DescripcionExcel FROM ${S}.ReclamoLineas WHERE ReclamoToken = @token`);
+    const p = plan(fila, actuales);
+    if (p.motivo) {
+      await transaction.rollback();
+      return { bloqueado: p.motivo };
+    }
+    for (const id of p.quitar) {
+      await new sql.Request(transaction)
+        .input('token', sql.UniqueIdentifier, token)
+        .input('id', sql.BigInt, id)
+        .query(`DELETE FROM ${S}.ReclamoLineas WHERE ReclamoToken = @token AND LineaId = @id`);
+    }
+    for (const l of p.cambiar) {
+      await new sql.Request(transaction)
+        .input('token', sql.UniqueIdentifier, token)
+        .input('id', sql.BigInt, l.lineaId)
+        .input('codigo', sql.VarChar(50), l.codigoBarra)
+        .input('cantidad', sql.Decimal(18, 3), l.cantidad)
+        .input('tipo', sql.VarChar(40), l.tipo)
+        .input('descripcion', sql.NVarChar(300), l.descripcion)
+        .input('dec', sql.VarChar(10), l.decStatus)
+        .input('com', sql.NVarChar(500), l.decComentario || null)
+        .input('by', sql.VarChar(150), l.decBy || null).query(`
+          UPDATE ${S}.ReclamoLineas
+          SET CodigoBarra = @codigo, Cantidad = @cantidad, Tipo = @tipo, DescripcionExcel = @descripcion,
+              DecStatus = @dec, DecComentario = @com, DecBy = @by, DecAt = CASE WHEN @dec = 'aprobado' THEN SYSUTCDATETIME() ELSE NULL END
+          WHERE ReclamoToken = @token AND LineaId = @id`);
+    }
+    if (p.agregar.length) {
+      const { recordset: mx } = await new sql.Request(transaction)
+        .input('token', sql.UniqueIdentifier, token)
+        .query(`SELECT ISNULL(MAX(Posicion), 0) AS maximo FROM ${S}.ReclamoLineas WHERE ReclamoToken = @token`);
+      let pos = mx[0].maximo;
+      for (const l of p.agregar) {
+        pos += 1;
+        await new sql.Request(transaction)
+          .input('token', sql.UniqueIdentifier, token)
+          .input('pos', sql.Int, pos)
+          .input('codigo', sql.VarChar(50), l.codigoBarra)
+          .input('cantidad', sql.Decimal(18, 3), l.cantidad)
+          .input('tipo', sql.VarChar(40), l.tipo)
+          .input('descripcion', sql.NVarChar(300), l.descripcion)
+          .input('dec', sql.VarChar(10), l.decStatus)
+          .input('com', sql.NVarChar(500), l.decComentario || null)
+          .input('by', sql.VarChar(150), l.decBy || null).query(`
+            INSERT INTO ${S}.ReclamoLineas (ReclamoToken, Posicion, CodigoBarra, Cantidad, Tipo, DescripcionExcel, DecStatus, DecComentario, DecAt, DecBy)
+            VALUES (@token, @pos, @codigo, @cantidad, @tipo, @descripcion, @dec, @com, CASE WHEN @dec = 'aprobado' THEN SYSUTCDATETIME() ELSE NULL END, @by)`);
+      }
+    }
+    await transaction.commit();
+    return { ok: true, quitados: p.quitar.length, cambiados: p.cambiar.length, agregados: p.agregar.length };
+  } catch (err) {
+    await transaction.rollback().catch(() => {});
+    throw err;
+  }
+}
 
 /**
  * Quien lo creó corrige los datos del reclamo devuelto. Mismo candado que el
@@ -698,7 +791,7 @@ export async function registrarRetiro(token, { fecha, foto, usuario }, verificar
   await transaction.begin();
   try {
     const { recordset } = await new sql.Request(transaction).input('token', sql.UniqueIdentifier, token).query(`
-      SELECT r.Tipo, r.RetiroProveedorFoto,
+      SELECT r.Tipo, r.RetiroProveedor, r.RetiroProveedorFoto,
         (SELECT COUNT(*) FROM ${S}.ReclamoLineas l WHERE l.ReclamoToken = r.Token AND l.Tipo = 'devolucion') AS LineasDevolucion
       FROM ${S}.Reclamos r WITH (UPDLOCK, HOLDLOCK) WHERE r.Token = @token`);
     const fila = recordset[0];
@@ -736,4 +829,40 @@ export async function quitarRetiro(token) {
     OUTPUT DELETED.RetiroProveedorFoto AS foto
     WHERE Token = @token`);
   return recordset[0] ? { foto: recordset[0].foto } : null;
+}
+
+/**
+ * Cambia la respuesta de «¿lo retira el proveedor?» con la fila bloqueada.
+ * `verificar(fila)` (regla del dominio) devuelve el motivo si no se puede.
+ * Devuelve null (no existe), { bloqueado } o { ok }.
+ */
+export async function cambiarRetiroProveedor(token, requerido, verificar) {
+  const pool = await getPool();
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+  try {
+    const { recordset } = await new sql.Request(transaction).input('token', sql.UniqueIdentifier, token).query(`
+      SELECT r.Tipo, r.CreatedBy, r.RetiroProveedor, r.RetiroProveedorFecha,
+        (SELECT COUNT(*) FROM ${S}.ReclamoLineas l WHERE l.ReclamoToken = r.Token AND l.Tipo = 'devolucion') AS LineasDevolucion
+      FROM ${S}.Reclamos r WITH (UPDLOCK, HOLDLOCK) WHERE r.Token = @token`);
+    const fila = recordset[0];
+    if (!fila) {
+      await transaction.rollback();
+      return null;
+    }
+    const motivo = verificar(fila);
+    if (motivo) {
+      await transaction.rollback();
+      return { bloqueado: motivo };
+    }
+    await new sql.Request(transaction)
+      .input('token', sql.UniqueIdentifier, token)
+      .input('requerido', sql.Bit, requerido)
+      .query(`UPDATE ${S}.Reclamos SET RetiroProveedor = @requerido WHERE Token = @token`);
+    await transaction.commit();
+    return { ok: true };
+  } catch (err) {
+    await transaction.rollback().catch(() => {});
+    throw err;
+  }
 }
