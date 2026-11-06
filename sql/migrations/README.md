@@ -64,6 +64,11 @@ sí mismo en `dbo.SchemaMigrations` al terminar.
    REC-000002 pasan a «Devolución al proveedor» (reclamo y productos).
 26. `026_prod_reclamos_5_6_7_devolucion.sql` — solo Prod: REC-000005,
    REC-000006 y REC-000007 pasan a «Devolución al proveedor» (reclamo y productos).
+27. `028_prod_reclamos_5_6_7_excel.js` — solo Prod: el Excel principal de
+   REC-000005, 006 y 007 pasa a ser el correcto (`archivos/028/`). Valida antes
+   que cada Excel traiga los mismos productos (código, cantidad, motivo); si no,
+   falla sin cambiar nada. Es la primera migración `.js` (`migrate.js` las corre
+   con `default async ({ pool, schema })`).
 
 ## Esquemas QA y Prod
 
