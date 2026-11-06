@@ -62,6 +62,8 @@ sí mismo en `dbo.SchemaMigrations` al terminar.
    reclamos». Solo si el rol aún no tiene permisos guardados.
 25. `024_prod_reclamos_1_2_devolucion.sql` — solo Prod: REC-000001 y
    REC-000002 pasan a «Devolución al proveedor» (reclamo y productos).
+26. `026_prod_reclamos_5_6_7_devolucion.sql` — solo Prod: REC-000005,
+   REC-000006 y REC-000007 pasan a «Devolución al proveedor» (reclamo y productos).
 
 ## Esquemas QA y Prod
 
