@@ -29,7 +29,8 @@ export const PERMISOS = [
   { codigo: 'reclamos.decidir', modulo: 'Reclamos', nombre: 'Aprobar o rechazar', descripcion: 'Decidir reclamos y productos, adjuntar archivos a cualquier reclamo y enviar los reclamos cerrados a contabilidad.' },
   { codigo: 'reclamos.enviar_contabilidad', modulo: 'Reclamos', nombre: 'Enviar reclamos a contabilidad', descripcion: 'Enviar a contabilidad los reclamos ya cerrados por la compradora (Gof, Torre de Control), después de subir el documento con lo aprobado.' },
   { codigo: 'reclamos.contabilidad', modulo: 'Reclamos', nombre: 'Recibir reclamos en contabilidad', descripcion: 'Recibir por correo los reclamos que la compradora envía a contabilidad, con sus productos y adjuntos.' },
-  { codigo: 'reclamos.retiro_proveedor', modulo: 'Reclamos', nombre: 'Registrar retiro del proveedor', descripcion: 'En los reclamos de devolución, marcar que el proveedor ya retiró el producto, con la foto y el día (Gof). No cambia el flujo del reclamo.' },
+  { codigo: 'reclamos.devolver_supervisor', modulo: 'Reclamos', nombre: 'Devolver al creador (supervisor GOF)', descripcion: 'Devolver a quien lo creó un reclamo con algo mal (adjunto, datos o productos), con el motivo, en cualquier estado mientras no se haya enviado a contabilidad. Al reenviarlo vuelve al estado que tenía (supervisor GOF).' },
+  { codigo: 'reclamos.retiro_proveedor', modulo: 'Reclamos', nombre: 'Registrar entrega al proveedor', descripcion: 'En los reclamos que el proveedor retira, marcar «Entregado al proveedor» con la foto y el día (Gof). Hasta entonces el reclamo no queda terminado.' },
   { codigo: 'reclamos.solo_tienda', modulo: 'Reclamos', nombre: 'Solo reclamos de Tienda', descripcion: 'Al crear un reclamo solo puede elegir Tienda, no CEDI (Gof).' },
   { codigo: 'reclamos.eliminar', modulo: 'Reclamos', nombre: 'Eliminar', descripcion: 'Eliminar reclamos y sus adjuntos.' },
 ];

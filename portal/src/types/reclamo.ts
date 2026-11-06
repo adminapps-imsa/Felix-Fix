@@ -71,12 +71,18 @@ export interface Reclamo {
   Status: StatusReclamo;
   /** Productos con motivo «devolución» (para saber si lleva el retiro del proveedor). */
   LineasDevolucion?: number;
-  /** Retiro del proveedor (reclamos de devolución): día, quién lo registró y cuándo. */
+  /** «¿El proveedor va a retirar el producto?» al crearlo; null = creado antes de la pregunta. */
+  RetiroProveedor?: boolean | null;
+  /** Entrega al proveedor: día, quién la registró y cuándo. */
   RetiroProveedorFecha?: string | null;
   RetiroProveedorFoto?: string | null;
   RetiroProveedorPor?: string | null;
   RetiroProveedorPorNombre?: string | null;
   RetiroProveedorRegistradoAt?: string | null;
+  /** Estado que tenía al devolverlo (al reenviar vuelve a él). */
+  StatusAntesDevolucion?: StatusReclamo | null;
+  /** Quién lo devolvió: la compradora o el supervisor GOF (null = compradora). */
+  DevueltoPor?: 'compradora' | 'supervisor_gof' | null;
   /** Historial de devoluciones y reenvíos (viene en el detalle). */
   Comentarios?: ComentarioReclamo[];
   Comentario: string | null;
@@ -106,6 +112,8 @@ export interface ReclamoLinea {
   Cantidad: number | null;
   Tipo: TipoReclamo;
   Descripcion: string | null;
+  /** La descripción guardada del Excel (o la que se corrigió). */
+  DescripcionExcel?: string | null;
   PrecioVenta: number | null;
   /** null = no se pudo validar contra SAP (no disponible). */
   Encontrado: boolean | null;
@@ -217,6 +225,8 @@ export interface PermisosReclamos {
   puedeDevolver: boolean;
   /** Corregir y reenviar cualquier reclamo devuelto (super administrador); los demás, solo los que crearon. */
   puedeCorregirCualquiera: boolean;
+  /** Supervisor GOF: devolver al creador en cualquier estado antes de contabilidad. */
+  puedeDevolverSupervisor: boolean;
   /** Super administrador: elimina el reclamo en cualquier estado. */
   puedeEliminarCualquiera: boolean;
   /** Reclamos de devolución: marcar que el proveedor retiró el producto (Gof). */

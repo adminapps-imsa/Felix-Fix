@@ -225,7 +225,7 @@ export function ReclamosPage() {
                 <span className="flex items-center justify-between gap-3">
                   <span className="numero-caso whitespace-nowrap text-lg leading-tight">{r.Numero}</span>
                   <span className="flex flex-wrap justify-end gap-1.5">
-                    <StatusReclamoBadge status={r.Status} />
+                    <StatusReclamoBadge status={r.Status} devueltoPor={r.DevueltoPor} />
                     <RetiroBadge reclamo={r} />
                   </span>
                 </span>
@@ -306,7 +306,7 @@ export function ReclamosPage() {
                     </td>
                     <td className="px-3 py-3.5">
                       <span className="flex flex-wrap gap-1.5">
-                        <StatusReclamoBadge status={r.Status} />
+                        <StatusReclamoBadge status={r.Status} devueltoPor={r.DevueltoPor} />
                         <RetiroBadge reclamo={r} />
                       </span>
                     </td>

@@ -27,7 +27,9 @@ export function permisos(usuario) {
     // Devolver a quien lo creó: quien decide (la compradora). Corregir y reenviar: quien lo creó o el super administrador.
     puedeDevolver: puedeDecidir,
     puedeCorregirCualquiera: tienePermiso(usuario, 'configuracion.administrar'),
-    // Reclamos de devolución: marcar que el proveedor ya retiró el producto (Gof).
+    // Supervisor GOF: devolver al creador en cualquier estado antes de contabilidad.
+    puedeDevolverSupervisor: tienePermiso(usuario, 'reclamos.devolver_supervisor'),
+    // Marcar «Entregado al proveedor» en los reclamos que el proveedor retira (Gof).
     puedeRegistrarRetiro: tienePermiso(usuario, 'reclamos.retiro_proveedor'),
     esAdmin: puedeDecidir,
     username: nombreUsuario(usuario),

@@ -114,6 +114,14 @@ export const devolver = asyncHandler(async (req, res) => {
   res.json(await service.devolver(req.params.token, req.body, req.user));
 });
 
+export const devolverSupervisor = asyncHandler(async (req, res) => {
+  res.json(await service.devolverSupervisor(req.params.token, req.body, req.user));
+});
+
+export const corregirLineas = asyncHandler(async (req, res) => {
+  res.json(await service.corregirLineas(req.params.token, req.body, req.user));
+});
+
 export const corregirDatos = asyncHandler(async (req, res) => {
   res.json(await service.corregirDatos(req.params.token, req.body, req.user));
 });
@@ -124,6 +132,10 @@ export const reenviar = asyncHandler(async (req, res) => {
 
 export const registrarRetiro = asyncHandler(async (req, res) => {
   res.json(await service.registrarRetiro(req.params.token, req.body, req.file, req.user));
+});
+
+export const cambiarRetiro = asyncHandler(async (req, res) => {
+  res.json(await service.cambiarRetiro(req.params.token, req.body, req.user));
 });
 
 export const quitarRetiro = asyncHandler(async (req, res) => {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { MessageSquareText, Pencil, Plus, Send, Trash2, Undo2 } from 'lucide-react';
+import { ListChecks, MessageSquareText, Pencil, Plus, Send, Trash2, Undo2 } from 'lucide-react';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { Modal } from '../../../components/ui/Modal';
 import { Button } from '../../../components/ui/Button';
@@ -12,12 +12,16 @@ import { ApiError } from '../../../api/client';
 import * as apiReclamos from '../../../api/reclamos';
 import { formatFecha } from '../../../lib/formatters';
 import { cn } from '../../../lib/cn';
-import type { CatalogosReclamo, ComentarioReclamo, Reclamo } from '../../../types/reclamo';
+import type { CatalogosReclamo, ComentarioReclamo, Reclamo, ReclamoLinea, StatusReclamo } from '../../../types/reclamo';
+import { CorregirProductosModal } from './CorregirProductosModal';
+import { STATUS_LABEL } from '../lib/tipos';
 import { useTiendas } from '../../productos-danados/hooks/useTiendas';
 
-// Devolución entre la compradora y quien creó el reclamo:
-//   la compradora lo devuelve con un comentario (estado «Con comentario de compradora»),
-//   quien lo creó corrige los datos, los documentos SAP y sus PDF, y lo reenvía.
+// Devolución a quien creó el reclamo:
+//   la compradora (pendiente) o el supervisor GOF (en cualquier estado antes de
+//   contabilidad) lo devuelve con un comentario; quien lo creó corrige los
+//   datos, los documentos SAP y sus PDF, los adjuntos y los productos, y lo
+//   reenvía: vuelve al estado que tenía.
 // Las reglas las revisa el backend (src/domain/reclamo.js); aquí solo se guía.
 
 const MIN_COMENTARIO = 5;
@@ -29,20 +33,29 @@ const hoyIso = () => {
 
 const mensajeError = (err: unknown, porDefecto: string) => (err instanceof ApiError ? err.message : porDefecto);
 
+const porSupervisor = (r: Reclamo) => r.DevueltoPor === 'supervisor_gof';
+/** A quién vuelve al reenviar: la compradora o «su curso» (el estado que tenía). */
+const destinoReenvio = (r: Reclamo) => (porSupervisor(r) ? 'Reenviar' : 'Reenviar a la compradora');
+
 /**
  * Tarjeta de la devolución: el comentario de la compradora a la vista, qué
  * hacer, los botones de quien corrige y el historial de idas y vueltas.
  */
 export function DevolucionReclamo({
   reclamo,
+  lineas,
   puedeCorregir,
   onActualizado,
+  onProductosCorregidos,
 }: {
   reclamo: Reclamo;
+  lineas: ReclamoLinea[];
   puedeCorregir: boolean;
   onActualizado: (r: Reclamo) => void;
+  onProductosCorregidos: (r: Reclamo) => void;
 }) {
   const [editar, setEditar] = useState(false);
+  const [productos, setProductos] = useState(false);
   const [reenviar, setReenviar] = useState(false);
   const comentarios = reclamo.Comentarios ?? [];
   const devuelto = reclamo.Status === 'devuelto';
@@ -54,12 +67,13 @@ export function DevolucionReclamo({
     <GlassCard className={cn('flex flex-col gap-4', devuelto && 'ring-2 ring-brand-500/40')}>
       <h2 className="flex items-center gap-2 text-base font-bold">
         <Undo2 size={17} className={devuelto ? 'text-brand-600 dark:text-brand-400' : undefined} />
-        {devuelto ? 'Devuelto para corregir' : 'Correcciones'}
+        {devuelto ? (porSupervisor(reclamo) ? 'Devuelto por el supervisor GOF' : 'Devuelto para corregir') : 'Correcciones'}
       </h2>
 
       {devuelto && ultima && (
         <div className="rounded-xl border-l-4 border-brand-500 bg-brand-500/10 px-4 py-3 dark:border-brand-400">
           <p className="text-xs font-semibold text-brand-600 dark:text-brand-400">
+            {porSupervisor(reclamo) ? 'Motivo · ' : ''}
             {ultima.UsuarioNombre} · {formatFecha(ultima.Fecha)}
           </p>
           <p className="mt-1 whitespace-pre-line text-[0.9375rem]">{ultima.Texto}</p>
@@ -70,17 +84,25 @@ export function DevolucionReclamo({
         (puedeCorregir ? (
           <>
             <ol className="flex flex-col gap-1.5 text-sm opacity-80">
-              <li>1. Corrige los datos o los documentos SAP con «Corregir datos».</li>
-              <li>2. Si cambiaste un documento SAP, sube su PDF en Adjuntos y quita el que ya no va.</li>
-              <li>3. Pulsa «Reenviar a la compradora».</li>
+              <li>1. Corrige los datos o los documentos SAP con «Corregir datos», y los productos con «Corregir productos».</li>
+              <li>2. Si un adjunto está mal o cambiaste un documento SAP, sube el correcto en Adjuntos y quita el que ya no va.</li>
+              <li>
+                3. Pulsa «{destinoReenvio(reclamo)}».
+                {porSupervisor(reclamo) && reclamo.StatusAntesDevolucion && (
+                  <> Vuelve a «{STATUS_LABEL[reclamo.StatusAntesDevolucion as StatusReclamo]}», como estaba.</>
+                )}
+              </li>
             </ol>
             <div className="flex flex-wrap justify-end gap-2">
               {/* Amarillo y grande: es lo primero que tiene que hacer quien recibe el reclamo devuelto. */}
               <Button variant="aviso" tamano="grande" onClick={() => setEditar(true)}>
                 <Pencil size={18} /> Corregir datos
               </Button>
+              <Button variant="secondary" tamano="grande" onClick={() => setProductos(true)}>
+                <ListChecks size={18} /> Corregir productos
+              </Button>
               <Button onClick={() => setReenviar(true)}>
-                <Send size={15} /> Reenviar a la compradora
+                <Send size={15} /> {destinoReenvio(reclamo)}
               </Button>
             </div>
           </>
@@ -92,6 +114,14 @@ export function DevolucionReclamo({
 
       {comentarios.length > (devuelto ? 1 : 0) && <Historial comentarios={comentarios} />}
 
+      {productos && (
+        <CorregirProductosModal
+          reclamo={reclamo}
+          lineas={lineas}
+          onClose={() => setProductos(false)}
+          onGuardado={(r) => (onProductosCorregidos(r), setProductos(false))}
+        />
+      )}
       {editar && <EditarDatosModal reclamo={reclamo} onClose={() => setEditar(false)} onGuardado={(r) => (onActualizado(r), setEditar(false))} />}
       {reenviar && <ReenviarModal reclamo={reclamo} onClose={() => setReenviar(false)} onReenviado={(r) => (onActualizado(r), setReenviar(false))} />}
     </GlassCard>
@@ -123,8 +153,21 @@ function Historial({ comentarios }: { comentarios: ComentarioReclamo[] }) {
   );
 }
 
-/** Compradora: devolver el reclamo a quien lo creó, con lo que hay que corregir (obligatorio). */
-export function DevolverModal({ reclamo, onClose, onDevuelto }: { reclamo: Reclamo; onClose: () => void; onDevuelto: (r: Reclamo) => void }) {
+/**
+ * Devolver el reclamo a quien lo creó, con lo que hay que corregir (obligatorio).
+ * `supervisor`: lo devuelve el supervisor GOF (en cualquier estado antes de contabilidad).
+ */
+export function DevolverModal({
+  reclamo,
+  supervisor = false,
+  onClose,
+  onDevuelto,
+}: {
+  reclamo: Reclamo;
+  supervisor?: boolean;
+  onClose: () => void;
+  onDevuelto: (r: Reclamo) => void;
+}) {
   const [comentario, setComentario] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -138,7 +181,8 @@ export function DevolverModal({ reclamo, onClose, onDevuelto }: { reclamo: Recla
     setBusy(true);
     setError(null);
     try {
-      onDevuelto(await apiReclamos.devolverReclamo(reclamo.Token, comentario.trim()));
+      const devolver = supervisor ? apiReclamos.devolverReclamoSupervisor : apiReclamos.devolverReclamo;
+      onDevuelto(await devolver(reclamo.Token, comentario.trim()));
       avisos.ok(`Reclamo ${reclamo.Numero} devuelto a ${creador}.`);
     } catch (err) {
       setError(mensajeError(err, 'No se pudo devolver el reclamo.'));
@@ -149,18 +193,29 @@ export function DevolverModal({ reclamo, onClose, onDevuelto }: { reclamo: Recla
   return (
     <Modal title={`Devolver ${reclamo.Numero}`} onClose={onClose} dismissible={!comentario.trim()}>
       <form onSubmit={enviar} className="flex flex-col gap-4 text-sm">
-        <p>
-          El reclamo vuelve a <strong className="font-semibold">{creador}</strong> para que lo corrija. Le llega un correo con tu comentario. Las
-          decisiones de productos que ya tomaste se conservan.
-        </p>
-        <Field label="¿Qué hay que corregir?">
+        {supervisor ? (
+          <p>
+            El reclamo vuelve a <strong className="font-semibold">{creador}</strong> para que lo corrija (datos, adjuntos o productos). Le llega un
+            correo con el motivo. Cuando lo reenvíe, vuelve a «{STATUS_LABEL[reclamo.Status]}», como está ahora, y te llega un aviso.
+          </p>
+        ) : (
+          <p>
+            El reclamo vuelve a <strong className="font-semibold">{creador}</strong> para que lo corrija. Le llega un correo con tu comentario. Las
+            decisiones de productos que ya tomaste se conservan.
+          </p>
+        )}
+        <Field label={supervisor ? 'Motivo de la devolución' : '¿Qué hay que corregir?'}>
           <Textarea
             required
             autoFocus
             rows={4}
             minLength={MIN_COMENTARIO}
             maxLength={1000}
-            placeholder="Por ejemplo: el documento SAP 4904151684 no es el de esta factura; revisa la marca."
+            placeholder={
+              supervisor
+                ? 'Por ejemplo: el PDF adjunto no es el de esta factura; súbelo de nuevo.'
+                : 'Por ejemplo: el documento SAP 4904151684 no es el de esta factura; revisa la marca.'
+            }
             value={comentario}
             onChange={(e) => setComentario(e.target.value)}
           />
@@ -191,7 +246,7 @@ function ReenviarModal({ reclamo, onClose, onReenviado }: { reclamo: Reclamo; on
     setError(null);
     try {
       onReenviado(await apiReclamos.reenviarReclamo(reclamo.Token, comentario.trim()));
-      avisos.ok(`Reclamo ${reclamo.Numero} reenviado a la compradora.`);
+      avisos.ok(porSupervisor(reclamo) ? `Reclamo ${reclamo.Numero} reenviado.` : `Reclamo ${reclamo.Numero} reenviado a la compradora.`);
     } catch (err) {
       setError(mensajeError(err, 'No se pudo reenviar el reclamo.'));
       setBusy(false);
@@ -201,8 +256,15 @@ function ReenviarModal({ reclamo, onClose, onReenviado }: { reclamo: Reclamo; on
   return (
     <Modal title={`Reenviar ${reclamo.Numero}`} onClose={onClose} dismissible={!comentario.trim()}>
       <form onSubmit={enviar} className="flex flex-col gap-4 text-sm">
-        <p>Vuelve a la compradora como pendiente, y le llega un correo avisando que ya está corregido.</p>
-        <Field label="Respuesta para la compradora" opcional>
+        {porSupervisor(reclamo) ? (
+          <p>
+            Vuelve a «{STATUS_LABEL[(reclamo.StatusAntesDevolucion || 'pendiente') as StatusReclamo]}», como estaba, y al supervisor GOF le llega un
+            correo avisando que ya está corregido. Si cambiaste productos de un reclamo ya cerrado, vuelve a la compradora para que los decida.
+          </p>
+        ) : (
+          <p>Vuelve a la compradora como pendiente, y le llega un correo avisando que ya está corregido.</p>
+        )}
+        <Field label={porSupervisor(reclamo) ? 'Respuesta' : 'Respuesta para la compradora'} opcional>
           <Textarea
             autoFocus
             rows={3}
@@ -218,7 +280,7 @@ function ReenviarModal({ reclamo, onClose, onReenviado }: { reclamo: Reclamo; on
             Cancelar
           </Button>
           <Button type="submit" estado={busy ? 'cargando' : null}>
-            <Send size={15} /> {busy ? 'Reenviando…' : 'Reenviar a la compradora'}
+            <Send size={15} /> {busy ? 'Reenviando…' : destinoReenvio(reclamo)}
           </Button>
         </div>
       </form>
@@ -226,7 +288,7 @@ function ReenviarModal({ reclamo, onClose, onReenviado }: { reclamo: Reclamo; on
   );
 }
 
-/** Quien lo creó corrige los datos del formulario y los documentos SAP. El origen y los productos no cambian. */
+/** Quien lo creó corrige los datos del formulario y los documentos SAP. El origen y el tipo no cambian (los productos, en CorregirProductosModal). */
 function EditarDatosModal({ reclamo, onClose, onGuardado }: { reclamo: Reclamo; onClose: () => void; onGuardado: (r: Reclamo) => void }) {
   const tiendas = useTiendas();
   const [cat, setCat] = useState<CatalogosReclamo | null>(null);
@@ -278,7 +340,8 @@ function EditarDatosModal({ reclamo, onClose, onGuardado }: { reclamo: Reclamo; 
     <Modal title={`Corregir ${reclamo.Numero}`} onClose={onClose} wide dismissible={false}>
       <form onSubmit={guardar} className="flex flex-col gap-5 text-sm">
         <p className="opacity-75">
-          Corrige lo que la compradora indicó. El origen ({cedi ? 'CEDI' : 'Tienda'}), el tipo y los productos del Excel no cambian.
+          Corrige lo que se indicó en la devolución. El origen ({cedi ? 'CEDI' : 'Tienda'}) y el tipo no cambian; los productos se corrigen con
+          «Corregir productos».
         </p>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {cedi ? (

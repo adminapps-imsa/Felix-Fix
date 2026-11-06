@@ -33,6 +33,14 @@ export const TIPO_LABEL_CORTO: Record<TipoReclamo, string> = {
 /** Reclamo de devolución: del tipo, o con algún producto de ese motivo (lleva el retiro del proveedor). */
 export const esDevolucion = (r: { Tipo: TipoReclamo; LineasDevolucion?: number }) => r.Tipo === 'devolucion' || Number(r.LineasDevolucion) > 0;
 
+type ConRetiro = { Tipo: TipoReclamo; LineasDevolucion?: number; RetiroProveedor?: boolean | null; RetiroProveedorFecha?: string | null };
+
+/** Lo retira el proveedor: devoluciones siempre; los demás si al crearlo se contestó que sí (igual que el backend). */
+export const llevaRetiro = (r: ConRetiro) => esDevolucion(r) || r.RetiroProveedor === true;
+
+/** Esperando que el proveedor se lo lleve: hasta entonces el reclamo no está terminado. */
+export const esperaRetiro = (r: ConRetiro) => llevaRetiro(r) && !r.RetiroProveedorFecha;
+
 export const STATUS_LABEL: Record<StatusReclamo, string> = {
   pendiente: 'Pendiente',
   // El valor interno sigue siendo 'resuelto'; solo cambia lo que se ve.
@@ -41,6 +49,10 @@ export const STATUS_LABEL: Record<StatusReclamo, string> = {
   notificado: 'Notificado',
   devuelto: 'Con comentario de compradora',
 };
+
+/** Etiqueta del estado; el devuelto dice quién lo devolvió. */
+export const etiquetaStatus = (status: StatusReclamo, devueltoPor?: string | null) =>
+  status === 'devuelto' && devueltoPor === 'supervisor_gof' ? 'Devuelto por supervisor GOF' : STATUS_LABEL[status];
 
 /** Deben coincidir con TIPOS_AUTO_APROBADOS del backend (src/services/reclamos/tipos.js). */
 export const TIPOS_AUTO_APROBADOS = new Set<TipoReclamo>([

@@ -1,7 +1,8 @@
-// Retiro del proveedor en los reclamos de devolución: Gof marca que el
-// proveedor ya se llevó el producto, con la foto y el día. Solo deja
-// constancia: no cambia el estado ni las decisiones del reclamo.
-// Regla: dominio.motivoNoRegistrarRetiro.
+// Retiro del proveedor: en los reclamos que el proveedor retira (al crearlo se
+// contestó que sí, o es de devolución), Gof marca «Entregado al proveedor»
+// con la foto y el día. No cambia el Status ni las decisiones: hasta la
+// entrega el reclamo no cuenta como terminado.
+// Reglas: dominio.motivoNoRegistrarRetiro y dominio.motivoNoCambiarRetiro.
 import path from 'node:path';
 import * as repo from '../../repositories/reclamosRepository.js';
 import * as dominio from '../../domain/reclamo.js';
@@ -9,6 +10,7 @@ import { diaPanama } from '../../domain/tablero.js';
 import { borrarArchivos, CONTENT_TYPE_IMAGEN } from './excelImages.js';
 import { reclamoArchivoPath } from '../../config/almacenamiento.js';
 import { badRequest, notFound } from '../../utils/httpError.js';
+import { tienePermiso, PERMISO_CONFIGURACION } from '../acceso/permisos.js';
 import { logger } from '../../utils/logger.js';
 import { obtenerOFallar, validarToken, exigir, nombreUsuario, detalle, tipoRealDeArchivo } from './comun.js';
 
@@ -33,6 +35,18 @@ export async function registrarRetiro(token, { fecha }, foto, usuario) {
     await borrarArchivos(creados);
     throw err;
   }
+}
+
+/** Quien lo creó (o el super administrador) corrige si el proveedor lo retira o no. */
+export async function cambiarRetiro(token, { requerido }, usuario) {
+  validarToken(token);
+  const quien = { username: nombreUsuario(usuario), esAdmin: tienePermiso(usuario, PERMISO_CONFIGURACION) };
+  const res = await repo.cambiarRetiroProveedor(token, requerido, (fila) => dominio.motivoNoCambiarRetiro(fila, quien));
+  if (!res) throw notFound('Reclamo no encontrado.');
+  exigir(res.bloqueado);
+  const dto = await detalle(token);
+  logger.info({ reclamo: dto.Numero, requerido, usuario: nombreUsuario(usuario) }, 'Cambió si el proveedor retira el reclamo');
+  return dto;
 }
 
 export async function quitarRetiro(token, usuario) {

@@ -158,6 +158,9 @@ export function NuevoReclamoForm({
   const idDivision = useId();
   const [tipo, setTipo] = useState<TipoReclamo | ''>('');
   const [modoManual, setModoManual] = useState(false);
+  // «¿El proveedor va a retirar el producto?»: obligatoria y sin respuesta marcada.
+  const [retiro, setRetiro] = useState<'' | 'si' | 'no'>('');
+  const idRetiro = useId();
   const [sapDocs, setSapDocs] = useState<string[]>(['', '', '']);
   // Documentos que ya están en otro reclamo (clave normalizada → reclamos). Un documento SAP pertenece a un solo reclamo.
   const [docsUsados, setDocsUsados] = useState<Map<string, DocumentoSapUsado['reclamos']>>(new Map());
@@ -328,6 +331,8 @@ export function NuevoReclamoForm({
     () => (Object.entries(preview?.desglose || {}) as [TipoReclamo, number][]).sort((a, b) => b[1] - a[1]),
     [preview]
   );
+  // Devolución (el tipo o algún producto del Excel): siempre la retira el proveedor.
+  const esDevolucionForm = tipo === 'devolucion' || desglose.some(([t]) => t === 'devolucion');
   const categoriasExcel = useMemo(() => new Set(desglose.map(([t]) => categoriaTipo(t))), [desglose]);
   const desajuste = Boolean(tipo) && categoriasExcel.size > 0 && !categoriasExcel.has(categoriaTipo(tipo || null));
   const tipoSugerido = preview?.tipoSugerido ?? null;
@@ -415,6 +420,7 @@ export function NuevoReclamoForm({
     !campos.mundo.trim() && 'Mundo',
     !campos.departamento.trim() && 'Departamento',
     !campos.marca.trim() && 'Marca',
+    !esDevolucionForm && !retiro && '¿El proveedor va a retirar el producto?',
     docsLlenos === 0 && 'Documento SAP',
     !pdfsLeyendo && docsSinPdf.length > 0 && `PDF del documento SAP ${docsSinPdf.join(', ')}`,
   ].filter(Boolean) as string[];
@@ -473,6 +479,7 @@ export function NuevoReclamoForm({
       form.set('sapDoc2', docs[1] || '');
       form.set('sapDoc3', docs[2] || '');
       form.set('sapDocsExtra', JSON.stringify(docs.slice(3).filter(Boolean)));
+      form.set('retiroProveedor', esDevolucionForm ? 'si' : retiro);
       pdfsSap.forEach((p) => form.append('pdfs', p.file));
 
       setProgreso('Creando reclamo…');
@@ -806,6 +813,23 @@ export function NuevoReclamoForm({
                 className="sm:col-start-2"
               >
                 <CampoFecha required max={hoyIso()} value={campos.fechaLlegadaMercancia} onChange={(v) => set('fechaLlegadaMercancia', v)} />
+              </Field>
+              {/* Si lo retira el proveedor, el reclamo no queda terminado hasta que Gof marque «Entregado al proveedor». */}
+              <Field label="¿El proveedor va a retirar el producto?" grupo idEtiqueta={idRetiro} className="sm:col-span-2">
+                {esDevolucionForm ? (
+                  <p className="text-sm opacity-70">Sí: es una devolución, el proveedor siempre la retira.</p>
+                ) : (
+                  <SelectorOpciones
+                    etiquetaId={idRetiro}
+                    required
+                    opciones={['Sí', 'No']}
+                    value={retiro === 'si' ? 'Sí' : retiro === 'no' ? 'No' : ''}
+                    onChange={(v) => setRetiro(v === 'Sí' ? 'si' : 'no')}
+                  />
+                )}
+                {(esDevolucionForm || retiro === 'si') && (
+                  <span className="anim-aparecer text-xs opacity-60">El reclamo quedará esperando el retiro hasta que Gof marque «Entregado al proveedor».</span>
+                )}
               </Field>
             </div>
           </SeccionForm>

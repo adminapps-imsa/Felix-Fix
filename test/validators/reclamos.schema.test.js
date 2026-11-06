@@ -19,6 +19,7 @@ const base = {
   marca: 'Zara',
   proveedor: 'ACME',
   compradora: 'kmojica',
+  retiroProveedor: 'no',
 };
 const mensajes = (r) => r.error.issues.map((i) => i.message);
 
@@ -36,6 +37,7 @@ test('crear: campos obligatorios con su mensaje', () => {
     ['proveedor', 'Proveedor es obligatorio.'],
     ['compradora', 'Compradora es obligatorio.'],
     ['fechaLlegadaMercancia', 'Indica la fecha de llegada de la mercancía.'],
+    ['retiroProveedor', 'Indica si el proveedor va a retirar el producto (Sí o No).'],
   ]) {
     const r = crearReclamoSchema.safeParse({ ...base, [campo]: '   ' });
     assert.equal(r.success, false, campo);
@@ -107,4 +109,16 @@ test('decisión en bloque: posiciones enteras positivas', () => {
   assert.equal(decisionLineasSchema.safeParse({ posiciones: [1, 2], decision: 'aprobado' }).success, true);
   for (const posiciones of [[], [0], [1.5]]) assert.equal(decisionLineasSchema.safeParse({ posiciones, decision: 'aprobado' }).success, false);
   assert.equal(decisionLineasSchema.safeParse({ posiciones: [1], decision: 'quizá' }).success, false);
+});
+
+test('corregirLineasSchema: al menos un producto, con código y motivo válido', async () => {
+  const { corregirLineasSchema } = await import('../../src/validators/reclamos.schema.js');
+  assert.equal(corregirLineasSchema.safeParse({ lineas: [] }).success, false);
+  assert.equal(corregirLineasSchema.safeParse({ lineas: [{ codigoBarra: '', tipo: 'diferencias' }] }).success, false);
+  assert.equal(corregirLineasSchema.safeParse({ lineas: [{ codigoBarra: '1', tipo: 'otro' }] }).success, false);
+  assert.equal(corregirLineasSchema.safeParse({ lineas: [{ codigoBarra: '1', tipo: 'diferencias', cantidad: -1 }] }).success, false);
+  const ok = corregirLineasSchema.safeParse({ lineas: [{ lineaId: 3, codigoBarra: ' 1 ', tipo: 'diferencias', cantidad: 2 }, { codigoBarra: '2', tipo: 'devolucion' }] });
+  assert.equal(ok.success, true);
+  assert.equal(ok.data.lineas[0].codigoBarra, '1');
+  assert.equal(ok.data.lineas[1].cantidad, null);
 });

@@ -2,7 +2,7 @@ import { CheckCircle2, Clock, Bell, XCircle, Undo2, Truck } from 'lucide-react';
 import type React from 'react';
 import { cn } from '../../../lib/cn';
 import type { Reclamo, StatusReclamo, TipoReclamo } from '../../../types/reclamo';
-import { STATUS_LABEL, TIPO_LABEL_CORTO, esDevolucion, formatFechaCorta } from '../lib/tipos';
+import { TIPO_LABEL_CORTO, etiquetaStatus, llevaRetiro, formatFechaCorta } from '../lib/tipos';
 
 // Mismos colores que EstadoBadge de Productos Dañados.
 const STATUS_STYLE: Record<StatusReclamo, string> = {
@@ -22,11 +22,11 @@ const STATUS_ICON: Record<StatusReclamo, React.ReactNode> = {
   devuelto: <Undo2 size={12} />,
 };
 
-export function StatusReclamoBadge({ status, className }: { status: StatusReclamo; className?: string }) {
+export function StatusReclamoBadge({ status, devueltoPor, className }: { status: StatusReclamo; devueltoPor?: string | null; className?: string }) {
   return (
     <span className={cn('badge-pill', STATUS_STYLE[status], className)}>
       {STATUS_ICON[status]}
-      {STATUS_LABEL[status]}
+      {etiquetaStatus(status, devueltoPor)}
     </span>
   );
 }
@@ -48,18 +48,24 @@ export function TipoBadge({ tipo, count, activo }: { tipo: TipoReclamo; count?: 
 }
 
 /**
- * Reclamos de devolución: si el proveedor ya retiró el producto (verde, con el
- * día) o si falta. En los demás reclamos no muestra nada.
+ * Reclamos que retira el proveedor: entregado (verde, con el día) o esperando
+ * al proveedor (todavía no está terminado). En los demás no muestra nada.
  */
-export function RetiroBadge({ reclamo, className }: { reclamo: Pick<Reclamo, 'Tipo' | 'LineasDevolucion' | 'RetiroProveedorFecha'>; className?: string }) {
-  if (!esDevolucion(reclamo)) return null;
+export function RetiroBadge({
+  reclamo,
+  className,
+}: {
+  reclamo: Pick<Reclamo, 'Tipo' | 'LineasDevolucion' | 'RetiroProveedor' | 'RetiroProveedorFecha'>;
+  className?: string;
+}) {
+  if (!llevaRetiro(reclamo)) return null;
   return reclamo.RetiroProveedorFecha ? (
-    <span className={cn('badge-pill border border-success/30 bg-success/15 text-success', className)} title={`El proveedor retiró el producto el ${formatFechaCorta(reclamo.RetiroProveedorFecha)}`}>
-      <Truck size={12} /> Retirado
+    <span className={cn('badge-pill border border-success/30 bg-success/15 text-success', className)} title={`Entregado al proveedor el ${formatFechaCorta(reclamo.RetiroProveedorFecha)}`}>
+      <Truck size={12} /> Entregado al proveedor
     </span>
   ) : (
-    <span className={cn('badge-pill border border-black/10 bg-black/5 dark:border-white/15 dark:bg-white/10', className)} title="El proveedor todavía no retira el producto">
-      <Truck size={12} /> Retiro pendiente
+    <span className={cn('badge-pill border border-warning/30 bg-warning/15 text-warning', className)} title="El proveedor todavía no se lleva el producto: el reclamo no está terminado">
+      <Truck size={12} /> Esperando retiro del proveedor
     </span>
   );
 }

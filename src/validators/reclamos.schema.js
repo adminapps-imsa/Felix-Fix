@@ -73,6 +73,11 @@ export const crearReclamoSchema = z
         }
       }),
     comentario: texto(1000).optional().default(''),
+    // «¿El proveedor va a retirar el producto?»: obligatoria. En devoluciones
+    // el servicio la deja en sí aunque llegue otra cosa.
+    retiroProveedor: z.enum(['si', 'no'], {
+      errorMap: () => ({ message: 'Indica si el proveedor va a retirar el producto (Sí o No).' }),
+    }),
     // Productos editados en el formulario (JSON). Sin él se leen del Excel.
     lineas: z
       .string()
@@ -110,6 +115,19 @@ export const crearReclamoSchema = z
 export const devolverSchema = z.object({ comentario: texto(1000) });
 
 /** Reenviar a la compradora: respuesta opcional de quien lo corrigió. */
+/** Productos corregidos de un reclamo devuelto: `lineaId` de los que ya estaban, sin él los nuevos. */
+const lineaCorregidaSchema = z.object({
+  lineaId: z.number().int().positive().nullable().optional(),
+  codigoBarra: z.string({ required_error: 'Cada producto necesita su código de barra.' }).trim().min(1, 'Cada producto necesita su código de barra.').max(50, 'El código de barra admite hasta 50 caracteres.'),
+  descripcion: texto(300).optional().default(''),
+  cantidad: z.number({ invalid_type_error: 'La cantidad debe ser un número.' }).finite().min(0, 'La cantidad no puede ser negativa.').max(1e12).nullable().optional().default(null),
+  tipo: z.enum(TIPOS, { errorMap: () => ({ message: 'Motivo de producto inválido.' }) }),
+});
+
+export const corregirLineasSchema = z.object({
+  lineas: z.array(lineaCorregidaSchema).min(1, 'El reclamo debe tener al menos un producto.').max(2000, 'Máximo 2000 productos.'),
+});
+
 export const reenviarSchema = z.object({ comentario: texto(1000).optional().default('') });
 
 /**
@@ -184,3 +202,6 @@ export const adjuntoQuerySchema = z.object({
 
 /** Retiro del proveedor: el día (la regla del dominio revisa que sea real y no futuro). La foto va aparte (multipart). */
 export const retiroSchema = z.object({ fecha: z.string({ required_error: 'Indica el día del retiro.' }).trim().max(10) });
+
+/** Cambiar la respuesta de «¿lo retira el proveedor?» (quien lo creó o el super administrador). */
+export const cambiarRetiroSchema = z.object({ requerido: z.boolean({ required_error: 'Indica si el proveedor lo va a retirar.' }) });

@@ -237,19 +237,31 @@ export function motivoNoCambiarLineas({ Status }) {
 }
 
 // ------------------------------------------------------------------
-// Retiro del proveedor (reclamos de devolución): Gof marca que el proveedor
-// ya se llevó el producto, con foto y día. No cambia el estado del reclamo.
+// Retiro del proveedor: al crear el reclamo se contesta si el proveedor va a
+// retirar el producto (las devoluciones, siempre). Si sí, el reclamo queda
+// esperando el retiro hasta que Gof marca «Entregado al proveedor» con foto
+// y día. No cambia el Status: solo si el reclamo cuenta como terminado.
 // ------------------------------------------------------------------
 
 /** Es de devolución si el reclamo es de ese tipo o alguno de sus productos trae el motivo «devolución». */
 export const esDevolucion = ({ Tipo, LineasDevolucion }) => Tipo === 'devolucion' || Number(LineasDevolucion) > 0;
 
 /**
- * Registrar el retiro: solo en reclamos de devolución, con la foto y el día
- * (una fecha real, no posterior a hoy). `hoy`: día de Panamá 'AAAA-MM-DD'.
+ * Lo retira el proveedor: las devoluciones siempre; los demás si al crearlo
+ * se contestó que sí (RetiroProveedor). Los creados antes de la pregunta
+ * (RetiroProveedor null) solo si son de devolución.
+ */
+export const llevaRetiro = (r) => esDevolucion(r) || r.RetiroProveedor === true || r.RetiroProveedor === 1;
+
+/** Esperando que el proveedor se lo lleve: lleva retiro y todavía no se registró la entrega. */
+export const esperaRetiro = (r) => llevaRetiro(r) && !r.RetiroProveedorFecha;
+
+/**
+ * Registrar la entrega: solo en reclamos que el proveedor retira, con la foto
+ * y el día (una fecha real, no posterior a hoy). `hoy`: día de Panamá 'AAAA-MM-DD'.
  */
 export function motivoNoRegistrarRetiro(reclamo, { fecha, tieneFoto, hoy }) {
-  if (!esDevolucion(reclamo)) return { mensaje: 'Solo los reclamos de devolución llevan el retiro del proveedor.', code: 'NO_ES_DEVOLUCION' };
+  if (!llevaRetiro(reclamo)) return { mensaje: 'Este reclamo no lo retira el proveedor.', code: 'SIN_RETIRO' };
   if (!tieneFoto) return { mensaje: 'Adjunta la foto del retiro.', code: 'FALTA_FOTO_RETIRO' };
   const f = String(fecha ?? '').trim();
   if (!f) return { mensaje: 'Indica el día en que el proveedor retiró el producto.', code: 'FECHA_RETIRO' };
@@ -257,6 +269,18 @@ export function motivoNoRegistrarRetiro(reclamo, { fecha, tieneFoto, hoy }) {
   const d = m && new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
   if (!d || d.toISOString().slice(0, 10) !== f) return { mensaje: `El día del retiro no es una fecha válida («${f}»).`, code: 'FECHA_RETIRO' };
   if (f > hoy) return { mensaje: 'El día del retiro no puede ser posterior a hoy.', code: 'FECHA_RETIRO' };
+  return null;
+}
+
+/**
+ * Cambiar la respuesta de «¿lo retira el proveedor?» (si se contestó mal al
+ * crearlo): solo quien lo creó o el super administrador, nunca en una
+ * devolución (siempre lo lleva) ni con la entrega ya registrada.
+ */
+export function motivoNoCambiarRetiro(reclamo, { username, esAdmin = false }) {
+  if (esDevolucion(reclamo)) return { mensaje: 'Los reclamos de devolución siempre los retira el proveedor.', code: 'ES_DEVOLUCION' };
+  if (reclamo.RetiroProveedorFecha) return { mensaje: 'La entrega al proveedor ya está registrada; quítala primero si fue un error.', code: 'RETIRO_REGISTRADO' };
+  if (!esAdmin && reclamo.CreatedBy !== username) return { mensaje: 'Solo quien creó el reclamo puede cambiar si lo retira el proveedor.', code: 'NO_ES_CREADOR' };
   return null;
 }
 
@@ -286,9 +310,44 @@ export function motivoNoDevolver({ Status, CreatedBy }, comentario) {
   return null;
 }
 
+// ------------------------------------------------------------------
+// Devolución del supervisor GOF: en cualquier estado mientras no se haya
+// enviado a contabilidad. Al reenviarlo vuelve al estado que tenía.
+//   pendiente | notificado | resuelto | rechazado --(supervisor GOF)--> devuelto
+//   devuelto --(quien lo creó: corregir y reenviar)--> estadoAlReenviar(...)
+// ------------------------------------------------------------------
+
+export const DEVUELTO_POR_COMPRADORA = 'compradora';
+export const DEVUELTO_POR_SUPERVISOR = 'supervisor_gof';
+export const ESTADOS_DEVOLVIBLES_SUPERVISOR = new Set(['pendiente', 'notificado', 'resuelto', 'rechazado']);
+
+/** El supervisor GOF devuelve el reclamo a quien lo creó, siempre con el motivo. */
+export function motivoNoDevolverSupervisor({ Status, CreatedBy, EnviadoContabilidadAt }, comentario) {
+  if (Status === STATUS_DEVUELTO) return { mensaje: 'Este reclamo ya está devuelto; espera a que lo corrijan y lo reenvíen.', code: 'RECLAMO_DEVUELTO' };
+  if (EnviadoContabilidadAt) return { mensaje: 'Este reclamo ya se envió a contabilidad; ya no se puede devolver.', code: 'NO_DEVOLVIBLE' };
+  if (!ESTADOS_DEVOLVIBLES_SUPERVISOR.has(Status)) return { mensaje: `No se puede devolver un reclamo en estado «${Status}».`, code: 'NO_DEVOLVIBLE' };
+  if (!CreatedBy) return { mensaje: 'Este reclamo no tiene quién lo creó: no hay a quién devolverlo.', code: 'NO_DEVOLVIBLE' };
+  if (String(comentario ?? '').trim().length < MIN_COMENTARIO_DEVOLUCION) {
+    return { mensaje: 'Escribe el motivo de la devolución para que quien lo creó sepa qué arreglar.', code: 'FALTA_COMENTARIO' };
+  }
+  return null;
+}
+
+/**
+ * Estado al reenviar un reclamo devuelto: el que tenía al devolverlo (sin dato:
+ * pendiente, como las devoluciones de la compradora). Si estaba cerrado pero
+ * quedaron productos por decidir (quien lo creó los cambió), vuelve a
+ * pendiente para que la compradora los decida.
+ */
+export function estadoAlReenviar({ StatusAntesDevolucion, LineasPendientes }) {
+  const antes = StatusAntesDevolucion && StatusAntesDevolucion !== STATUS_DEVUELTO ? StatusAntesDevolucion : 'pendiente';
+  if (estaCerrado(antes) && Number(LineasPendientes) > 0) return 'pendiente';
+  return antes;
+}
+
 /** Corregir datos o archivos de un reclamo devuelto: solo quien lo creó (o el super administrador). */
 export function motivoNoCorregir({ Status, CreatedBy }, { username, esAdmin = false }) {
-  if (Status !== STATUS_DEVUELTO) return { mensaje: 'Solo se corrige un reclamo que la compradora devolvió.', code: 'NO_DEVUELTO' };
+  if (Status !== STATUS_DEVUELTO) return { mensaje: 'Solo se corrige un reclamo devuelto para corregir.', code: 'NO_DEVUELTO' };
   if (!esAdmin && CreatedBy !== username) return { mensaje: 'Solo quien creó el reclamo puede corregirlo y reenviarlo.', code: 'NO_ES_CREADOR' };
   return null;
 }
@@ -341,4 +400,51 @@ export function motivoNoEnviarContabilidad(reclamo, adjuntos) {
     };
   }
   return null;
+}
+
+// ------------------------------------------------------------------
+// Corregir productos de un reclamo devuelto (quien lo creó).
+// ------------------------------------------------------------------
+
+const textoLinea = (v) => String(v ?? '').trim();
+const cantidadLinea = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
+
+/**
+ * Compara los productos guardados con los que mandó quien corrige y dice qué
+ * hacer con cada uno. Los que no cambian conservan la decisión de la
+ * compradora; los cambiados y los nuevos vuelven a decidirse (o se aprueban
+ * solos si su tipo es automático); los que ya no vienen se quitan.
+ *   actuales: filas de ReclamoLineas [{ LineaId, Posicion, CodigoBarra, Cantidad, Tipo, DescripcionExcel }]
+ *   nuevas:   [{ lineaId?, codigoBarra, descripcion, cantidad, tipo }]
+ *   esAuto(tipo): si ese tipo se aprueba solo.
+ * Devuelve { motivo } si algo no cuadra, o { quitar: [LineaId], cambiar: [...], agregar: [...] }.
+ */
+export function planCorreccionLineas(actuales, nuevas, esAuto) {
+  if (!nuevas.length) return { motivo: { mensaje: 'El reclamo debe tener al menos un producto.', code: 'SIN_PRODUCTOS' } };
+  const porId = new Map(actuales.map((l) => [Number(l.LineaId), l]));
+  const vistos = new Set();
+  const cambiar = [];
+  const agregar = [];
+  for (const n of nuevas) {
+    const fila = { codigoBarra: textoLinea(n.codigoBarra), descripcion: textoLinea(n.descripcion) || null, cantidad: cantidadLinea(n.cantidad), tipo: n.tipo };
+    const decision = esAuto(fila.tipo) ? 'aprobado' : 'pendiente';
+    if (n.lineaId === undefined || n.lineaId === null) {
+      agregar.push({ ...fila, decStatus: decision });
+      continue;
+    }
+    const id = Number(n.lineaId);
+    const actual = porId.get(id);
+    if (!actual || vistos.has(id)) {
+      return { motivo: { mensaje: 'Los productos cambiaron mientras tanto. Recarga el detalle y vuelve a intentarlo.', code: 'PRODUCTOS_CAMBIARON' } };
+    }
+    vistos.add(id);
+    const igual =
+      textoLinea(actual.CodigoBarra) === fila.codigoBarra &&
+      (textoLinea(actual.DescripcionExcel) || null) === fila.descripcion &&
+      cantidadLinea(actual.Cantidad) === fila.cantidad &&
+      actual.Tipo === fila.tipo;
+    if (!igual) cambiar.push({ ...fila, lineaId: id, decStatus: decision });
+  }
+  const quitar = actuales.filter((l) => !vistos.has(Number(l.LineaId))).map((l) => Number(l.LineaId));
+  return { quitar, cambiar, agregar };
 }

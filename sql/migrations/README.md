@@ -62,9 +62,16 @@ sí mismo en `dbo.SchemaMigrations` al terminar.
    reclamos». Solo si el rol aún no tiene permisos guardados.
 25. `024_prod_reclamos_1_2_devolucion.sql` — solo Prod: REC-000001 y
    REC-000002 pasan a «Devolución al proveedor» (reclamo y productos).
-26. `026_prod_reclamos_5_6_7_devolucion.sql` — solo Prod: REC-000005,
+26. `025_reclamos_retiro_proveedor_todos.sql` — `Reclamos.RetiroProveedor`:
+   «¿El proveedor va a retirar el producto?» se contesta al crear cualquier
+   reclamo; si es Sí, espera a que Gof marque «Entregado al proveedor»
+27. `026_prod_reclamos_5_6_7_devolucion.sql` — solo Prod: REC-000005,
    REC-000006 y REC-000007 pasan a «Devolución al proveedor» (reclamo y productos).
-27. `028_prod_reclamos_5_6_7_excel.js` — solo Prod: el Excel principal de
+28. `027_reclamos_devolucion_supervisor_gof.sql` — el supervisor GOF devuelve
+   el reclamo a quien lo creó en cualquier estado antes de contabilidad
+   (`StatusAntesDevolucion`, `DevueltoPor`); permiso `reclamos.devolver_supervisor`
+   para los roles con «Validar NF».
+29. `028_prod_reclamos_5_6_7_excel.js` — solo Prod: el Excel principal de
    REC-000005, 006 y 007 pasa a ser el correcto (`archivos/028/`). Valida antes
    que cada Excel traiga los mismos productos (código, cantidad, motivo); si no,
    falla sin cambiar nada. Es la primera migración `.js` (`migrate.js` las corre

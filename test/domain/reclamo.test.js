@@ -220,11 +220,36 @@ test('retiro del proveedor: solo en devoluciones, con foto y un día real no fut
   assert.equal(esDevolucion({ Tipo: 'sobrante_real', LineasDevolucion: 0 }), false);
   const dev = { Tipo: 'devolucion' };
   assert.equal(motivoNoRegistrarRetiro(dev, { fecha: '2026-10-20', tieneFoto: true, hoy }), null);
-  assert.equal(motivoNoRegistrarRetiro({ Tipo: 'faltante_real' }, { fecha: '2026-10-20', tieneFoto: true, hoy }).code, 'NO_ES_DEVOLUCION');
+  assert.equal(motivoNoRegistrarRetiro({ Tipo: 'faltante_real' }, { fecha: '2026-10-20', tieneFoto: true, hoy }).code, 'SIN_RETIRO');
+  // Otro tipo al que se le contestó «sí, lo retira el proveedor».
+  assert.equal(motivoNoRegistrarRetiro({ Tipo: 'danos_perfumeria_gof', RetiroProveedor: true }, { fecha: '2026-10-20', tieneFoto: true, hoy }), null);
   assert.equal(motivoNoRegistrarRetiro(dev, { fecha: '2026-10-20', tieneFoto: false, hoy }).code, 'FALTA_FOTO_RETIRO');
   assert.equal(motivoNoRegistrarRetiro(dev, { fecha: '', tieneFoto: true, hoy }).code, 'FECHA_RETIRO');
   assert.match(motivoNoRegistrarRetiro(dev, { fecha: '2026-02-30', tieneFoto: true, hoy }).mensaje, /no es una fecha válida/);
   assert.match(motivoNoRegistrarRetiro(dev, { fecha: '2026-10-21', tieneFoto: true, hoy }).mensaje, /posterior a hoy/);
+});
+
+test('lleva retiro: devoluciones siempre; los demás si se contestó que sí; termina con la entrega', async () => {
+  const { llevaRetiro, esperaRetiro } = await import('../../src/domain/reclamo.js');
+  assert.equal(llevaRetiro({ Tipo: 'devolucion', RetiroProveedor: false }), true);
+  assert.equal(llevaRetiro({ Tipo: 'faltante_real', LineasDevolucion: 1, RetiroProveedor: null }), true);
+  assert.equal(llevaRetiro({ Tipo: 'danos_perfumeria_gof', RetiroProveedor: true }), true);
+  assert.equal(llevaRetiro({ Tipo: 'danos_perfumeria_gof', RetiroProveedor: false }), false);
+  // Creados antes de la pregunta: solo si son de devolución.
+  assert.equal(llevaRetiro({ Tipo: 'sobrante_real', RetiroProveedor: null }), false);
+  assert.equal(esperaRetiro({ Tipo: 'diferencias', RetiroProveedor: true, RetiroProveedorFecha: null }), true);
+  assert.equal(esperaRetiro({ Tipo: 'diferencias', RetiroProveedor: true, RetiroProveedorFecha: '2026-11-02' }), false);
+  assert.equal(esperaRetiro({ Tipo: 'diferencias', RetiroProveedor: false, RetiroProveedorFecha: null }), false);
+});
+
+test('cambiar si lo retira el proveedor: quien lo creó o el administrador, no en devolución ni ya entregado', async () => {
+  const { motivoNoCambiarRetiro } = await import('../../src/domain/reclamo.js');
+  const r = { Tipo: 'danos_textil', CreatedBy: 'tienda1', RetiroProveedor: true, RetiroProveedorFecha: null };
+  assert.equal(motivoNoCambiarRetiro(r, { username: 'tienda1' }), null);
+  assert.equal(motivoNoCambiarRetiro(r, { username: 'otra', esAdmin: true }), null);
+  assert.equal(motivoNoCambiarRetiro(r, { username: 'otra' }).code, 'NO_ES_CREADOR');
+  assert.equal(motivoNoCambiarRetiro({ ...r, Tipo: 'devolucion' }, { username: 'tienda1' }).code, 'ES_DEVOLUCION');
+  assert.equal(motivoNoCambiarRetiro({ ...r, RetiroProveedorFecha: '2026-11-01' }, { username: 'tienda1' }).code, 'RETIRO_REGISTRADO');
 });
 
 test('excel: el motivo «devolución» se reconoce como tipo devolucion', async () => {
@@ -233,4 +258,58 @@ test('excel: el motivo «devolución» se reconoce como tipo devolucion', async 
   assert.equal(detectarTipoPorMotivo('FALTANTE REAL'), 'faltante_real');
   assert.equal(detectarTipoPorMotivo('SOBRANTE'), 'sobrante_real');
   assert.equal(detectarTipoPorMotivo('DIFERENCIAS (SOBRANTE)'), 'diferencias');
+});
+
+// ------------------------------------------------------------------
+// Devolución del supervisor GOF
+// ------------------------------------------------------------------
+
+test('supervisor GOF: devuelve en cualquier estado antes de contabilidad, con motivo', async () => {
+  const { motivoNoDevolverSupervisor } = await import('../../src/domain/reclamo.js');
+  const motivo = 'El PDF adjunto no es el de esta factura';
+  for (const Status of ['pendiente', 'notificado', 'resuelto', 'rechazado']) {
+    assert.equal(motivoNoDevolverSupervisor({ Status, CreatedBy: 'ana' }, motivo), null, Status);
+  }
+  assert.equal(motivoNoDevolverSupervisor({ Status: 'devuelto', CreatedBy: 'ana' }, motivo).code, 'RECLAMO_DEVUELTO');
+  assert.equal(motivoNoDevolverSupervisor({ Status: 'resuelto', CreatedBy: 'ana', EnviadoContabilidadAt: new Date() }, motivo).code, 'NO_DEVOLVIBLE');
+  assert.equal(motivoNoDevolverSupervisor({ Status: 'pendiente', CreatedBy: null }, motivo).code, 'NO_DEVOLVIBLE');
+  assert.equal(motivoNoDevolverSupervisor({ Status: 'pendiente', CreatedBy: 'ana' }, ' mal ').code, 'FALTA_COMENTARIO');
+});
+
+test('al reenviar vuelve al estado de antes; cerrado con productos por decidir vuelve a pendiente', async () => {
+  const { estadoAlReenviar } = await import('../../src/domain/reclamo.js');
+  assert.equal(estadoAlReenviar({ StatusAntesDevolucion: null, LineasPendientes: 0 }), 'pendiente');
+  assert.equal(estadoAlReenviar({ StatusAntesDevolucion: 'pendiente', LineasPendientes: 3 }), 'pendiente');
+  assert.equal(estadoAlReenviar({ StatusAntesDevolucion: 'notificado', LineasPendientes: 0 }), 'notificado');
+  assert.equal(estadoAlReenviar({ StatusAntesDevolucion: 'resuelto', LineasPendientes: 0 }), 'resuelto');
+  assert.equal(estadoAlReenviar({ StatusAntesDevolucion: 'rechazado', LineasPendientes: 0 }), 'rechazado');
+  assert.equal(estadoAlReenviar({ StatusAntesDevolucion: 'resuelto', LineasPendientes: 2 }), 'pendiente');
+  assert.equal(estadoAlReenviar({ StatusAntesDevolucion: 'devuelto', LineasPendientes: 0 }), 'pendiente');
+});
+
+test('corregir productos: conserva los iguales, redecide los cambiados, agrega y quita', async () => {
+  const { planCorreccionLineas } = await import('../../src/domain/reclamo.js');
+  const esAuto = (t) => t === 'faltante_real';
+  const actuales = [
+    { LineaId: 1, Posicion: 1, CodigoBarra: '111', Cantidad: 2, Tipo: 'diferencias', DescripcionExcel: 'A' },
+    { LineaId: 2, Posicion: 2, CodigoBarra: '222', Cantidad: 1, Tipo: 'diferencias', DescripcionExcel: null },
+    { LineaId: 3, Posicion: 3, CodigoBarra: '333', Cantidad: 5, Tipo: 'diferencias', DescripcionExcel: 'C' },
+  ];
+  const plan = planCorreccionLineas(
+    actuales,
+    [
+      { lineaId: 1, codigoBarra: ' 111 ', descripcion: 'A', cantidad: 2, tipo: 'diferencias' },
+      { lineaId: 2, codigoBarra: '222', descripcion: '', cantidad: 4, tipo: 'diferencias' },
+      { codigoBarra: '444', descripcion: 'Nuevo', cantidad: 1, tipo: 'faltante_real' },
+    ],
+    esAuto
+  );
+  assert.deepEqual(plan.quitar, [3]);
+  assert.deepEqual(plan.cambiar, [{ lineaId: 2, codigoBarra: '222', descripcion: null, cantidad: 4, tipo: 'diferencias', decStatus: 'pendiente' }]);
+  assert.deepEqual(plan.agregar, [{ codigoBarra: '444', descripcion: 'Nuevo', cantidad: 1, tipo: 'faltante_real', decStatus: 'aprobado' }]);
+
+  assert.equal(planCorreccionLineas(actuales, [], esAuto).motivo.code, 'SIN_PRODUCTOS');
+  assert.equal(planCorreccionLineas(actuales, [{ lineaId: 99, codigoBarra: 'x', tipo: 'diferencias' }], esAuto).motivo.code, 'PRODUCTOS_CAMBIARON');
+  const repetido = [{ lineaId: 1, codigoBarra: '111', tipo: 'diferencias' }, { lineaId: 1, codigoBarra: '111', tipo: 'diferencias' }];
+  assert.equal(planCorreccionLineas(actuales, repetido, esAuto).motivo.code, 'PRODUCTOS_CAMBIARON');
 });
