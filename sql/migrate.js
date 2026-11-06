@@ -10,9 +10,11 @@
 // Los scripts usan $(SCHEMA) como marcador (formato de variables de sqlcmd),
 // así también se pueden correr a mano: sqlcmd -v SCHEMA=QA -i archivo.sql
 // Cada script es idempotente, así que volver a correrlo no duplica nada.
+// También acepta migraciones .js (para lo que SQL no puede, como copiar un
+// archivo): exportan `default async ({ pool, schema })` y se registran solas.
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { getPool } from '../src/config/db.js';
 import { env, SCHEMA_PATTERN } from '../src/config/env.js';
 
@@ -25,7 +27,7 @@ if (!SCHEMA_PATTERN.test(schema)) {
 }
 
 const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations');
-const files = fs.readdirSync(dir).filter((f) => /^\d+_.*\.sql$/.test(f)).sort();
+const files = fs.readdirSync(dir).filter((f) => /^\d+_.*\.(sql|js)$/.test(f)).sort();
 
 const pool = await getPool();
 try {
@@ -47,6 +49,12 @@ try {
   for (const file of files) {
     if (aplicadas.has(file)) {
       console.log(`  ${file} ya aplicada`);
+      continue;
+    }
+    if (file.endsWith('.js')) {
+      const { default: migrar } = await import(pathToFileURL(path.join(dir, file)).href);
+      await migrar({ pool, schema });
+      console.log(`  ${file} ok`);
       continue;
     }
     const text = fs.readFileSync(path.join(dir, file), 'utf8').replaceAll('$(SCHEMA)', `[${schema}]`);
