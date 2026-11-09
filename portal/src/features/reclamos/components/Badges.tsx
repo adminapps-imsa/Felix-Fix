@@ -22,11 +22,21 @@ const STATUS_ICON: Record<StatusReclamo, React.ReactNode> = {
   devuelto: <Undo2 size={12} />,
 };
 
-export function StatusReclamoBadge({ status, devueltoPor, className }: { status: StatusReclamo; devueltoPor?: string | null; className?: string }) {
+export function StatusReclamoBadge({
+  status,
+  devueltoPor,
+  decisionBy,
+  className,
+}: {
+  status: StatusReclamo;
+  devueltoPor?: string | null;
+  decisionBy?: string | null;
+  className?: string;
+}) {
   return (
     <span className={cn('badge-pill', STATUS_STYLE[status], className)}>
       {STATUS_ICON[status]}
-      {etiquetaStatus(status, devueltoPor)}
+      {etiquetaStatus(status, devueltoPor, decisionBy)}
     </span>
   );
 }
