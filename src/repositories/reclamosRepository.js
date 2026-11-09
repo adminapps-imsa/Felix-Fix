@@ -194,15 +194,17 @@ export async function crear(data, lineas, { docsSap = [], motivoBloqueo } = {}) 
       .input('comentario', sql.NVarChar(1000), data.comentario || null)
       .input('adjuntosExtra', sql.NVarChar(sql.MAX), JSON.stringify(data.adjuntosExtra || []))
       .input('retiroProveedor', sql.Bit, data.retiroProveedor)
+      .input('decisionBy', sql.VarChar(150), data.decisionBy || null)
       .input('createdBy', sql.VarChar(150), data.createdBy).query(`
         INSERT INTO ${S}.Reclamos
           (Token, Tipo, Origen, Sucursal, NumeroEmbarqueFactura, FechaRegistro, FechaLlegadaMercancia, Mundo, Departamento, Marca,
            Proveedor, Compradora, Division, Motivo, SapDoc1, SapDoc2, SapDoc3, SapDocsExtra, ArchivoExcel, ArchivoExcelNombre,
-           ImagenesExcel, AdjuntosExtra, Status, Comentario, RetiroProveedor, CreatedBy)
+           ImagenesExcel, AdjuntosExtra, Status, Comentario, RetiroProveedor, CreatedBy, DecisionBy, DecisionAt)
         VALUES
           (@token, @tipo, @origen, @sucursal, @numeroEmbarqueFactura, @fechaRegistro, @fechaLlegada, @mundo, @departamento, @marca,
            @proveedor, @compradora, @division, @motivo, @sapDoc1, @sapDoc2, @sapDoc3, @sapDocsExtra, @archivoExcel, @archivoExcelNombre,
-           '[]', @adjuntosExtra, @status, @comentario, @retiroProveedor, @createdBy)
+           '[]', @adjuntosExtra, @status, @comentario, @retiroProveedor, @createdBy,
+           @decisionBy, CASE WHEN @decisionBy IS NULL THEN NULL ELSE SYSUTCDATETIME() END)
       `);
 
     for (let i = 0; i < lineas.length; i += LINEAS_POR_INSERT) {

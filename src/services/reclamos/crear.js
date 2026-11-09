@@ -26,7 +26,7 @@ import { exigirDivision } from '../divisiones.js';
 import { avisarReclamo } from '../correo/avisosReclamos.js';
 import { env } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
-import { normalizarDocSap, motivoDocsRepetidos, motivoDocsEnOtrosReclamos, documentosUsados, motivoFechaLlegadaInvalida, esDevolucion } from '../../domain/reclamo.js';
+import { normalizarDocSap, motivoDocsRepetidos, motivoDocsEnOtrosReclamos, documentosUsados, motivoFechaLlegadaInvalida, esDevolucion, estadoAlCrear } from '../../domain/reclamo.js';
 import { diaPanama } from '../../domain/tablero.js';
 import { tipoReal, tipoRealDeArchivo, nombreUsuario, detalle, exigir, conDocumentos } from './comun.js';
 import { reclamoArchivoPath } from '../../config/almacenamiento.js';
@@ -340,12 +340,15 @@ export async function crear(body, multerFile, usuario, pdfs = []) {
     if (data.motivo) data.motivo = await repo.asegurarValorCatalogo('motivo', data.motivo, nombreUsuario(usuario));
 
     const token = crypto.randomUUID();
+    const status = estadoAlCrear({ soloNotificacion: TIPOS_SOLO_NOTIFICACION.has(data.tipo), lineas });
     const alta = await repo.crear(
       {
         ...data,
         adjuntosExtra: adjuntosSap,
         token,
-        status: TIPOS_SOLO_NOTIFICACION.has(data.tipo) ? 'notificado' : 'pendiente',
+        status,
+        // Cierre automático (todos los productos se aprobaron solos): lo «decide» el sistema.
+        decisionBy: status === 'resuelto' ? USUARIO_SISTEMA : null,
         // Las devoluciones (del tipo o con algún producto de ese motivo) siempre las retira el proveedor.
         retiroProveedor: data.retiroProveedor === 'si' || esDevolucion({ Tipo: data.tipo, LineasDevolucion: lineas.filter((l) => l.tipo === 'devolucion').length }),
         archivoExcel: multerFile ? multerFile.filename : null,
@@ -380,6 +383,8 @@ export async function crear(body, multerFile, usuario, pdfs = []) {
     }
     // Aviso a las compradoras: solo si espera su decisión (los «notificados» son solo informativos).
     if (dto.Status === 'pendiente') avisarReclamo('nuevo', dto, { comentario: dto.Comentario, de: usuario.name || nombreUsuario(usuario) });
+    // Cerrado solo: al supervisor GOF, que ya lo tiene para enviar a contabilidad.
+    if (dto.Status === 'resuelto') avisarReclamo('cerrado', dto);
     return dto;
   } catch (err) {
     await borrarArchivos(archivosCreados);

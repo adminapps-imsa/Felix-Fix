@@ -480,7 +480,10 @@ function rutaFlujo(r: Reclamo): PasoRuta[] {
   const enviado = Boolean(r.EnviadoContabilidadAt);
   return [
     creado,
-    cerrado
+    cerrado && r.DecisionBy === 'sistema'
+      ? // Todos sus productos se aprobaron solos (p. ej. solo faltante real): nadie lo decidió.
+        { titulo: 'Cerrado automáticamente', estado: 'hecho', tono: 'ok', fecha: r.DecisionAt, nota: 'Todos los productos se aprueban solos' }
+      : cerrado
       ? {
           titulo: r.Status === 'resuelto' ? 'Confirmado por compradora' : 'Rechazado',
           estado: 'hecho',

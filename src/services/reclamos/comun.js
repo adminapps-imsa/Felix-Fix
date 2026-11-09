@@ -5,6 +5,7 @@ import { detectarTipoArchivo } from '../../utils/tipoArchivo.js';
 import * as repo from '../../repositories/reclamosRepository.js';
 import { parseJsonArray } from '../../repositories/reclamosRepository.js';
 import * as dominio from '../../domain/reclamo.js';
+import { USUARIO_SISTEMA } from './tipos.js';
 import { nombresDeUsuarios } from '../acceso/keycloakAdmin.js';
 import { conflict, notFound } from '../../utils/httpError.js';
 
@@ -104,7 +105,8 @@ export async function conNombres(dtos) {
   return dtos.map((d) => ({
     ...d,
     CreatedByNombre: n(d.CreatedBy),
-    DecisionByNombre: n(d.DecisionBy),
+    // 'sistema': cierre automático (todos los productos se aprobaron solos).
+    DecisionByNombre: d.DecisionBy === USUARIO_SISTEMA ? 'Cierre automático' : n(d.DecisionBy),
     EnviadoContabilidadByNombre: n(d.EnviadoContabilidadBy),
     RetiroProveedorPorNombre: n(d.RetiroProveedorPor),
     AdjuntosExtra: d.AdjuntosExtra.map((a) => ({ ...a, uploaded_by_nombre: n(a.uploaded_by) })),
