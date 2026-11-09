@@ -20,9 +20,9 @@ import { AdjuntosSection } from '../components/AdjuntosSection';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { DevolucionReclamo, DevolverModal } from '../components/DevolucionReclamo';
 import { RetiroProveedor } from '../components/RetiroProveedor';
-import { MotivosProductos } from '../components/MotivosProductos';
+import { MotivosProductos, agruparMotivos } from '../components/MotivosProductos';
 import { usePermisosReclamos } from '../lib/usePermisosReclamos';
-import { STATUS_LABEL, TIPO_LABEL, formatFechaCorta, llevaRetiro } from '../lib/tipos';
+import { STATUS_LABEL, TIPO_LABEL, TIPO_LABEL_CORTO, formatFechaCorta, llevaRetiro } from '../lib/tipos';
 
 export function ReclamoDetallePage() {
   const { token = '' } = useParams();
@@ -179,7 +179,7 @@ export function ReclamoDetallePage() {
       <GlassCard className="flex flex-col gap-5">
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3 lg:gap-0 lg:divide-x lg:divide-black/5 dark:lg:divide-white/5">
           <SeccionDatos icono={<ClipboardList size={15} />} titulo="Datos del reclamo" className="lg:pr-6">
-            <Dato label="Tipo" value={TIPO_LABEL[reclamo.Tipo]} />
+            <Dato label="Tipo" value={tipoSegunExcel(reclamo, lineas)} />
             {reclamo.Motivo && <Dato label="Motivo" value={reclamo.Motivo} />}
             <Dato label="Origen" value={reclamo.Origen === 'cedi' ? 'CEDI' : 'Tienda'} />
             {reclamo.Origen === 'tienda' && <Dato label="Sucursal" value={reclamo.Sucursal} />}
@@ -441,6 +441,16 @@ function DecisionReclamo({
 }
 
 /** Ruta del reclamo: creado → decisión de la compradora → enviado a contabilidad. */
+/**
+ * «Tipo» en los datos: los motivos de los productos (columna MOTIVO del Excel),
+ * no solo el tipo elegido al crearlo. Con un solo motivo, el nombre completo del tipo.
+ */
+function tipoSegunExcel(r: Reclamo, lineas: ReclamoLinea[]): string {
+  const grupos = agruparMotivos(lineas);
+  if (grupos.length <= 1) return TIPO_LABEL[grupos[0]?.tipo ?? r.Tipo];
+  return grupos.map((g) => TIPO_LABEL_CORTO[g.tipo]).join(' · ');
+}
+
 function rutaReclamo(r: Reclamo): PasoRuta[] {
   // Si lo retira el proveedor, el último paso es la entrega: hasta entonces no está terminado.
   const entrega: PasoRuta[] = !llevaRetiro(r)
