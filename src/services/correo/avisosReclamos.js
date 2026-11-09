@@ -9,7 +9,8 @@
 //   reabierto -> la compradora: un reclamo cerrado volvió a pendiente porque
 //                quien lo creó cambió productos (hay que decidirlos otra vez).
 //   cerrado   -> quien lo envía a contabilidad (reclamos.enviar_contabilidad):
-//                la compradora lo confirmó o rechazó. A quien lo creó ya no
+//                la compradora lo confirmó o rechazó, o se cerró solo al crearse
+//                (todos sus productos se aprueban solos). A quien lo creó ya no
 //                se le avisa (solo informaba; quitado el 2026-10-21).
 // Si alguien está en el área y además es la persona, recibe solo el del área.
 //
@@ -21,6 +22,7 @@ import { logger } from '../../utils/logger.js';
 import { enviarCorreo, correoConfigurado, resumenDestinatarios } from './mailer.js';
 import { destinatarios, deUsuario, PERMISOS_COMPRADORA, correosDeAsignadas } from './destinatarios.js';
 import { TIPO_LABEL } from './plantillaReclamoContabilidad.js';
+import { USUARIO_SISTEMA } from '../reclamos/tipos.js';
 import { documento, parrafo, recuadro, boton, datos, saludo, esc, fechaHora, datosTexto } from './diseno.js';
 
 const PIE = 'Aviso automático de Felix Fix. No respondas este correo.';
@@ -94,7 +96,10 @@ const EVENTOS = {
       permiso: 'reclamos.enviar_contabilidad',
       titulo: 'Reclamo listo para contabilidad',
       estado: 'Por enviar a contabilidad',
-      frase: (de, r) => `${de} ${cerradoTexto(r)} este reclamo. Si tiene productos aprobados, sube la nota de débito y envíalo a contabilidad.`,
+      frase: (de, r) =>
+        r.DecisionBy === USUARIO_SISTEMA
+          ? 'Este reclamo se cerró automáticamente: todos sus productos se aprueban solos (p. ej. faltante real). Sube la nota de débito y envíalo a contabilidad.'
+          : `${de} ${cerradoTexto(r)} este reclamo. Si tiene productos aprobados, sube la nota de débito y envíalo a contabilidad.`,
       etiquetaComentario: 'Comentario de la compradora',
       boton: 'Abrir y enviar',
     },

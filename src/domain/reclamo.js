@@ -8,6 +8,19 @@ export const ESTADOS_CERRADOS = new Set(['resuelto', 'rechazado']);
 
 export const numeroReclamo = (id) => `REC-${String(id).padStart(6, '0')}`;
 
+/**
+ * Estado con que nace un reclamo. Los de solo notificación quedan
+ * 'notificado'. Si TODOS sus productos se aprobaron solos (p. ej. solo
+ * faltante real), la compradora no tiene nada que decidir: nace 'resuelto'
+ * (cierre automático) y pasa directo a la cola de envío a contabilidad.
+ * Si no, 'pendiente' hasta que la compradora lo cierre.
+ */
+export function estadoAlCrear({ soloNotificacion, lineas }) {
+  if (soloNotificacion) return 'notificado';
+  if (lineas.length && lineas.every((l) => l.decStatus === 'aprobado')) return 'resuelto';
+  return 'pendiente';
+}
+
 // ------------------------------------------------------------------
 // Fecha de llegada de la mercancía (obligatoria en Tienda y CEDI).
 // ------------------------------------------------------------------

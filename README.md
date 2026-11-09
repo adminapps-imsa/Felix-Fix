@@ -197,6 +197,9 @@ Excel "Tienda" y "CEDI". Backend en `src/routes/reclamos.routes.js` →
   por defecto «Administrador») los tiene todos.
 - **Auto-aprobado por producto**: faltante_real y cualquier daño se aprueban
   al crear y no se pueden decidir a mano (409). Sobrante/diferencias sí.
+- **Cierre automático** (migración `029`): si todos los productos se aprueban
+  solos, el reclamo nace `resuelto` (`DecisionBy = 'sistema'`, «Cerrado
+  automáticamente»), sin pasar por la compradora; avisa al supervisor GOF.
 - **Adjuntos**: quien creó el reclamo (en los suyos), quien decide, o quien
   tiene `reclamos.adjuntar` (Torre de Control) en cualquier reclamo.
 - **Solo Tienda** (`reclamos.solo_tienda`, rol Gof): el formulario solo

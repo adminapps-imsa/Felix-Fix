@@ -15,6 +15,7 @@ import {
   motivoNotaNoCuadra,
   esNotaAprobada,
   motivoNotasYaNoCuadran,
+  estadoAlCrear,
 } from '../../src/domain/reclamo.js';
 
 const pdfValidado = { tipo: 'pdf', notaAprobada: true };
@@ -312,4 +313,13 @@ test('corregir productos: conserva los iguales, redecide los cambiados, agrega y
   assert.equal(planCorreccionLineas(actuales, [{ lineaId: 99, codigoBarra: 'x', tipo: 'diferencias' }], esAuto).motivo.code, 'PRODUCTOS_CAMBIARON');
   const repetido = [{ lineaId: 1, codigoBarra: '111', tipo: 'diferencias' }, { lineaId: 1, codigoBarra: '111', tipo: 'diferencias' }];
   assert.equal(planCorreccionLineas(actuales, repetido, esAuto).motivo.code, 'PRODUCTOS_CAMBIARON');
+});
+
+test('estadoAlCrear: se cierra solo si todos los productos se aprobaron solos', () => {
+  const auto = { decStatus: 'aprobado' };
+  const pend = { decStatus: 'pendiente' };
+  assert.equal(estadoAlCrear({ soloNotificacion: false, lineas: [auto, auto] }), 'resuelto');
+  assert.equal(estadoAlCrear({ soloNotificacion: false, lineas: [auto, pend] }), 'pendiente');
+  assert.equal(estadoAlCrear({ soloNotificacion: false, lineas: [] }), 'pendiente');
+  assert.equal(estadoAlCrear({ soloNotificacion: true, lineas: [auto] }), 'notificado');
 });

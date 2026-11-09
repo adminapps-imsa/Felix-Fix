@@ -76,6 +76,9 @@ sí mismo en `dbo.SchemaMigrations` al terminar.
    que cada Excel traiga los mismos productos (código, cantidad, motivo); si no,
    falla sin cambiar nada. Es la primera migración `.js` (`migrate.js` las corre
    con `default async ({ pool, schema })`).
+30. `029_reclamos_cierre_automatico.sql` — Reclamos: cierra (`resuelto`,
+   `DecisionBy = 'sistema'`) los pendientes cuyos productos aprobó todos el
+   sistema (p. ej. solo faltante real). Los nuevos ya nacen así. No manda correos.
 
 ## Esquemas QA y Prod
 
