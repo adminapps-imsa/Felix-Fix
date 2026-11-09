@@ -20,6 +20,7 @@ import { AdjuntosSection } from '../components/AdjuntosSection';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { DevolucionReclamo, DevolverModal } from '../components/DevolucionReclamo';
 import { RetiroProveedor } from '../components/RetiroProveedor';
+import { MotivosProductos } from '../components/MotivosProductos';
 import { usePermisosReclamos } from '../lib/usePermisosReclamos';
 import { STATUS_LABEL, TIPO_LABEL, formatFechaCorta, llevaRetiro } from '../lib/tipos';
 
@@ -161,7 +162,7 @@ export function ReclamoDetallePage() {
         <span className="etiqueta">Reclamo</span>
         <h1 className="numero-caso text-5xl">{reclamo.Numero}</h1>
         <div className="mt-1 flex flex-wrap justify-center gap-2">
-          <StatusReclamoBadge status={reclamo.Status} devueltoPor={reclamo.DevueltoPor} />
+          <StatusReclamoBadge status={reclamo.Status} devueltoPor={reclamo.DevueltoPor} decisionBy={reclamo.DecisionBy} />
           <RetiroBadge reclamo={reclamo} />
         </div>
         <RutaCaso pasos={rutaReclamo(reclamo)} className="mt-5 w-full max-w-3xl text-left" />
@@ -188,6 +189,7 @@ export function ReclamoDetallePage() {
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3 lg:gap-0 lg:divide-x lg:divide-black/5 dark:lg:divide-white/5">
           <SeccionDatos icono={<ClipboardList size={15} />} titulo="Datos del reclamo" className="lg:pr-6">
             <Dato label="Tipo" value={TIPO_LABEL[reclamo.Tipo]} />
+            {reclamo.Motivo && <Dato label="Motivo" value={reclamo.Motivo} />}
             <Dato label="Origen" value={reclamo.Origen === 'cedi' ? 'CEDI' : 'Tienda'} />
             {reclamo.Origen === 'tienda' && <Dato label="Sucursal" value={reclamo.Sucursal} />}
             {reclamo.Origen === 'cedi' && <Dato label="División" value={reclamo.Division} />}
@@ -210,6 +212,7 @@ export function ReclamoDetallePage() {
             )}
           </SeccionDatos>
         </div>
+        <MotivosProductos lineas={lineas} />
         {reclamo.Comentario && (
           <div className="rounded-xl bg-black/[0.03] px-4 py-3 text-sm dark:bg-white/[0.05]">
             <span className="etiqueta">Comentario</span>

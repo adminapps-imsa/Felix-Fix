@@ -23,7 +23,7 @@ import { ConfirmModal } from '../../reclamos/components/ConfirmModal';
 import { formatFecha, formatCantidad } from '../../../lib/formatters';
 import * as apiProductosDanados from '../../../api/productosDanados';
 import { ApiError } from '../../../api/client';
-import type { Estado, ReporteDetalle } from '../../../types/productoDanado';
+import { motivoLabel, type Estado, type ReporteDetalle } from '../../../types/productoDanado';
 
 // No se borra lo que ya está en contabilidad, cerrado o en SAP (igual que el backend).
 const NO_ELIMINABLES: Estado[] = ['EnProceso', 'Procesado', 'EnContabilidad', 'Cerrado'];
@@ -225,6 +225,8 @@ export function ReporteDetalleModal({
                 {reporte.Categoria && <Dato label="Categoría" value={reporte.Categoria} />}
               </SeccionDatos>
               <SeccionDatos icono={<ClipboardList size={15} />} titulo="Reporte" className="md:pl-5">
+                <Dato label="Motivo" value={motivoLabel(reporte.Motivo)} />
+                {reporte.Resolucion && <Dato label="Resolución" value={reporte.Resolucion === 'NF' ? 'NF' : 'Devolución al proveedor'} />}
                 <Dato label="Tienda" value={reporte.TiendaNombre} />
                 <Dato label="Reportado por" value={reporte.EmpleadoReportaNombre} />
                 <Dato label="Fecha" value={formatFecha(reporte.FechaCreacion)} />

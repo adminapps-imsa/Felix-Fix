@@ -50,9 +50,12 @@ export const STATUS_LABEL: Record<StatusReclamo, string> = {
   devuelto: 'Con comentario de compradora',
 };
 
-/** Etiqueta del estado; el devuelto dice quién lo devolvió. */
-export const etiquetaStatus = (status: StatusReclamo, devueltoPor?: string | null) =>
-  status === 'devuelto' && devueltoPor === 'supervisor_gof' ? 'Devuelto por supervisor GOF' : STATUS_LABEL[status];
+/** Etiqueta del estado; el devuelto dice quién lo devolvió y el cerrado por el sistema, que se cerró solo. */
+export const etiquetaStatus = (status: StatusReclamo, devueltoPor?: string | null, decisionBy?: string | null) => {
+  if (status === 'devuelto' && devueltoPor === 'supervisor_gof') return 'Devuelto por supervisor GOF';
+  if (status === 'resuelto' && decisionBy === 'sistema') return 'Cerrado automáticamente';
+  return STATUS_LABEL[status];
+};
 
 /** Deben coincidir con TIPOS_AUTO_APROBADOS del backend (src/services/reclamos/tipos.js). */
 export const TIPOS_AUTO_APROBADOS = new Set<TipoReclamo>([
