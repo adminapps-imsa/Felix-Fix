@@ -152,7 +152,8 @@ export interface ArticuloData {
   precioVenta: number;
   categoria: string;
   tipoProducto: string;
-  cicloVida: string;
+  /** Opcional. */
+  cicloVida: string | null;
   descripcion: string;
   marca: string;
 }

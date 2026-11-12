@@ -180,7 +180,8 @@ export const articuloDataSchema = z.object({
   precioVenta: dinero('precio de venta'),
   categoria: textoArticulo('Indica la categoría.', 100),
   tipoProducto: textoArticulo('Indica el tipo de producto.', 100),
-  cicloVida: textoArticulo('Indica el ciclo de vida.', 100),
+  // Opcional (pedido del 2026-11-12).
+  cicloVida: z.string().trim().max(100).nullable().optional().transform((v) => v || null),
   descripcion: textoArticulo('Escribe la descripción.', 300),
   marca: textoArticulo('Indica la marca.', 100),
 });

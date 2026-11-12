@@ -157,6 +157,10 @@ test('datos del artículo para Data: todos obligatorios; montos sin negativos', 
   const sinCategoria = decisionLineaSchema.safeParse({ decision: 'aprobado', articulo: { ...ok, categoria: ' ' } });
   assert.equal(sinCategoria.error.issues[0].message, 'Indica la categoría.');
   assert.equal(decisionLineaSchema.safeParse({ decision: 'aprobado', articulo: { ...ok, costo: -1 } }).success, false);
+  // El ciclo de vida es opcional.
+  const sinCiclo = decisionLineaSchema.safeParse({ decision: 'aprobado', articulo: { ...ok, cicloVida: '' } });
+  assert.equal(sinCiclo.success, true);
+  assert.equal(sinCiclo.data.articulo.cicloVida, null);
 });
 
 test('Averia: fila sin foto en el Excel se reporta para pedirla en el formulario', () => {
