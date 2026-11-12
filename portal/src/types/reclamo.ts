@@ -131,11 +131,30 @@ export interface ReclamoLinea {
   CodigoDataBy?: string | null;
   CodigoDataByNombre?: string | null;
   CodigoDataAt?: string | null;
+  /** Datos del artículo que llenó la compradora al aprobar (van a Data). */
+  ArtCosto?: number | null;
+  ArtPrecioVenta?: number | null;
+  ArtCategoria?: string | null;
+  ArtTipoProducto?: string | null;
+  ArtCicloVida?: string | null;
+  ArtDescripcion?: string | null;
+  ArtMarca?: string | null;
   DecStatus: DecStatus;
   DecComentario: string | null;
   DecAt: string | null;
   DecBy: string | null;
   DecByNombre?: string | null;
+}
+
+/** Lo que llena la compradora al aprobar un sobrante no esperado sin SAP. */
+export interface ArticuloData {
+  costo: number;
+  precioVenta: number;
+  categoria: string;
+  tipoProducto: string;
+  cicloVida: string;
+  descripcion: string;
+  marca: string;
 }
 
 export interface KpisReclamos {

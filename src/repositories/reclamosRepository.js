@@ -312,7 +312,8 @@ export async function listarLineas(token) {
   const { recordset } = await pool.request().input('token', sql.UniqueIdentifier, token).query(`
     SELECT LineaId, Posicion, CodigoBarra, Cantidad, Tipo, DescripcionExcel,
            DecStatus, DecComentario, DecAt, DecBy, CreatedAt,
-           Referencia, Color, Talla, EsperaData, CodigoDataBy, CodigoDataAt
+           Referencia, Color, Talla, EsperaData, CodigoDataBy, CodigoDataAt,
+           ArtCosto, ArtPrecioVenta, ArtCategoria, ArtTipoProducto, ArtCicloVida, ArtDescripcion, ArtMarca
     FROM ${S}.ReclamoLineas
     WHERE ReclamoToken = @token
     ORDER BY Posicion
@@ -368,7 +369,11 @@ export async function actualizarDecisionLineas(token, posiciones, cambio) {
   }
 }
 
-async function updateDecisionLinea(req, token, posicion, { desde, hacia, comentario, usuario, tiposBloqueados }) {
+/**
+ * `articulo` (al aprobar un sobrante no esperado sin SAP): datos que van a
+ * Data. Sin él, esos productos no se aprueban (en el lote se omiten).
+ */
+async function updateDecisionLinea(req, token, posicion, { desde, hacia, comentario, usuario, tiposBloqueados, articulo = null }) {
   req
     .input('token', sql.UniqueIdentifier, token)
     .input('pos', sql.Int, posicion)
@@ -381,10 +386,26 @@ async function updateDecisionLinea(req, token, posicion, { desde, hacia, comenta
   });
   const condDesde = desde === 'pendiente' ? "DecStatus = 'pendiente'" : "DecStatus <> 'pendiente'";
   const setDecAt = hacia === 'pendiente' ? 'NULL' : 'SYSUTCDATETIME()';
+  let setArticulo = '';
+  let condArticulo = '';
+  if (hacia === 'aprobado' && articulo) {
+    req
+      .input('artCosto', sql.Decimal(18, 2), articulo.costo)
+      .input('artPrecio', sql.Decimal(18, 2), articulo.precioVenta)
+      .input('artCategoria', sql.NVarChar(100), articulo.categoria)
+      .input('artTipo', sql.NVarChar(100), articulo.tipoProducto)
+      .input('artCiclo', sql.NVarChar(100), articulo.cicloVida)
+      .input('artDescripcion', sql.NVarChar(300), articulo.descripcion)
+      .input('artMarca', sql.NVarChar(100), articulo.marca);
+    setArticulo = `, ArtCosto = @artCosto, ArtPrecioVenta = @artPrecio, ArtCategoria = @artCategoria, ArtTipoProducto = @artTipo,
+        ArtCicloVida = @artCiclo, ArtDescripcion = @artDescripcion, ArtMarca = @artMarca`;
+  } else if (hacia === 'aprobado') {
+    condArticulo = 'AND EsperaData = 0';
+  }
   const result = await req.query(`
     UPDATE ${S}.ReclamoLineas
-    SET DecStatus = @hacia, DecComentario = @comentario, DecAt = ${setDecAt}, DecBy = @usuario
-    WHERE ReclamoToken = @token AND Posicion = @pos AND ${condDesde}
+    SET DecStatus = @hacia, DecComentario = @comentario, DecAt = ${setDecAt}, DecBy = @usuario${setArticulo}
+    WHERE ReclamoToken = @token AND Posicion = @pos AND ${condDesde} ${condArticulo}
       ${bloqueados.length ? `AND Tipo NOT IN (${bloqueados.join(', ')})` : ''}
       AND EXISTS (SELECT 1 FROM ${S}.Reclamos r WHERE r.Token = @token AND r.Status IN ('pendiente', 'notificado'))
   `);

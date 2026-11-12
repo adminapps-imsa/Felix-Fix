@@ -1,7 +1,9 @@
 // Aviso a Data: la compradora cerró un reclamo de CEDI aprobando sobrantes no
-// esperados que no están creados en SAP (o vinieron sin código). Lleva las
-// columnas de la hoja «Sobrante NO esperado» (CÓDIGO, REFERENCIA, COLOR,
-// TALLA, CANTIDAD) para que Data cree los artículos; ya creados, Data carga el
+// esperados que no están creados en SAP (o vinieron sin código). Por cada
+// artículo lleva las columnas de la hoja «Sobrante NO esperado» (CÓDIGO,
+// REFERENCIA, COLOR, TALLA, CANTIDAD) y lo que la compradora llenó al
+// aprobarlo (costo, precio de venta, categoría, tipo de producto, ciclo de
+// vida, descripción y marca) para que Data cree los artículos; ya creados, Data carga el
 // código en el portal y Torre de Control hace el 912.
 //
 // Va a los usuarios cuyos roles tienen «Crear artículos en SAP (Data)»
@@ -16,15 +18,34 @@ import { destinatarios, deUsuario } from './destinatarios.js';
 // Solo QA (rama qa, nunca a main): el aviso a Data va únicamente a este usuario
 // y sale aunque MAIL_DESACTIVADO=true, para probar sin escribirle a nadie más.
 const PRUEBA_QA_DATA = 'maltamiranda';
-import { documento, parrafo, tituloSeccion, bloque, boton, datos, saludo, esc, datosTexto, COLOR, FUENTE } from './diseno.js';
+import { documento, parrafo, tituloSeccion, bloque, boton, datos, saludo, esc, datosTexto, tablaDatosHtml } from './diseno.js';
 
 export const PERMISO_DATA = 'reclamos.articulos_sap';
 const PIE = 'Aviso automático de Felix Fix. No respondas este correo.';
 const cantidad = (n) => (n === null || n === undefined ? '—' : new Intl.NumberFormat('es-PA', { maximumFractionDigits: 3 }).format(Number(n)));
+const dinero = (n) => (n === null || n === undefined ? null : new Intl.NumberFormat('es-PA', { style: 'currency', currency: 'USD' }).format(Number(n)));
+
+/** Filas de un artículo: lo de la hoja del Excel y lo que llenó la compradora al aprobarlo. */
+const filasArticulo = (l) => [
+  ['Código de barras', l.codigoBarra || 'Sin código'],
+  ['Referencia', l.referencia],
+  ['Color', l.color],
+  ['Talla', l.talla],
+  ['Cantidad', cantidad(l.cantidad)],
+  ['Descripción', l.articulo?.descripcion],
+  ['Marca', l.articulo?.marca],
+  ['Categoría', l.articulo?.categoria],
+  ['Tipo de producto', l.articulo?.tipoProducto],
+  ['Ciclo de vida', l.articulo?.cicloVida],
+  ['Costo', dinero(l.articulo?.costo)],
+  ['Precio de venta', dinero(l.articulo?.precioVenta)],
+];
+const tituloArticulo = (l, i, n) => `Artículo ${i + 1} de ${n} · ${[l.referencia, l.color, l.talla].filter(Boolean).join(' · ') || l.codigoBarra || `#${l.posicion}`}`;
 
 /**
  * @param r       detalle del reclamo (Numero, Token, Proveedor, Marca, Division…)
- * @param lineas  [{ posicion, codigoBarra, referencia, color, talla, cantidad, descripcion }]
+ * @param lineas  [{ posicion, codigoBarra, referencia, color, talla, cantidad,
+ *                  articulo: { descripcion, marca, categoria, tipoProducto, cicloVida, costo, precioVenta } }]
  * @param opts    { de: la compradora que lo aprobó, nombre: quien recibe }
  */
 export function plantillaDataArticulos(r, lineas, { de, nombre } = {}) {
@@ -41,23 +62,7 @@ export function plantillaDataArticulos(r, lineas, { de, nombre } = {}) {
     ['Documento(s) SAP', (r.SapDocs || []).join(', ')],
   ];
 
-  const celda = `padding:7px 8px;border-top:1px solid ${COLOR.borde};font-family:${FUENTE};font-size:12px;vertical-align:top;color:${COLOR.texto};`;
-  const cab = `padding:7px 8px;font-family:${FUENTE};font-size:11px;font-weight:700;color:${COLOR.suave};text-align:left;background:${COLOR.celda};`;
-  const filasHtml = lineas
-    .map(
-      (l) => `
-            <tr>
-              <td style="${celda}font-family:Consolas,monospace;">${l.codigoBarra ? esc(l.codigoBarra) : `<span style="color:${COLOR.suave};font-family:${FUENTE};">Sin código</span>`}</td>
-              <td style="${celda}">${esc(l.referencia || '—')}</td>
-              <td style="${celda}">${esc(l.color || '—')}</td>
-              <td style="${celda}">${esc(l.talla || '—')}</td>
-              <td style="${celda}text-align:right;white-space:nowrap;">${esc(cantidad(l.cantidad))}</td>
-            </tr>`
-    )
-    .join('');
-  const tabla = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${COLOR.borde};border-radius:12px;border-collapse:separate;overflow:hidden;">
-            <tr><th style="${cab}">Código</th><th style="${cab}">Referencia</th><th style="${cab}">Color</th><th style="${cab}">Talla</th><th style="${cab}text-align:right;">Cantidad</th></tr>${filasHtml}
-          </table>`;
+  const articulos = lineas.flatMap((l, i) => [tituloSeccion(tituloArticulo(l, i, n)), bloque(tablaDatosHtml(filasArticulo(l)), { arriba: 10 })]);
 
   const html = documento({
     asunto,
@@ -67,8 +72,7 @@ export function plantillaDataArticulos(r, lineas, { de, nombre } = {}) {
     vistaPrevia: frase,
     bloques: [
       parrafo(`${esc(saludo(nombre))}<br />${esc(frase)}`, { arriba: 22 }),
-      tituloSeccion(`Sobrante no esperado · ${n} ${n === 1 ? 'artículo' : 'artículos'}`),
-      bloque(tabla, { arriba: 10 }),
+      ...articulos,
       boton({ texto: `Abrir ${r.Numero}`, enlace }),
       datos('Datos del reclamo', filas),
     ],
@@ -80,9 +84,7 @@ export function plantillaDataArticulos(r, lineas, { de, nombre } = {}) {
     '',
     saludo(nombre),
     frase,
-    '',
-    'CÓDIGO | REFERENCIA | COLOR | TALLA | CANTIDAD',
-    ...lineas.map((l) => [l.codigoBarra || 'Sin código', l.referencia || '—', l.color || '—', l.talla || '—', cantidad(l.cantidad)].join(' | ')),
+    ...lineas.flatMap((l, i) => datosTexto(tituloArticulo(l, i, n), filasArticulo(l))),
     ...(enlace ? ['', `Abrir ${r.Numero}: ${enlace}`] : []),
     ...datosTexto('Datos del reclamo', filas),
     '',

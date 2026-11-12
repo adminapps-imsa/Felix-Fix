@@ -234,7 +234,7 @@ export function ReclamoDetallePage() {
         <EnvioContabilidad reclamo={reclamo} puedeEnviar={puedeEnviarContabilidad && cerrado} onEnviado={setReclamo} />
       )}
 
-      <ProductosSection token={reclamo.Token} lineas={lineas} esAdmin={puedeDecidir} cerrado={cerrado || devuelto} puedeCargarCodigo={Boolean(permisos?.puedeCargarCodigoSap) && !reclamo.EnviadoContabilidadAt} onLineaActualizada={actualizarLinea} onLineasActualizadas={actualizarLineas} />
+      <ProductosSection token={reclamo.Token} lineas={lineas} esAdmin={puedeDecidir} cerrado={cerrado || devuelto} puedeCargarCodigo={Boolean(permisos?.puedeCargarCodigoSap) && !reclamo.EnviadoContabilidadAt} marcaReclamo={reclamo.Marca} onLineaActualizada={actualizarLinea} onLineasActualizadas={actualizarLineas} />
 
       <AdjuntosSection
         reclamo={reclamo}

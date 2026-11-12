@@ -26,7 +26,24 @@ export async function decidir(token, { status, comentario }, usuario) {
   if (Number(dto.LineasEsperaData) > 0) {
     const paraData = (await repo.listarLineas(token))
       .filter((l) => l.EsperaData && l.DecStatus === 'aprobado')
-      .map((l) => ({ posicion: l.Posicion, codigoBarra: l.CodigoBarra, referencia: l.Referencia, color: l.Color, talla: l.Talla, cantidad: l.Cantidad === null ? null : Number(l.Cantidad), descripcion: l.DescripcionExcel }));
+      .map((l) => ({
+        posicion: l.Posicion,
+        codigoBarra: l.CodigoBarra,
+        referencia: l.Referencia,
+        color: l.Color,
+        talla: l.Talla,
+        cantidad: l.Cantidad === null ? null : Number(l.Cantidad),
+        // Lo que llenó la compradora al aprobarlo.
+        articulo: {
+          descripcion: l.ArtDescripcion,
+          marca: l.ArtMarca,
+          categoria: l.ArtCategoria,
+          tipoProducto: l.ArtTipoProducto,
+          cicloVida: l.ArtCicloVida,
+          costo: l.ArtCosto === null ? null : Number(l.ArtCosto),
+          precioVenta: l.ArtPrecioVenta === null ? null : Number(l.ArtPrecioVenta),
+        },
+      }));
     avisarDataArticulos(dto, paraData, { de: usuario.name || nombreUsuario(usuario) });
   }
   return dto;
@@ -65,7 +82,7 @@ async function lineaDecidible(token, posicion) {
     });
   }
   exigir(dominio.motivoNoCambiarLineas(r));
-  return { pos, reclamo: r };
+  return { pos, reclamo: r, linea };
 }
 
 async function lineaActualizada(token, pos) {
@@ -74,14 +91,18 @@ async function lineaActualizada(token, pos) {
   return dto;
 }
 
-export async function decidirLinea(token, posicion, { decision, comentario }, usuario) {
-  const { pos } = await lineaDecidible(token, posicion);
+export async function decidirLinea(token, posicion, { decision, comentario, articulo }, usuario) {
+  const { pos, linea } = await lineaDecidible(token, posicion);
+  // Sobrante no esperado sin SAP: al aprobarlo, la compradora llena los datos que van a Data.
+  const pideArticulo = decision === 'aprobado' && linea.EsperaData;
+  if (pideArticulo && !articulo) exigir(dominio.MOTIVO_FALTAN_DATOS_ARTICULO);
   const ok = await repo.actualizarDecisionLinea(token, pos, {
     desde: 'pendiente',
     hacia: decision,
     comentario,
     usuario: nombreUsuario(usuario),
     tiposBloqueados: TIPOS_AUTO_APROBADOS,
+    articulo: pideArticulo ? articulo : null,
   });
   if (!ok) {
     await lineaDecidible(token, pos); // si el reclamo se cerró mientras tanto, da ese motivo

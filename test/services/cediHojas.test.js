@@ -6,7 +6,7 @@ import * as XLSX from 'xlsx';
 import { parsearPlantilla, detectarTipoPorMotivo, motivoFaltantesSinDocumento, filasConFoto } from '../../src/services/reclamos/excelParser.js';
 import { TIPOS, esAutoAprobado, TIPOS_SOBRANTE } from '../../src/services/reclamos/tipos.js';
 import { motivoNoDecidir, motivoNoEnviarContabilidad } from '../../src/domain/reclamo.js';
-import { codigoDataSchema, corregirLineasSchema } from '../../src/validators/reclamos.schema.js';
+import { codigoDataSchema, corregirLineasSchema, decisionLineaSchema } from '../../src/validators/reclamos.schema.js';
 import { plantillaDataArticulos } from '../../src/services/correo/avisoDataArticulos.js';
 
 function libro(...hojas) {
@@ -124,16 +124,39 @@ test('corregir productos: sin código solo en sobrante no esperado', () => {
   assert.equal(mal.success, false);
 });
 
-test('aviso a Data: tabla con código, referencia, color, talla y cantidad', () => {
+test('aviso a Data: por artículo, lo del Excel y lo que llenó la compradora', () => {
   const { asunto, html, texto } = plantillaDataArticulos(
     { Numero: 'REC-000099', Token: 't', Proveedor: 'GIGIO', SapDocs: ['4904530773'] },
-    [{ posicion: 4, codigoBarra: null, referencia: 'TY1374', color: 'OFF WHITE MIX', talla: 'S', cantidad: 2 }],
+    [
+      {
+        posicion: 4,
+        codigoBarra: null,
+        referencia: 'TY1374',
+        color: 'OFF WHITE MIX',
+        talla: 'S',
+        cantidad: 2,
+        articulo: { descripcion: 'Blusa floral', marca: 'GIGIO', categoria: 'Blusas', tipoProducto: 'Textil', cicloVida: 'Temporada', costo: 12.5, precioVenta: 29.95 },
+      },
+    ],
     { de: 'Ana' }
   );
   assert.equal(asunto, 'Artículos por crear en SAP: REC-000099 — GIGIO');
-  assert.match(texto, /Sin código \| TY1374 \| OFF WHITE MIX \| S \| 2/);
   assert.match(texto, /Ana aprobó en un reclamo de CEDI un sobrante no esperado que no está creado en SAP/);
-  assert.match(html, /OFF WHITE MIX/);
+  for (const t of ['Artículo 1 de 1 · TY1374 · OFF WHITE MIX · S', 'Código de barras: Sin código', 'Cantidad: 2', 'Descripción: Blusa floral', 'Marca: GIGIO', 'Categoría: Blusas', 'Tipo de producto: Textil', 'Ciclo de vida: Temporada', ]) {
+    assert.ok(texto.includes(t), t);
+  }
+  assert.match(texto, /Costo: USD\s12\.50/);
+  assert.match(texto, /Precio de venta: USD\s29\.95/);
+  assert.match(html, /Blusa floral/);
+});
+
+test('datos del artículo para Data: todos obligatorios; montos sin negativos', () => {
+  const ok = { costo: 12.5, precioVenta: 29.95, categoria: 'Blusas', tipoProducto: 'Textil', cicloVida: 'Temporada', descripcion: 'Blusa', marca: 'GIGIO' };
+  assert.equal(decisionLineaSchema.safeParse({ decision: 'aprobado', articulo: ok }).success, true);
+  assert.equal(decisionLineaSchema.safeParse({ decision: 'aprobado' }).success, true); // el servicio lo exige solo si espera a Data
+  const sinCategoria = decisionLineaSchema.safeParse({ decision: 'aprobado', articulo: { ...ok, categoria: ' ' } });
+  assert.equal(sinCategoria.error.issues[0].message, 'Indica la categoría.');
+  assert.equal(decisionLineaSchema.safeParse({ decision: 'aprobado', articulo: { ...ok, costo: -1 } }).success, false);
 });
 
 test('Averia: fila sin foto en el Excel se reporta para pedirla en el formulario', () => {
