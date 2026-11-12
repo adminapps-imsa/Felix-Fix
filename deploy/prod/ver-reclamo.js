@@ -7,6 +7,10 @@
 //
 // No muestra el Token (va en las URLs del portal) ni rutas de archivos.
 import { getPool, closePool, sql, S } from '../../src/config/db.js';
+import { reclamoArchivoPath } from '../../src/config/almacenamiento.js';
+import { leerNotaPdf } from '../../src/services/contabilidad/leerNotaPdf.js';
+import { claveProducto } from '../../src/services/contabilidad/validarDocumento.js';
+import { materialesDeCodigos } from '../../src/services/sapProductosService.js';
 
 const arg = String(process.argv[2] ?? '').trim();
 const m = /^(?:REC-?)?0*(\d{1,9})$/i.exec(arg);
@@ -65,6 +69,58 @@ try {
   for (const d of docs) {
     console.log(`    ${txt(d.NumeroDocumento)}  ${txt(d.TipoDocumento)}  ${txt(d.Movimiento)}  ${dia(d.FechaDocumento)}  total ${txt(d.Total)}  ${d.Estado}  enviado ${hora(d.EnviadoAt)} por ${txt(d.EnviadoPor)}`);
   }
+
+  await documentosSap(r, lineas);
 } finally {
   await closePool();
+  try {
+    const { getSapOraclePool } = await import('../../src/config/oracle.js');
+    await (await getSapOraclePool()).close(0);
+  } catch {
+    /* sin SAP */
+  }
+}
+
+/**
+ * Documentos SAP del reclamo y sus PDF (911/912) con los productos que traen,
+ * y si cada faltante aparece en algún PDF (por material SAP o por descripción).
+ */
+async function documentosSap(r, lineas) {
+  const lista = (v) => {
+    try {
+      return Array.isArray(JSON.parse(v || '[]')) ? JSON.parse(v || '[]') : [];
+    } catch {
+      return [];
+    }
+  };
+  const docs = [r.SapDoc1, r.SapDoc2, r.SapDoc3, ...lista(r.SapDocsExtra)].filter(Boolean);
+  console.log(`  Documentos SAP del reclamo: ${docs.length ? docs.join(', ') : '—'}`);
+  const pdfs = lista(r.AdjuntosExtra).filter((a) => a.tipo === 'pdf');
+  console.log(`  PDF adjuntos (${pdfs.length}):`);
+  const filasPdf = [];
+  for (const a of pdfs) {
+    const nota = await leerNotaPdf(reclamoArchivoPath(a.filename)).catch((e) => ({ legible: false, filas: [], error: e.message }));
+    console.log(
+      `    «${a.originalname}»  doc ${txt(nota.numeroDocumento)}  ${txt(nota.tipoDocumento)}  mov ${txt(nota.movimiento)}  ${txt(nota.fechaDocumento)}  total ${txt(nota.total)}  ${nota.legible ? `${nota.filas.length} fila(s)` : `ilegible: ${txt(nota.error)}`}${a.notaAprobada ? '  [912 validado]' : ''}`
+    );
+    for (const f of nota.filas) {
+      console.log(`       ${txt(f.material)}  ${txt(f.descripcion)}  cant ${txt(f.cantidad)}  valor ${txt(f.valor)}`);
+      filasPdf.push({ ...f, doc: nota.numeroDocumento });
+    }
+  }
+  const faltantes = lineas.filter((l) => l.Tipo === 'faltante_real');
+  if (!faltantes.length || !filasPdf.length) return;
+  const sap = await materialesDeCodigos(faltantes.map((l) => l.CodigoBarra));
+  const norm = (m) => String(m ?? '').trim().toUpperCase().replace(/^0+/, '');
+  console.log(`  Faltantes contra los PDF (SAP ${sap.disponible ? 'disponible' : 'NO disponible'}):`);
+  for (const l of faltantes) {
+    const matnr = sap.materiales.get(String(l.CodigoBarra).trim()) ?? null;
+    const porMat = matnr ? filasPdf.filter((f) => norm(f.material) === norm(matnr)) : [];
+    const k = claveProducto(l.DescripcionExcel);
+    const porDesc = k ? filasPdf.filter((f) => claveProducto(f.descripcion) === k) : [];
+    const cant = (fs) => fs.reduce((a, f) => a + Number(f.cantidad || 0), 0);
+    console.log(
+      `    ${l.Posicion}. ${l.CodigoBarra}  material ${txt(matnr)}  cant ${txt(l.Cantidad)}  → por material: ${porMat.length ? `sí (cant ${cant(porMat)}, doc ${porMat.map((f) => f.doc).join('/')})` : 'no'}  · por descripción: ${porDesc.length ? `sí (cant ${cant(porDesc)})` : 'no'}`
+    );
+  }
 }
