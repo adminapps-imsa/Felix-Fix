@@ -1,11 +1,12 @@
-// Aviso a Data: un reclamo de CEDI trae sobrantes no esperados que no están
-// creados en SAP (o vinieron sin código). Lleva las columnas de la hoja
-// «Sobrante NO esperado» (CÓDIGO, REFERENCIA, COLOR, TALLA, CANTIDAD) para
-// que Data cree los artículos; ya creados, Data carga el código en el portal.
+// Aviso a Data: la compradora cerró un reclamo de CEDI aprobando sobrantes no
+// esperados que no están creados en SAP (o vinieron sin código). Lleva las
+// columnas de la hoja «Sobrante NO esperado» (CÓDIGO, REFERENCIA, COLOR,
+// TALLA, CANTIDAD) para que Data cree los artículos; ya creados, Data carga el
+// código en el portal y Torre de Control hace el 912.
 //
 // Va a los usuarios cuyos roles tienen «Crear artículos en SAP (Data)»
 // (reclamos.articulos_sap). Igual que los demás avisos: nunca bloquea ni hace
-// fallar la creación; sin correo, con MAIL_AVISOS=false, MAIL_DESACTIVADO o
+// fallar el cierre; sin correo, con MAIL_AVISOS=false, MAIL_DESACTIVADO o
 // sin destinatarios, solo queda en el log.
 import { env } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
@@ -20,15 +21,15 @@ const cantidad = (n) => (n === null || n === undefined ? '—' : new Intl.Number
 /**
  * @param r       detalle del reclamo (Numero, Token, Proveedor, Marca, Division…)
  * @param lineas  [{ posicion, codigoBarra, referencia, color, talla, cantidad, descripcion }]
- * @param opts    { de: quien creó el reclamo, nombre: quien recibe }
+ * @param opts    { de: la compradora que lo aprobó, nombre: quien recibe }
  */
 export function plantillaDataArticulos(r, lineas, { de, nombre } = {}) {
   const n = lineas.length;
   const titulo = 'Artículos por crear en SAP';
   const asunto = `${titulo}: ${r.Numero} — ${r.Proveedor || 'Sobrante no esperado'}`;
   const enlace = env.correo.portalUrl ? `${env.correo.portalUrl}/reclamos/${r.Token}` : '';
-  const quien = de || 'CEDI';
-  const frase = `${quien} creó un reclamo de CEDI con ${n === 1 ? 'un sobrante no esperado que no está creado' : `${n} sobrantes no esperados que no están creados`} en SAP. Crea ${n === 1 ? 'el artículo' : 'los artículos'} y, cuando ${n === 1 ? 'esté listo' : 'estén listos'}, carga su código de barras en el reclamo para que la compradora lo${n === 1 ? '' : 's'} revise.`;
+  const quien = de || 'La compradora';
+  const frase = `${quien} aprobó en un reclamo de CEDI ${n === 1 ? 'un sobrante no esperado que no está creado' : `${n} sobrantes no esperados que no están creados`} en SAP. Crea ${n === 1 ? 'el artículo' : 'los artículos'} y, cuando ${n === 1 ? 'esté listo' : 'estén listos'}, carga su código de barras en el reclamo para que Torre de Control haga el 912.`;
   const filas = [
     ['Proveedor', [r.Proveedor, r.Marca].filter(Boolean).join(' · ')],
     ['Mundo / Departamento', [r.Mundo, r.Departamento, r.Division].filter(Boolean).join(' · ')],
@@ -87,7 +88,7 @@ export function plantillaDataArticulos(r, lineas, { de, nombre } = {}) {
   return { asunto, html, texto: plano };
 }
 
-/** Manda el aviso a Data. No espera ni lanza: se llama después de crear el reclamo. */
+/** Manda el aviso a Data. No espera ni lanza: se llama después de que la compradora cierra el reclamo. */
 export function avisarDataArticulos(r, lineas, { de } = {}) {
   if (!lineas?.length || !r) return;
   if (!env.correo.avisos || env.correo.desactivado || !correoConfigurado()) {

@@ -102,6 +102,8 @@ export interface Reclamo {
   LineasTotal: number;
   LineasPendientes: number;
   /** La compradora aprobó productos: para enviar a contabilidad hace falta su nota de débito. */
+  /** Sobrantes no esperados aprobados que Data todavía no crea en SAP (bloquean el envío a contabilidad). */
+  LineasEsperaData?: number;
   RequiereNotaAprobada: boolean;
   TieneNotaAprobada: boolean;
 }

@@ -152,7 +152,7 @@ const CORREOS_RECLAMOS = [
   {
     id: 'rec-data-articulos',
     nombre: 'Artículos por crear en SAP',
-    cuando: 'Se crea un reclamo de CEDI con sobrantes no esperados que no están en SAP (o vienen sin código).',
+    cuando: 'La compradora cierra un reclamo de CEDI aprobando sobrantes no esperados que no están en SAP (o vienen sin código).',
     quien: 'Data (permiso «Crear artículos en SAP (Data)»), con la hoja «Sobrante NO esperado»',
     generar: () =>
       plantillaDataArticulos(
@@ -162,15 +162,16 @@ const CORREOS_RECLAMOS = [
           { posicion: 10, codigoBarra: null, referencia: 'TY1374', color: 'OFF WHITE MIX', talla: 'M', cantidad: 2 },
           { posicion: 11, codigoBarra: '7701234500042', referencia: 'TY1374', color: 'OFF WHITE MIX', talla: 'L', cantidad: 2 },
         ],
-        { de: 'CEDI de ejemplo' }
+        { de: 'Compradora de ejemplo' }
       ),
   },
   {
     id: 'rec-listo-data',
-    nombre: 'Sobrantes no esperados listos para revisar',
-    cuando: 'Data carga el código del último sobrante no esperado que faltaba en SAP.',
-    quien: 'La compradora del reclamo',
-    generar: () => plantillaAvisoReclamo('listo_data', reclamo({ Tipo: 'sobrante_no_esperado', Origen: 'cedi' }), { de: 'Data de ejemplo', para: 'area' }),
+    nombre: 'Sobrantes no esperados creados en SAP',
+    cuando: 'Data carga el código del último sobrante no esperado aprobado que faltaba en SAP.',
+    quien: 'Gof y Torre de Control (permiso «Enviar reclamos a contabilidad»)',
+    generar: () =>
+      plantillaAvisoReclamo('listo_data', reclamo({ Tipo: 'sobrante_no_esperado', Origen: 'cedi', Status: 'resuelto', LineasAprobadas: 3, LineasPendientes: 0 }), { de: 'Data de ejemplo', para: 'area' }),
   },
   {
     id: 'rec-cerrado-area',

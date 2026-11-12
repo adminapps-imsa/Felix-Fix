@@ -6,6 +6,7 @@ import * as dominio from '../../domain/reclamo.js';
 import { conflict, notFound } from '../../utils/httpError.js';
 import { logger } from '../../utils/logger.js';
 import { avisarReclamo } from '../correo/avisosReclamos.js';
+import { avisarDataArticulos } from '../correo/avisoDataArticulos.js';
 import { obtenerOFallar, exigir, lineasConNombres, nombreUsuario, detalle, numeroReclamo } from './comun.js';
 
 export async function decidir(token, { status, comentario }, usuario) {
@@ -21,6 +22,13 @@ export async function decidir(token, { status, comentario }, usuario) {
   const dto = await detalle(token);
   // Aviso a quien lo envía a contabilidad y a quien lo creó.
   avisarReclamo('cerrado', dto, { comentario, de: usuario.name || nombreUsuario(usuario) });
+  // A Data: los sobrantes no esperados que la compradora aprobó y no están creados en SAP.
+  if (Number(dto.LineasEsperaData) > 0) {
+    const paraData = (await repo.listarLineas(token))
+      .filter((l) => l.EsperaData && l.DecStatus === 'aprobado')
+      .map((l) => ({ posicion: l.Posicion, codigoBarra: l.CodigoBarra, referencia: l.Referencia, color: l.Color, talla: l.Talla, cantidad: l.Cantidad === null ? null : Number(l.Cantidad), descripcion: l.DescripcionExcel }));
+    avisarDataArticulos(dto, paraData, { de: usuario.name || nombreUsuario(usuario) });
+  }
   return dto;
 }
 
@@ -57,7 +65,6 @@ async function lineaDecidible(token, posicion) {
     });
   }
   exigir(dominio.motivoNoCambiarLineas(r));
-  if (linea.EsperaData) exigir(dominio.MOTIVO_ESPERA_DATA);
   return { pos, reclamo: r };
 }
 
