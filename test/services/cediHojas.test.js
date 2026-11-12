@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as XLSX from 'xlsx';
-import { parsearPlantilla, detectarTipoPorMotivo, motivoFaltantesSinDocumento } from '../../src/services/reclamos/excelParser.js';
+import { parsearPlantilla, detectarTipoPorMotivo, motivoFaltantesSinDocumento, filasConFoto } from '../../src/services/reclamos/excelParser.js';
 import { TIPOS, esAutoAprobado, TIPOS_SOBRANTE } from '../../src/services/reclamos/tipos.js';
 import { motivoNoDecidir, motivoNoEnviarContabilidad } from '../../src/domain/reclamo.js';
 import { codigoDataSchema, corregirLineasSchema } from '../../src/validators/reclamos.schema.js';
@@ -134,4 +134,37 @@ test('aviso a Data: tabla con código, referencia, color, talla y cantidad', () 
   assert.match(texto, /Sin código \| TY1374 \| OFF WHITE MIX \| S \| 2/);
   assert.match(texto, /Ana aprobó en un reclamo de CEDI un sobrante no esperado que no está creado en SAP/);
   assert.match(html, /OFF WHITE MIX/);
+});
+
+test('Averia: fila sin foto en el Excel se reporta para pedirla en el formulario', () => {
+  const r = parsearPlantilla(libro(AVERIA));
+  assert.deepEqual(r.averiasSinFoto, [{ hoja: 'Averia', fila: 2, codigoBarra: '2050039062096' }]);
+});
+
+test('Averia: foto flotante anclada en la fila cuenta como foto', async () => {
+  const ExcelJS = (await import('exceljs')).default;
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Averia');
+  ws.addRow(AVERIA[1][0]);
+  ws.addRow(AVERIA[1][1]);
+  ws.addRow([150222430005, 2050039062126, 'TE2114, RED, M', 'Domestic', 180131238, 'UN', 'Roto', 2, '']);
+  // PNG de 1×1
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+  const id = wb.addImage({ buffer: png, extension: 'png' });
+  ws.addImage(id, { tl: { col: 8, row: 1 }, ext: { width: 20, height: 20 } }); // fila 2 de Excel
+  const r = parsearPlantilla(Buffer.from(await wb.xlsx.writeBuffer()));
+  assert.deepEqual(r.averiasSinFoto, [{ hoja: 'Averia', fila: 3, codigoBarra: '2050039062126' }]);
+});
+
+test('fotos «en la celda» (vm) cuentan por su fila', () => {
+  const archivo = (content) => ({ content: Buffer.from(content) });
+  const wb = {
+    SheetNames: ['Averia'],
+    Workbook: { Sheets: [{ name: 'Averia', id: 'rId9' }] },
+    files: {
+      'xl/_rels/workbook.xml.rels': archivo('<Relationships><Relationship Id="rId9" Type="x/worksheet" Target="worksheets/sheet2.xml"/></Relationships>'),
+      'xl/worksheets/sheet2.xml': archivo('<sheetData><row r="2"><c r="I2" t="e" vm="1"><v>#VALUE!</v></c></row><row r="3"><c r="I3" t="e"><v>#VALUE!</v></c></row></sheetData>'),
+    },
+  };
+  assert.deepEqual([...filasConFoto(wb, 'Averia')], [2]);
 });

@@ -122,6 +122,8 @@ export async function previsualizarExcel(multerFile) {
     lineasSinMotivo: parsed.lineasSinMotivo,
     // Plantilla CEDI por hojas: faltantes sin DOCUMENTO (no deja crear el reclamo).
     faltantesSinDocumento: motivoFaltantesSinDocumento(parsed.faltantesSinDocumento)?.mensaje || null,
+    // Hoja «Averia»: filas sin foto en el Excel. El formulario pide subir sus fotos en el paso 4.
+    averiasSinFoto: (parsed.averiasSinFoto || []).map(({ fila, codigoBarra }) => ({ fila, codigoBarra })),
     // Sobrante no esperado: los que no están en SAP (o sin código) se avisan a Data.
     sobranteNoEsperado: resumenSobranteNoEsperado(parsed.lineas, sap),
     // Las filas con las columnas de la plantilla: son el formulario de productos.

@@ -436,6 +436,10 @@ export function NuevoReclamoForm({
   // ---------------- Envío ----------------
 
   const excelCedi = soloTienda && preview?.origen === 'cedi';
+  // Averías sin foto en el Excel: una foto por cada una en el paso 4.
+  const averiasSinFoto = preview?.averiasSinFoto ?? [];
+  const fotosAdjuntas = adjuntos.filter(esImagen).length;
+  const fotosQueFaltan = Math.max(0, averiasSinFoto.length - fotosAdjuntas);
 
   // Todos los motivos por los que aún no se puede crear: se muestran en el popup al intentarlo.
   const motivos = [
@@ -446,6 +450,8 @@ export function NuevoReclamoForm({
     excel && !parsing && !tipo && 'Selecciona el tipo de reclamo.',
     desajuste && 'El tipo elegido no coincide con lo que indica el Excel.',
     preview?.faltantesSinDocumento,
+    fotosQueFaltan > 0 &&
+      `${averiasSinFoto.length === 1 ? 'La avería' : `Las ${averiasSinFoto.length} averías`} del Excel sin foto ${averiasSinFoto.length === 1 ? 'necesita su foto' : 'necesitan su foto'}: ${fotosQueFaltan === 1 ? 'falta 1 foto' : `faltan ${fotosQueFaltan} fotos`} en «4. Fotos y comentario».`,
     ...[...new Set(docsRepetidos)].map((d) => `El documento SAP ${d} está escrito más de una vez.`),
     ...docsEnOtros.map((d) => `El documento SAP ${d} ya está en ${usadosDe(d)!.map((r) => r.numero).join(', ')}: no se puede crear otro reclamo con el mismo documento.`),
     pdfsLeyendo && 'Se están leyendo los PDF de los documentos SAP; espera un momento.',
@@ -949,7 +955,23 @@ export function NuevoReclamoForm({
           />
         </SeccionForm>
 
-        <SeccionForm paso={4} titulo="Fotos y comentario" ayuda="Opcional: fotos del producto o de la mercancía y un comentario. También acepta Excel; los PDF pasan a Documentos SAP.">
+        <SeccionForm
+          paso={4}
+          titulo="Fotos y comentario"
+          {...(averiasSinFoto.length ? { completa: fotosQueFaltan === 0 } : {})}
+          ayuda={
+            averiasSinFoto.length
+              ? `Obligatorio: ${averiasSinFoto.length === 1 ? 'una avería del Excel no trae foto' : `${averiasSinFoto.length} averías del Excel no traen foto`}. Sube ${averiasSinFoto.length === 1 ? 'su foto' : 'una foto de cada una'}. También acepta Excel; los PDF pasan a Documentos SAP.`
+              : 'Opcional: fotos del producto o de la mercancía y un comentario. También acepta Excel; los PDF pasan a Documentos SAP.'
+          }
+        >
+          {averiasSinFoto.length > 0 && (
+            <p className={cn('rounded-lg px-2.5 py-1.5 text-xs', fotosQueFaltan ? 'bg-warning/10' : 'bg-success/10 text-success')}>
+              {fotosQueFaltan
+                ? `Averías sin foto en el Excel: ${averiasSinFoto.map((a) => `fila ${a.fila} (${a.codigoBarra})`).join(', ')}. ${fotosQueFaltan === 1 ? 'Falta 1 foto' : `Faltan ${fotosQueFaltan} fotos`}.`
+                : `Fotos de las averías listas (${averiasSinFoto.length}).`}
+            </p>
+          )}
           {adjuntos.length > 0 && (
             <ul className="flex flex-col gap-1.5">
               {adjuntos.map((a, i) => (
