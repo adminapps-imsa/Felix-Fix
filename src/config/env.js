@@ -131,6 +131,9 @@ export const env = {
     // "Direct Send" de Microsoft 365, que solo entrega dentro de la empresa).
     soloDominios: (process.env.MAIL_SOLO_DOMINIOS || '').split(',').map((d) => d.trim().toLowerCase()).filter(Boolean),
     maxAdjuntosMb: Number(process.env.MAIL_MAX_ADJUNTOS_MB) || 20,
+    // Buzón de Data para «Artículos por crear en SAP» (además de quien tenga el
+    // permiso «Crear artículos en SAP (Data)»). Por defecto, analistas de compras.
+    dataPara: (process.env.MAIL_DATA_PARA ?? 'analistascompras@maduro.com.pa').split(',').map((d) => d.trim().toLowerCase()).filter(Boolean),
     // Avisos internos a cada área cuando un reporte le llega (por defecto sí).
     avisos: bool(process.env.MAIL_AVISOS, true),
     // Interruptor general para pruebas: con true no sale NINGÚN correo (avisos,

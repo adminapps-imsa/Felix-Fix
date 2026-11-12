@@ -6,14 +6,15 @@
 // vida, descripción y marca) para que Data cree los artículos; ya creados, Data carga el
 // código en el portal y Torre de Control hace el 912.
 //
-// Va a los usuarios cuyos roles tienen «Crear artículos en SAP (Data)»
+// Va al buzón de Data (MAIL_DATA_PARA, por defecto analistascompras@maduro.com.pa)
+// y a los usuarios cuyos roles tienen «Crear artículos en SAP (Data)»
 // (reclamos.articulos_sap). Igual que los demás avisos: nunca bloquea ni hace
 // fallar el cierre; sin correo, con MAIL_AVISOS=false, MAIL_DESACTIVADO o
 // sin destinatarios, solo queda en el log.
 import { env } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
 import { enviarCorreo, correoConfigurado, resumenDestinatarios } from './mailer.js';
-import { destinatarios } from './destinatarios.js';
+import { destinatarios, filtrarDominios } from './destinatarios.js';
 import { documento, parrafo, tituloSeccion, bloque, boton, datos, saludo, esc, datosTexto, COLOR, FUENTE } from './diseno.js';
 
 export const PERMISO_DATA = 'reclamos.articulos_sap';
@@ -129,9 +130,9 @@ export function avisarDataArticulos(r, lineas, { de } = {}) {
     return;
   }
   (async () => {
-    const para = await destinatarios(PERMISO_DATA);
+    const para = [...new Set([...filtrarDominios(env.correo.dataPara), ...(await destinatarios(PERMISO_DATA))])];
     if (!para.length) {
-      logger.warn({ reclamo: r.Numero, articulos: lineas.length }, 'Aviso a Data sin destinatarios: ningún rol tiene «Crear artículos en SAP (Data)»');
+      logger.warn({ reclamo: r.Numero, articulos: lineas.length }, 'Aviso a Data sin destinatarios: sin MAIL_DATA_PARA y ningún rol tiene «Crear artículos en SAP (Data)»');
       return;
     }
     const { asunto, html, texto } = plantillaDataArticulos(r, lineas, { de });
