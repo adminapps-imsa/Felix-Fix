@@ -135,6 +135,22 @@ export async function consultarProductos(codigos) {
 }
 
 /**
+ * Material SAP (MATNR) de cada código de barras -> { disponible, materiales: Map<codigo, MATNR> }.
+ * Nunca lanza.
+ */
+export async function materialesDeCodigos(codigos) {
+  const unicos = [...new Set((codigos || []).map((c) => String(c ?? '').trim()).filter(Boolean))];
+  if (!isSapConfigured()) return { disponible: false, materiales: new Map() };
+  if (!unicos.length) return { disponible: true, materiales: new Map() };
+  try {
+    return { disponible: true, materiales: await materialesPorCodigo(unicos) };
+  } catch (err) {
+    logger.warn({ err: err.message }, 'SAP no disponible: no se buscan los materiales');
+    return { disponible: false, materiales: new Map() };
+  }
+}
+
+/**
  * Documento de material en SAP (MSEG, por su número) y el material del código
  * de barras del reporte, para validar el «Documento salida de NF».
  * -> { disponible, encontrado, matnr, lineas: [{ mjahr, bwart, lgort, werks, matnr, menge }] }
