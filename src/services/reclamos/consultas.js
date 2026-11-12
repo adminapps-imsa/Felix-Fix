@@ -19,9 +19,10 @@ export function permisos(usuario) {
     // Super administrador (sin «Vista por»): elimina desde el detalle en cualquier estado.
     puedeEliminarCualquiera: Boolean(usuario?.esSuperAdmin && !usuario.vista),
     // Adjuntar en cualquier reclamo (no solo en los propios).
-    puedeAdjuntar: puedeDecidir || tienePermiso(usuario, 'reclamos.adjuntar'),
+    // Quien envía a contabilidad también adjunta (sube el 912).
+    puedeAdjuntar: puedeDecidir || tienePermiso(usuario, 'reclamos.adjuntar') || tienePermiso(usuario, 'reclamos.enviar_contabilidad'),
     // Torre de Control: también agrega adjuntos cuando el reclamo ya tiene decisión.
-    puedeAdjuntarCerrado: tienePermiso(usuario, 'reclamos.adjuntar'),
+    puedeAdjuntarCerrado: tienePermiso(usuario, 'reclamos.adjuntar') || tienePermiso(usuario, 'reclamos.enviar_contabilidad'),
     // Enviar a contabilidad: solo quien tiene el permiso propio (Gof, Torre de Control). La compradora decide, no envía.
     puedeEnviarContabilidad: tienePermiso(usuario, 'reclamos.enviar_contabilidad'),
     // Devolver a quien lo creó: quien decide (la compradora). Corregir y reenviar: quien lo creó o el super administrador.

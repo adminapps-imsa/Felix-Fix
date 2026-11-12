@@ -7,6 +7,7 @@ import { Dato, SeccionDatos } from '../../../components/ui/DatosDetalle';
 import { RutaCaso, type PasoRuta } from '../../../components/ui/RutaCaso';
 import { Button } from '../../../components/ui/Button';
 import { Textarea } from '../../../components/ui/Input';
+import { ZonaArchivo } from '../../../components/ui/Formulario';
 import { EsqueletoDetalle } from '../../../components/ui/Esqueleto';
 import { BotonReintentar, EstadoVacio } from '../../../components/ui/EstadoVacio';
 import { useAvisos } from '../../../components/ui/Avisos';
@@ -297,8 +298,28 @@ function EnvioContabilidad({
   const avisos = useAvisos();
   const nArchivos = (reclamo.TieneExcel ? 1 : 0) + reclamo.AdjuntosExtra.length;
   const nPdf = reclamo.AdjuntosExtra.filter((a) => a.tipo === 'pdf').length;
-  // Con sobrantes aprobados, primero se sube la nota de débito 912 validada (sección Adjuntos).
+  // Con sobrantes aprobados, primero se sube la nota de débito 912 validada (aquí mismo).
   const faltaNota = reclamo.RequiereNotaAprobada && !reclamo.TieneNotaAprobada;
+  const notas = reclamo.AdjuntosExtra.filter((a) => a.tipo === 'pdf' && a.notaAprobada);
+  const [subiendo, setSubiendo] = useState(false);
+  const [errorNota, setErrorNota] = useState<string | null>(null);
+
+  // Sube el 912: el backend lo cruza con las decisiones de la compradora y lo marca como nota validada.
+  const subirNota = async ([archivo]: File[]) => {
+    if (!archivo) return;
+    setSubiendo(true);
+    setErrorNota(null);
+    try {
+      const r = await apiReclamos.subirAdjunto(reclamo.Token, archivo);
+      onEnviado(r);
+      if (r.TieneNotaAprobada) avisos.ok('Documento 912 validado: ya puedes enviarlo a contabilidad.');
+      else setErrorNota('El PDF se adjuntó, pero no se reconoce como un 912 con los sobrantes aprobados. Revisa que sea el PDF de SAP del documento 912.');
+    } catch (err) {
+      setErrorNota(err instanceof ApiError ? err.message : 'No se pudo subir el documento.');
+    } finally {
+      setSubiendo(false);
+    }
+  };
   // Sobrantes no esperados aprobados que Data todavía no crea en SAP: sin ellos no hay 912.
   const esperanData = Number(reclamo.LineasEsperaData || 0);
 
@@ -349,12 +370,27 @@ function EnvioContabilidad({
         </p>
       )}
       {puedeEnviar && esperanData === 0 && faltaNota && (
-        <p className="flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-sm">
-          <AlertTriangle size={16} className="mt-0.5 shrink-0 text-warning" />
-          <span>
-            Para enviarlo a contabilidad, primero sube en <strong>Adjuntos</strong> el documento 912 (PDF de SAP) con los sobrantes aprobados por
-            la compradora.
-          </span>
+        <div className="flex flex-col gap-2">
+          <p className="flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-sm">
+            <AlertTriangle size={16} className="mt-0.5 shrink-0 text-warning" />
+            <span>Para enviarlo a contabilidad, sube aquí el documento 912 (PDF de SAP) con los sobrantes aprobados por la compradora.</span>
+          </p>
+          <ZonaArchivo
+            compacta
+            icono={FileText}
+            titulo={subiendo ? 'Validando el 912…' : 'Subir el 912 (PDF de SAP)'}
+            ayuda="o suéltalo aquí · se valida contra los productos aprobados"
+            accept="application/pdf,.pdf"
+            disabled={subiendo}
+            onArchivos={subirNota}
+          />
+          {errorNota && <p className="text-sm text-danger">{errorNota}</p>}
+        </div>
+      )}
+      {notas.length > 0 && (
+        <p className="text-sm">
+          <CheckCircle2 size={15} className="mr-1 inline text-success" />
+          912 validado: {notas.map((n) => n.documentoSap || n.originalname).join(', ')}
         </p>
       )}
       {puedeEnviar && esperanData === 0 && !faltaNota && (
