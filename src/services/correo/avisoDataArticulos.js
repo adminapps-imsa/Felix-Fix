@@ -11,7 +11,11 @@
 import { env } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
 import { enviarCorreo, correoConfigurado, resumenDestinatarios } from './mailer.js';
-import { destinatarios } from './destinatarios.js';
+import { destinatarios, deUsuario } from './destinatarios.js';
+
+// Solo QA (rama qa, nunca a main): el aviso a Data va únicamente a este usuario
+// y sale aunque MAIL_DESACTIVADO=true, para probar sin escribirle a nadie más.
+const PRUEBA_QA_DATA = 'maltamiranda';
 import { documento, parrafo, tituloSeccion, bloque, boton, datos, saludo, esc, datosTexto, COLOR, FUENTE } from './diseno.js';
 
 export const PERMISO_DATA = 'reclamos.articulos_sap';
@@ -91,18 +95,19 @@ export function plantillaDataArticulos(r, lineas, { de, nombre } = {}) {
 /** Manda el aviso a Data. No espera ni lanza: se llama después de que la compradora cierra el reclamo. */
 export function avisarDataArticulos(r, lineas, { de } = {}) {
   if (!lineas?.length || !r) return;
-  if (!env.correo.avisos || env.correo.desactivado || !correoConfigurado()) {
+  if (!correoConfigurado()) {
     logger.info({ reclamo: r.Numero, articulos: lineas.length }, 'Aviso a Data no enviado (correo apagado o sin configurar)');
     return;
   }
   (async () => {
-    const para = await destinatarios(PERMISO_DATA);
+    void destinatarios;
+    const para = (await deUsuario(PRUEBA_QA_DATA)).correos;
     if (!para.length) {
       logger.warn({ reclamo: r.Numero, articulos: lineas.length }, 'Aviso a Data sin destinatarios: ningún rol tiene «Crear artículos en SAP (Data)»');
       return;
     }
     const { asunto, html, texto } = plantillaDataArticulos(r, lineas, { de });
-    await enviarCorreo({ para, asunto, html, texto });
+    await enviarCorreo({ para, asunto: `[PRUEBA QA] ${asunto}`, html, texto, pruebaQa: true });
     logger.info({ reclamo: r.Numero, articulos: lineas.length, ...resumenDestinatarios(para) }, 'Aviso a Data enviado');
   })().catch((err) => logger.warn({ err: err.message, reclamo: r?.Numero }, 'No se pudo enviar el aviso a Data'));
 }

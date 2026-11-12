@@ -109,12 +109,13 @@ export function resumenDestinatarios(direcciones) {
 }
 
 /** Envía y devuelve el messageId. Errores de SMTP o n8n -> 502 con un mensaje genérico (el detalle va al log). */
-export async function enviarCorreo({ para, cc = [], responderA, asunto, html, texto, adjuntos = [] }) {
+export async function enviarCorreo({ para, cc = [], responderA, asunto, html, texto, adjuntos = [], pruebaQa = false }) {
   validarDestinatarios([...para, ...cc]);
   // El logo del encabezado va incrustado (cid) en todos los correos del diseño común.
   if (html?.includes(`cid:${LOGO_CID}`)) adjuntos = [...adjuntos, logoAdjunto()];
   // Antes de tocar n8n o SMTP: con el interruptor de pruebas no sale nada.
-  if (correoDesactivado()) {
+  // Solo QA: `pruebaQa` deja pasar el aviso de prueba a Data (va solo a quien prueba).
+  if (correoDesactivado() && !pruebaQa) {
     logger.warn({ ...resumenDestinatarios([...para, ...cc]), adjuntos: adjuntos.length }, 'Correo NO enviado: MAIL_DESACTIVADO=true');
     throw serviceUnavailable(MSG_DESACTIVADO, { code: 'CORREO_DESACTIVADO' });
   }
