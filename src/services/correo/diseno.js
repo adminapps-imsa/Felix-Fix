@@ -125,8 +125,9 @@ export const bloque = (html, opciones) => fila(html, opciones);
  * @param vistaPrevia texto que muestra la bandeja junto al asunto
  * @param bloques    filas de la tarjeta (de los helpers de arriba)
  * @param pie        líneas del pie (texto)
+ * @param ancho      ancho máximo de la tarjeta en px (600; más ancho solo para tablas como la de Data)
  */
-export function documento({ asunto, modulo, titulo, subtitulo, vistaPrevia, bloques, pie = [] }) {
+export function documento({ asunto, modulo, titulo, subtitulo, vistaPrevia, bloques, pie = [], ancho = 600 }) {
   return `<!doctype html>
 <html lang="es">
 <head>
@@ -149,7 +150,7 @@ export function documento({ asunto, modulo, titulo, subtitulo, vistaPrevia, bloq
   ${vistaPrevia ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">${esc(vistaPrevia)}</div>` : ''}
   <table role="presentation" class="fondo" width="100%" cellpadding="0" cellspacing="0" bgcolor="#ffffff" style="background:#ffffff;">
     <tr><td align="center" style="padding:28px 12px;">
-      <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;">
+      <table role="presentation" width="${ancho}" cellpadding="0" cellspacing="0" style="width:100%;max-width:${ancho}px;">
         <tr><td>
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#ffffff" style="background:#ffffff;border:1px solid ${COLOR.borde};border-radius:16px;overflow:hidden;">
             <!-- Encabezado de la marca: logo, nombre, título y subtítulo. -->

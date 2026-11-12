@@ -136,7 +136,8 @@ export async function enviarPruebaCorreo(id, usuario) {
   const { correos: para } = await deUsuario(quien(usuario));
   if (!para.length) throw badRequest('Tu usuario no tiene correo en Keycloak: no hay a dónde mandar la prueba.');
   const { asunto, html, texto } = c.generar();
-  await enviarCorreo({ para, asunto: `[PRUEBA] ${asunto}`, html, texto });
+  // Solo QA: la prueba del correo de Data sale aunque MAIL_DESACTIVADO=true (va solo a quien la pide).
+  await enviarCorreo({ para, asunto: `[PRUEBA] ${asunto}`, html, texto, pruebaQa: id === 'rec-data-articulos' });
   logger.info({ correo: id, usuario: quien(usuario), ...resumenDestinatarios(para) }, 'Prueba de correo enviada');
   return { para };
 }

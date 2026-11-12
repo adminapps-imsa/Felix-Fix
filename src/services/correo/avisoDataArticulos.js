@@ -18,29 +18,56 @@ import { destinatarios, deUsuario } from './destinatarios.js';
 // Solo QA (rama qa, nunca a main): el aviso a Data va únicamente a este usuario
 // y sale aunque MAIL_DESACTIVADO=true, para probar sin escribirle a nadie más.
 const PRUEBA_QA_DATA = 'maltamiranda';
-import { documento, parrafo, tituloSeccion, bloque, boton, datos, saludo, esc, datosTexto, tablaDatosHtml } from './diseno.js';
+import { documento, parrafo, tituloSeccion, bloque, boton, datos, saludo, esc, datosTexto, COLOR, FUENTE } from './diseno.js';
 
 export const PERMISO_DATA = 'reclamos.articulos_sap';
 const PIE = 'Aviso automático de Felix Fix. No respondas este correo.';
 const cantidad = (n) => (n === null || n === undefined ? '—' : new Intl.NumberFormat('es-PA', { maximumFractionDigits: 3 }).format(Number(n)));
 const dinero = (n) => (n === null || n === undefined ? null : new Intl.NumberFormat('es-PA', { style: 'currency', currency: 'USD' }).format(Number(n)));
 
-/** Filas de un artículo: lo de la hoja del Excel y lo que llenó la compradora al aprobarlo. */
-const filasArticulo = (l) => [
-  ['Código de barras', l.codigoBarra || 'Sin código'],
-  ['Referencia', l.referencia],
-  ['Color', l.color],
-  ['Talla', l.talla],
-  ['Cantidad', cantidad(l.cantidad)],
-  ['Descripción', l.articulo?.descripcion],
-  ['Marca', l.articulo?.marca],
-  ['Categoría', l.articulo?.categoria],
-  ['Tipo de producto', l.articulo?.tipoProducto],
-  ['Ciclo de vida', l.articulo?.cicloVida],
-  ['Costo', dinero(l.articulo?.costo)],
-  ['Precio de venta', dinero(l.articulo?.precioVenta)],
+/**
+ * Columnas de la tabla (tipo Excel, una fila por artículo): lo de la hoja
+ * «Sobrante NO esperado» y lo que llenó la compradora al aprobarlo.
+ */
+const COLUMNAS = [
+  { titulo: 'Código de barras', valor: (l) => l.codigoBarra || 'Sin código', mono: true },
+  { titulo: 'Referencia', valor: (l) => l.referencia },
+  { titulo: 'Color', valor: (l) => l.color },
+  { titulo: 'Talla', valor: (l) => l.talla },
+  { titulo: 'Cantidad', valor: (l) => cantidad(l.cantidad), derecha: true },
+  { titulo: 'Descripción', valor: (l) => l.articulo?.descripcion },
+  { titulo: 'Marca', valor: (l) => l.articulo?.marca },
+  { titulo: 'Categoría', valor: (l) => l.articulo?.categoria },
+  { titulo: 'Tipo de producto', valor: (l) => l.articulo?.tipoProducto },
+  { titulo: 'Ciclo de vida', valor: (l) => l.articulo?.cicloVida },
+  { titulo: 'Costo', valor: (l) => dinero(l.articulo?.costo), derecha: true },
+  { titulo: 'Precio de venta', valor: (l) => dinero(l.articulo?.precioVenta), derecha: true },
 ];
-const tituloArticulo = (l, i, n) => `Artículo ${i + 1} de ${n} · ${[l.referencia, l.color, l.talla].filter(Boolean).join(' · ') || l.codigoBarra || `#${l.posicion}`}`;
+const valorCelda = (c, l) => {
+  const v = c.valor(l);
+  return v === null || v === undefined || String(v).trim() === '' ? '—' : String(v);
+};
+
+/** Tabla con cuadrícula, como una hoja de Excel: encabezado de color y filas alternadas. */
+function tablaExcel(lineas) {
+  const borde = '1px solid #c7d2e0';
+  const base = `border:${borde};padding:6px 8px;font-family:${FUENTE};font-size:12px;line-height:1.35;vertical-align:top;`;
+  const cab = `${base}background:${COLOR.marca};color:#ffffff;font-weight:700;text-align:left;white-space:nowrap;`;
+  const filas = lineas
+    .map(
+      (l, i) =>
+        `<tr>${COLUMNAS.map(
+          (c) =>
+            `<td style="${base}color:${COLOR.texto};background:${i % 2 ? COLOR.celda : '#ffffff'};${c.derecha ? 'text-align:right;white-space:nowrap;' : ''}${
+              c.mono ? 'font-family:Consolas,monospace;white-space:nowrap;' : ''
+            }">${esc(valorCelda(c, l))}</td>`
+        ).join('')}</tr>`
+    )
+    .join('');
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border:${borde};">
+            <tr>${COLUMNAS.map((c) => `<th style="${cab}${c.derecha ? 'text-align:right;' : ''}">${esc(c.titulo)}</th>`).join('')}</tr>${filas}
+          </table>`;
+}
 
 /**
  * @param r       detalle del reclamo (Numero, Token, Proveedor, Marca, Division…)
@@ -62,7 +89,6 @@ export function plantillaDataArticulos(r, lineas, { de, nombre } = {}) {
     ['Documento(s) SAP', (r.SapDocs || []).join(', ')],
   ];
 
-  const articulos = lineas.flatMap((l, i) => [tituloSeccion(tituloArticulo(l, i, n)), bloque(tablaDatosHtml(filasArticulo(l)), { arriba: 10 })]);
 
   const html = documento({
     asunto,
@@ -72,11 +98,14 @@ export function plantillaDataArticulos(r, lineas, { de, nombre } = {}) {
     vistaPrevia: frase,
     bloques: [
       parrafo(`${esc(saludo(nombre))}<br />${esc(frase)}`, { arriba: 22 }),
-      ...articulos,
+      tituloSeccion(`Sobrante no esperado · ${n} ${n === 1 ? 'artículo' : 'artículos'}`),
+      bloque(tablaExcel(lineas), { arriba: 10 }),
       boton({ texto: `Abrir ${r.Numero}`, enlace }),
       datos('Datos del reclamo', filas),
     ],
     pie: [PIE],
+    // Más ancho que los demás correos: la tabla tiene 12 columnas.
+    ancho: 1000,
   });
 
   const plano = [
@@ -84,7 +113,9 @@ export function plantillaDataArticulos(r, lineas, { de, nombre } = {}) {
     '',
     saludo(nombre),
     frase,
-    ...lineas.flatMap((l, i) => datosTexto(tituloArticulo(l, i, n), filasArticulo(l))),
+    '',
+    COLUMNAS.map((c) => c.titulo).join(' | '),
+    ...lineas.map((l) => COLUMNAS.map((c) => valorCelda(c, l)).join(' | ')),
     ...(enlace ? ['', `Abrir ${r.Numero}: ${enlace}`] : []),
     ...datosTexto('Datos del reclamo', filas),
     '',

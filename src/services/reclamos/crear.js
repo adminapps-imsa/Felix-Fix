@@ -319,6 +319,9 @@ export async function crear(body, multerFile, usuario, pdfs = []) {
     if (data.origen === 'cedi' && tienePermiso(usuario, 'reclamos.solo_tienda')) {
       throw badRequest('Tu rol solo crea reclamos de Tienda, no de CEDI.', { code: 'SOLO_TIENDA' });
     }
+    if (data.origen === 'tienda' && tienePermiso(usuario, 'reclamos.solo_cedi')) {
+      throw badRequest('Tu rol solo crea reclamos de CEDI, no de Tienda.', { code: 'SOLO_CEDI' });
+    }
     // Un documento SAP pertenece a un solo reclamo: se revisa antes de leer
     // archivos (aviso rápido) y otra vez dentro de la transacción del alta.
     const docsSap = [data.sapDoc1, data.sapDoc2, data.sapDoc3, ...data.sapDocsExtra].filter(Boolean);

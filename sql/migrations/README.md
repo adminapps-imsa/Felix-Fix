@@ -91,6 +91,8 @@ sí mismo en `dbo.SchemaMigrations` al terminar.
    (`ArtCosto`, `ArtPrecioVenta`, `ArtCategoria`, `ArtTipoProducto`,
    `ArtCicloVida`, `ArtDescripcion`, `ArtMarca`) que la compradora llena al
    aprobar un sobrante no esperado sin SAP; van a Data en el correo.
+34. `033_torre_control_solo_cedi.sql` — da al rol «Torre de Control» la
+   restricción «Solo reclamos de CEDI» (`reclamos.solo_cedi`).
 
 ## Esquemas QA y Prod
 

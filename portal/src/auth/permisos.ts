@@ -20,6 +20,7 @@ export const P = {
   recEnviarContabilidad: 'reclamos.enviar_contabilidad',
   recEliminar: 'reclamos.eliminar',
   recSoloTienda: 'reclamos.solo_tienda',
+  recSoloCedi: 'reclamos.solo_cedi',
   recRetiro: 'reclamos.retiro_proveedor',
   config: 'configuracion.administrar',
 } as const;

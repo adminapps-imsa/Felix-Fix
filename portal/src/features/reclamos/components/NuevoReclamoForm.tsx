@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Camera, CheckCircle2, Eye, FileSpreadsheet, FileText, LoaderCircle, Plus, ScanLine, Store, Trash2, Upload, Warehouse } from 'lucide-react';
 import { Modal } from '../../../components/ui/Modal';
 import { SeccionForm, ZonaArchivo } from '../../../components/ui/Formulario';
@@ -6,7 +6,6 @@ import { Field, Input, Select, Textarea } from '../../../components/ui/Input';
 import { Button } from '../../../components/ui/Button';
 import { useAvisos } from '../../../components/ui/Avisos';
 import { Combobox } from '../../../components/ui/Combobox';
-import { SelectorOpciones } from '../../../components/ui/SelectorOpciones';
 import { CampoFecha } from '../../../components/ui/CampoFecha';
 import { ApiError } from '../../../api/client';
 import { P } from '../../../auth/permisos';
@@ -149,17 +148,22 @@ export function NuevoReclamoForm({
   const parseSeq = useRef(0);
 
   // Gof no hace reclamos de CEDI: solo ve Tienda, ya elegida.
-  const soloTienda = useAuth().puede(P.recSoloTienda);
-  const origenes: OrigenReclamo[] = soloTienda ? ['tienda'] : ['tienda', 'cedi'];
-  const [campos, setCampos] = useState<Campos>(() => ({ ...CAMPOS_VACIOS, fechaRegistro: hoyIso(), ...(soloTienda ? { origen: 'tienda' as const } : {}) }));
+  const auth = useAuth();
+  const soloTienda = auth.puede(P.recSoloTienda);
+  // Torre de Control: solo CEDI («Solo reclamos de CEDI»).
+  const soloCedi = !soloTienda && auth.puede(P.recSoloCedi);
+  const origenes: OrigenReclamo[] = soloTienda ? ['tienda'] : soloCedi ? ['cedi'] : ['tienda', 'cedi'];
+  const [campos, setCampos] = useState<Campos>(() => ({
+    ...CAMPOS_VACIOS,
+    fechaRegistro: hoyIso(),
+    ...(soloTienda ? { origen: 'tienda' as const } : soloCedi ? { origen: 'cedi' as const } : {}),
+  }));
   // Último estado dibujado, para leerlo tras un await (procesarExcel) sin hacerlo dentro de un updater.
   const camposRef = useRef(campos);
   camposRef.current = campos;
   const [tipo, setTipo] = useState<TipoReclamo | ''>('');
   const [modoManual, setModoManual] = useState(false);
   // «¿El proveedor va a retirar el producto?»: obligatoria y sin respuesta marcada.
-  const [retiro, setRetiro] = useState<'' | 'si' | 'no'>('');
-  const idRetiro = useId();
   const [sapDocs, setSapDocs] = useState<string[]>(['', '', '']);
   // Documentos que ya están en otro reclamo (clave normalizada → reclamos). Un documento SAP pertenece a un solo reclamo.
   const [docsUsados, setDocsUsados] = useState<Map<string, DocumentoSapUsado['reclamos']>>(new Map());
@@ -278,7 +282,7 @@ export function NuevoReclamoForm({
       if (seq !== parseSeq.current) return; // el usuario ya eligió otro archivo
       setPreview(p);
       const delExcel = {
-        origen: soloTienda ? 'tienda' : p.origen,
+        origen: soloTienda ? 'tienda' : soloCedi ? 'cedi' : p.origen,
         sucursal: p.sucursal || '',
         fechaLlegadaMercancia: p.fechaLlegadaMercancia || '',
         numeroEmbarqueFactura: p.numeroEmbarqueFactura || '',
@@ -417,7 +421,6 @@ export function NuevoReclamoForm({
     !campos.mundo.trim() && 'Mundo',
     !campos.departamento.trim() && 'Departamento',
     !campos.marca.trim() && 'Marca',
-    !esDevolucionForm && !retiro && '¿El proveedor va a retirar el producto?',
     docsLlenos === 0 && 'Documento SAP',
     !pdfsLeyendo && docsSinPdf.length > 0 && `PDF del documento SAP ${docsSinPdf.join(', ')}`,
   ].filter(Boolean) as string[];
@@ -436,6 +439,7 @@ export function NuevoReclamoForm({
   // ---------------- Envío ----------------
 
   const excelCedi = soloTienda && preview?.origen === 'cedi';
+  const excelTienda = soloCedi && preview?.origen === 'tienda';
   // Averías sin foto en el Excel: una foto por cada una en el paso 4.
   const averiasSinFoto = preview?.averiasSinFoto ?? [];
   const fotosAdjuntas = adjuntos.filter(esImagen).length;
@@ -445,6 +449,7 @@ export function NuevoReclamoForm({
   const motivos = [
     !campos.origen && 'Elige el origen del reclamo (Tienda o CEDI).',
     excelCedi && 'El Excel es de la plantilla CEDI: tu rol solo crea reclamos de Tienda.',
+    excelTienda && 'El Excel es de la plantilla Tienda: tu rol solo crea reclamos de CEDI.',
     !excel && 'Adjunta el Excel del reclamo: es obligatorio.',
     parsing && 'Se está leyendo el Excel; espera un momento.',
     excel && !parsing && !tipo && 'Selecciona el tipo de reclamo.',
@@ -484,7 +489,8 @@ export function NuevoReclamoForm({
       form.set('sapDoc2', docs[1] || '');
       form.set('sapDoc3', docs[2] || '');
       form.set('sapDocsExtra', JSON.stringify(docs.slice(3).filter(Boolean)));
-      form.set('retiroProveedor', esDevolucionForm ? 'si' : retiro);
+      // Ya no se pregunta si el proveedor lo retira (2026-11-12): solo las devoluciones lo llevan.
+      form.set('retiroProveedor', esDevolucionForm ? 'si' : 'no');
       pdfsSap.forEach((p) => form.append('pdfs', p.file));
 
       setProgreso('Creando reclamo…');
@@ -585,9 +591,9 @@ export function NuevoReclamoForm({
 
   // Cada paso se marca completo con la misma regla que habilita "Crear reclamo".
   const faltanDatos = faltantes.filter((f) => f !== 'Origen' && f !== 'Documento SAP');
-  const paso1Completo = Boolean(campos.origen && excel && !parsing && tipo && !desajuste && !excelCedi);
+  const paso1Completo = Boolean(campos.origen && excel && !parsing && tipo && !desajuste && !excelCedi && !excelTienda);
   const paso2Completo = Boolean(campos.origen) && faltanDatos.length === 0;
-  const plantilla = esCedi ? 'plantilla CEDI' : campos.origen === 'tienda' || soloTienda ? 'plantilla Tienda' : 'plantilla Tienda o CEDI';
+  const plantilla = esCedi || soloCedi ? 'plantilla CEDI' : campos.origen === 'tienda' || soloTienda ? 'plantilla Tienda' : 'plantilla Tienda o CEDI';
 
   return (
     <Modal title="Nuevo reclamo" onClose={onClose} wide dismissible={false}>
@@ -819,23 +825,6 @@ export function NuevoReclamoForm({
                 className="sm:col-start-2"
               >
                 <CampoFecha required max={hoyIso()} value={campos.fechaLlegadaMercancia} onChange={(v) => set('fechaLlegadaMercancia', v)} />
-              </Field>
-              {/* Si lo retira el proveedor, el reclamo no queda terminado hasta que Gof marque «Entregado al proveedor». */}
-              <Field label="¿El proveedor va a retirar el producto?" grupo idEtiqueta={idRetiro} className="sm:col-span-2">
-                {esDevolucionForm ? (
-                  <p className="text-sm opacity-70">Sí: es una devolución, el proveedor siempre la retira.</p>
-                ) : (
-                  <SelectorOpciones
-                    etiquetaId={idRetiro}
-                    required
-                    opciones={['Sí', 'No']}
-                    value={retiro === 'si' ? 'Sí' : retiro === 'no' ? 'No' : ''}
-                    onChange={(v) => setRetiro(v === 'Sí' ? 'si' : 'no')}
-                  />
-                )}
-                {(esDevolucionForm || retiro === 'si') && (
-                  <span className="anim-aparecer text-xs opacity-60">El reclamo quedará esperando el retiro hasta que Gof marque «Entregado al proveedor».</span>
-                )}
               </Field>
             </div>
           </SeccionForm>

@@ -142,11 +142,11 @@ test('aviso a Data: por artículo, lo del Excel y lo que llenó la compradora', 
   );
   assert.equal(asunto, 'Artículos por crear en SAP: REC-000099 — GIGIO');
   assert.match(texto, /Ana aprobó en un reclamo de CEDI un sobrante no esperado que no está creado en SAP/);
-  for (const t of ['Artículo 1 de 1 · TY1374 · OFF WHITE MIX · S', 'Código de barras: Sin código', 'Cantidad: 2', 'Descripción: Blusa floral', 'Marca: GIGIO', 'Categoría: Blusas', 'Tipo de producto: Textil', 'Ciclo de vida: Temporada', ]) {
-    assert.ok(texto.includes(t), t);
-  }
-  assert.match(texto, /Costo: USD\s12\.50/);
-  assert.match(texto, /Precio de venta: USD\s29\.95/);
+  // Tabla tipo Excel: una fila por artículo.
+  assert.ok(texto.includes('Código de barras | Referencia | Color | Talla | Cantidad | Descripción | Marca | Categoría | Tipo de producto | Ciclo de vida | Costo | Precio de venta'));
+  assert.match(texto, /Sin código \| TY1374 \| OFF WHITE MIX \| S \| 2 \| Blusa floral \| GIGIO \| Blusas \| Textil \| Temporada \| USD\s12\.50 \| USD\s29\.95/);
+  assert.match(html, /<th[^>]*>Precio de venta<\/th>/);
+  assert.match(html, /max-width:1000px/);
   assert.match(html, /Blusa floral/);
 });
 
