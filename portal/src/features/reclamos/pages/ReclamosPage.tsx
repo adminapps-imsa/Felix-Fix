@@ -15,7 +15,7 @@ import { BotonReintentar, EstadoVacio } from '../../../components/ui/EstadoVacio
 import { cn } from '../../../lib/cn';
 import { formatFecha } from '../../../lib/formatters';
 import * as apiReclamos from '../../../api/reclamos';
-import type { PaginationMeta } from '../../../types/productoDanado';
+import type { PaginationMeta, Tienda } from '../../../types/productoDanado';
 import type { KpisReclamos, Reclamo, StatusReclamo } from '../../../types/reclamo';
 import { useTiendas } from '../../productos-danados/hooks/useTiendas';
 import { RetiroBadge, StatusReclamoBadge } from '../components/Badges';
@@ -31,6 +31,34 @@ const KPI_CARDS: Array<{ key: keyof KpisReclamos; status: StatusReclamo | ''; la
   { key: 'resueltos', status: 'resuelto', label: 'Confirmados', icon: <CheckCircle2 size={18} />, color: 'text-success' },
   { key: 'rechazados', status: 'rechazado', label: 'Rechazados', icon: <XCircle size={18} />, color: 'text-danger' },
 ];
+
+/** Texto comparable: sin acentos, mayúsculas ni espacios de sobra (igual que src/domain/tienda.js). */
+const normalizar = (s: string | null | undefined) =>
+  String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim().toUpperCase();
+
+/**
+ * Dónde se creó el reclamo: CEDI o la tienda. La sucursal se escribe a mano o
+ * viene del Excel («TD04», «via españa»): si coincide con una tienda, se
+ * muestra su nombre oficial; si no, tal cual.
+ */
+function lugarReclamo(r: Pick<Reclamo, 'Origen' | 'Sucursal'>, tiendas: Tienda[]) {
+  if (r.Origen === 'cedi') return { cedi: true, nombre: 'CEDI' };
+  const s = normalizar(r.Sucursal);
+  const t = s ? tiendas.find((x) => normalizar(x.Nombre) === s || normalizar(x.Codigo) === s) : undefined;
+  return { cedi: false, nombre: t?.Nombre ?? (r.Sucursal?.trim() || 'Tienda') };
+}
+
+/** La tienda (o CEDI) con su icono, para la tabla y las tarjetas. */
+function LugarReclamo({ reclamo, tiendas, className }: { reclamo: Pick<Reclamo, 'Origen' | 'Sucursal'>; tiendas: Tienda[]; className?: string }) {
+  const { cedi, nombre } = lugarReclamo(reclamo, tiendas);
+  const I = cedi ? Warehouse : Store;
+  return (
+    <span className={cn('inline-flex min-w-0 max-w-full items-center gap-1.5', className)} title={cedi ? 'Centro de distribución' : `Tienda ${nombre}`}>
+      <I size={14} aria-hidden className="shrink-0 opacity-60" />
+      <span className="truncate">{nombre}</span>
+    </span>
+  );
+}
 
 export function ReclamosPage() {
   const navigate = useNavigate();
@@ -265,7 +293,7 @@ export function ReclamosPage() {
                 <span className="line-clamp-2 break-words font-semibold leading-snug">{r.Proveedor || '—'}</span>
                 <span className="flex flex-wrap gap-x-3 gap-y-1 text-xs opacity-75">
                   <span>{TIPO_LABEL_CORTO[r.Tipo]}</span>
-                  <span>{r.Origen === 'cedi' ? 'CEDI' : r.Sucursal || 'Tienda'}</span>
+                  <LugarReclamo reclamo={r} tiendas={tiendas} className="font-semibold" />
                   {r.Marca && <span>{r.Marca}</span>}
                 </span>
                 <span className="text-sm tabular-nums">
@@ -284,12 +312,12 @@ export function ReclamosPage() {
       {data.length > 0 && (
         <div className="glass-card hidden overflow-hidden md:block">
           <div className="max-h-[60vh] overflow-auto">
-            <table className="tabla-lista w-full min-w-[720px] border-collapse text-sm">
+            <table className="tabla-lista w-full min-w-[800px] border-collapse text-sm">
               <thead className="sticky top-0 z-10 bg-[var(--glass-bg)] backdrop-blur-md">
                 <tr className="border-b border-black/10 text-left text-xs opacity-70 dark:border-white/10">
                   <th className="px-3 py-3">Reclamo</th>
+                  <th className="px-3 py-3">Tienda</th>
                   <th className="px-3 py-3">Proveedor</th>
-                  <th className="hidden xl:table-cell px-3 py-3">Tienda</th>
                   <th className="hidden xl:table-cell px-3 py-3">Fecha</th>
                   <th className="px-3 py-3 text-right">Productos</th>
                   <th className="px-3 py-3">Estado</th>
@@ -317,10 +345,10 @@ export function ReclamosPage() {
                   >
                     <td className="px-3 py-3.5">
                       <span className="numero-caso block text-base leading-tight">{r.Numero}</span>
-                      <span className="sub">
-                        {TIPO_LABEL_CORTO[r.Tipo]}
-                        <span className="xl:hidden"> · {r.Origen === 'cedi' ? 'CEDI' : r.Sucursal || 'Tienda'}</span>
-                      </span>
+                      <span className="sub">{TIPO_LABEL_CORTO[r.Tipo]}</span>
+                    </td>
+                    <td className="max-w-[11rem] px-3 py-3.5">
+                      <LugarReclamo reclamo={r} tiendas={tiendas} className="font-medium" />
                     </td>
                     <td className="max-w-[13rem] px-3 py-3.5 xl:max-w-[17rem]">
                       <span className="celda-larga font-medium" title={r.Proveedor ?? undefined}>
@@ -331,9 +359,6 @@ export function ReclamosPage() {
                           {r.Marca}
                         </span>
                       )}
-                    </td>
-                    <td className="hidden xl:table-cell max-w-[10rem] px-3 py-3.5">
-                      <span className="celda-larga font-medium">{r.Origen === 'cedi' ? 'CEDI' : r.Sucursal || 'Tienda'}</span>
                     </td>
                     <td className="hidden xl:table-cell px-3 py-3.5">{formatFechaCorta(r.FechaRegistro)}</td>
                     <td className="px-3 py-3.5 text-right tabular-nums">
