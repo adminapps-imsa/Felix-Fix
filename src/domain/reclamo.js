@@ -199,13 +199,16 @@ export const estaCerrado = (status) => ESTADOS_CERRADOS.has(status);
 const bloqueado = (mensaje) => ({ mensaje, code: 'RECLAMO_BLOQUEADO' });
 
 /**
- * Para enviar a contabilidad, si la compradora aprobó productos debe haber
- * subida una nota de débito (PDF) validada contra sus decisiones.
+ * Para enviar a contabilidad, si la compradora aprobó algún SOBRANTE debe
+ * haber subida la nota de débito (912) validada contra sus decisiones.
+ * Faltante, devolución, diferencias y daños se aprueban solos y van solo con
+ * el documento del 911 (subido al crear el reclamo); si el sobrante se
+ * rechaza, tampoco se pide el 912.
  * `adjuntos`: los AdjuntosExtra del reclamo ya parseados.
  */
-export function estadoNotaAprobada({ LineasAprobadas }, adjuntos) {
+export function estadoNotaAprobada({ LineasSobranteAprobadas }, adjuntos) {
   return {
-    RequiereNotaAprobada: Number(LineasAprobadas || 0) > 0,
+    RequiereNotaAprobada: Number(LineasSobranteAprobadas || 0) > 0,
     TieneNotaAprobada: adjuntos.some((a) => a?.tipo === 'pdf' && a.notaAprobada),
   };
 }
@@ -397,7 +400,7 @@ export function motivoNoReenviar(reclamo, usuario, { docs, pdfs, documentoOpcion
 
 /**
  * Enviar a contabilidad: con el reclamo cerrado por la compradora y, si
- * aprobó productos, con la nota de débito validada ya subida.
+ * aprobó sobrantes, con la nota de débito (912) validada ya subida.
  */
 export function motivoNoEnviarContabilidad(reclamo, adjuntos) {
   if (!estaCerrado(reclamo.Status)) {
@@ -408,7 +411,7 @@ export function motivoNoEnviarContabilidad(reclamo, adjuntos) {
   const nota = estadoNotaAprobada(reclamo, adjuntos);
   if (nota.RequiereNotaAprobada && !nota.TieneNotaAprobada) {
     return {
-      mensaje: 'Primero sube el documento (PDF de SAP) con los productos aprobados por la compradora; después podrás enviarlo a contabilidad.',
+      mensaje: 'Primero sube el documento 912 (PDF de SAP) con los sobrantes aprobados por la compradora; después podrás enviarlo a contabilidad.',
       code: 'FALTA_NOTA_APROBADA',
     };
   }

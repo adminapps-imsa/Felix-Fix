@@ -297,7 +297,7 @@ function EnvioContabilidad({
   const avisos = useAvisos();
   const nArchivos = (reclamo.TieneExcel ? 1 : 0) + reclamo.AdjuntosExtra.length;
   const nPdf = reclamo.AdjuntosExtra.filter((a) => a.tipo === 'pdf').length;
-  // Con productos aprobados, primero se sube la nota de débito validada (sección Adjuntos).
+  // Con sobrantes aprobados, primero se sube la nota de débito 912 validada (sección Adjuntos).
   const faltaNota = reclamo.RequiereNotaAprobada && !reclamo.TieneNotaAprobada;
 
   const enviar = async () => {
@@ -341,8 +341,8 @@ function EnvioContabilidad({
         <p className="flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-sm">
           <AlertTriangle size={16} className="mt-0.5 shrink-0 text-warning" />
           <span>
-            Para enviarlo a contabilidad, primero sube en <strong>Adjuntos</strong> el documento PDF de SAP con los productos aprobados por la
-            compradora.
+            Para enviarlo a contabilidad, primero sube en <strong>Adjuntos</strong> el documento 912 (PDF de SAP) con los sobrantes aprobados por
+            la compradora.
           </span>
         </p>
       )}
