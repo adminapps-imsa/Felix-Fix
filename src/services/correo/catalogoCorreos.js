@@ -153,7 +153,7 @@ const CORREOS_RECLAMOS = [
     id: 'rec-data-articulos',
     nombre: 'Artículos por crear en SAP',
     cuando: 'La compradora cierra un reclamo de CEDI aprobando sobrantes no esperados que no están en SAP (o vienen sin código).',
-    quien: 'Data (permiso «Crear artículos en SAP (Data)»), con la hoja «Sobrante NO esperado» y los datos que llenó la compradora',
+    quien: 'Data: analistascompras@maduro.com.pa y quien tenga el permiso «Crear artículos en SAP (Data)», con la hoja «Sobrante NO esperado» y los datos que llenó la compradora',
     generar: () =>
       plantillaDataArticulos(
         reclamo({ Tipo: 'sobrante_no_esperado', Origen: 'cedi', Sucursal: null }),
