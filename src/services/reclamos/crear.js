@@ -365,8 +365,8 @@ export async function crear(body, multerFile, usuario, pdfs = []) {
     }
     lineas = await marcarEsperaData(lineas);
 
-    // División: solo las del catálogo (Perfumería o Cosméticos), como están
-    // escritas allí (no escribe nada).
+    // División: ya no se pide en el formulario (2026-11-12). Si llega una, solo
+    // las del catálogo (Perfumería o Cosméticos), como están escritas allí.
     if (data.origen !== 'cedi') data.division = '';
     if (data.division) data.division = await exigirDivision(data.division);
 

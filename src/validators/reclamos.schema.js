@@ -106,9 +106,6 @@ export const crearReclamoSchema = z
     if (data.origen === 'tienda' && !data.sucursal) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['sucursal'], message: 'La sucursal es obligatoria para reclamos de tienda.' });
     }
-    if (data.origen === 'cedi' && !data.division) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['division'], message: 'La división es obligatoria para reclamos de CEDI.' });
-    }
   });
 
 /** Devolver a quien lo creó: el comentario dice qué corregir (el mínimo lo revisa el dominio). */
