@@ -31,3 +31,9 @@ test('cualquier otra diferencia lo detiene', () => {
   const yaCorregido = actuales.map((l) => (l.Posicion === 17 ? { ...l, CodigoBarra: CAMBIO.ahora } : l));
   assert.match(planRec28(yaCorregido, excel).error, /se esperaba 1/);
 });
+
+test('ya corregido: decide por el código del faltante, no por el nombre del Excel', async () => {
+  const { yaCorregido } = await import('../../sql/migrations/036_prod_rec28_excel.js');
+  assert.equal(yaCorregido(actuales), false);
+  assert.equal(yaCorregido(actuales.map((l) => (l.Posicion === 17 ? { ...l, CodigoBarra: CAMBIO.ahora } : l))), true);
+});

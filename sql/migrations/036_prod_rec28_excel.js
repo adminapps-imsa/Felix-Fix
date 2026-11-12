@@ -13,7 +13,10 @@
 // en disco, sin referencia. No manda correos.
 //
 // Solo en Prod: en QA el 28 es otro reclamo (solo se registra).
-// Idempotente: si el reclamo ya tiene el Excel nuevo, no hace nada.
+// Idempotente: si el faltante ya tiene el código correcto, no hace nada.
+// (Hasta el 2026-11-12 lo decidía por el nombre del Excel, pero el que se
+// subió también se llamaba «PRESTIGE (2).xlsx» y en Prod no cambió nada:
+// por eso existe la 037, que vuelve a correr este arreglo.)
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -54,7 +57,12 @@ export default async function migrar({ pool, schema }) {
               INSERT INTO [${schema}].SchemaMigrations (Nombre) VALUES (@nombre)`);
 }
 
-async function arreglar(pool, schema) {
+/** true si el reclamo ya tiene el código corregido y no el equivocado. */
+export const yaCorregido = (actuales) =>
+  !actuales.some((l) => l.Tipo === CAMBIO.tipo && l.CodigoBarra === CAMBIO.antes) &&
+  actuales.filter((l) => l.Tipo === CAMBIO.tipo && l.CodigoBarra === CAMBIO.ahora).length === 1;
+
+export async function arreglar(pool, schema) {
   // Solo aquí: importarlo crea las carpetas de uploads del esquema.
   const { reclamoArchivoPath } = await import('../../src/config/almacenamiento.js');
   const { recordset: rs } = await pool
@@ -63,18 +71,18 @@ async function arreglar(pool, schema) {
     .query(`SELECT Token, ArchivoExcelNombre, EnviadoContabilidadAt FROM [${schema}].Reclamos WHERE ReclamoId = @id`);
   if (!rs.length) throw new Error('036: REC-000028 no existe.');
   const r = rs[0];
-  if (r.ArchivoExcelNombre === ARCHIVO) {
-    console.log(`    REC-000028: ya tiene ${ARCHIVO}`);
+  const { recordset: actuales } = await pool
+    .request()
+    .input('token', r.Token)
+    .query(`SELECT Posicion, CodigoBarra, Cantidad, Tipo FROM [${schema}].ReclamoLineas WHERE ReclamoToken = @token`);
+  if (yaCorregido(actuales)) {
+    console.log(`    REC-000028: el faltante ya tiene ${CAMBIO.ahora}`);
     return;
   }
   if (r.EnviadoContabilidadAt) throw new Error('036: REC-000028 ya se envió a contabilidad; no se toca.');
 
   const buffer = fs.readFileSync(path.join(ORIGEN, ARCHIVO));
   const excel = parsearPlantilla(buffer);
-  const { recordset: actuales } = await pool
-    .request()
-    .input('token', r.Token)
-    .query(`SELECT Posicion, CodigoBarra, Cantidad, Tipo FROM [${schema}].ReclamoLineas WHERE ReclamoToken = @token`);
   const plan = planRec28(actuales, excel);
   if (plan.error) throw new Error(`036: REC-000028 sin cambios: ${plan.error}`);
 
@@ -92,7 +100,10 @@ async function arreglar(pool, schema) {
       .input('ahora', CAMBIO.ahora)
       .input('desc', plan.descripcion)
       .query(`UPDATE [${schema}].ReclamoLineas SET CodigoBarra = @ahora, DescripcionExcel = COALESCE(@desc, DescripcionExcel)
-              WHERE ReclamoToken = @token AND Posicion = @pos AND CodigoBarra = @antes`);
+              WHERE ReclamoToken = @token AND Posicion = @pos AND CodigoBarra = @antes`)
+      .then((res) => {
+        if (res.rowsAffected[0] !== 1) throw new Error('036: el producto cambió mientras se corregía; sin cambios.');
+      });
     await tx
       .request()
       .input('token', r.Token)
