@@ -102,3 +102,49 @@ export function cruzar(filas, lineasReclamo) {
     },
   };
 }
+
+const normMaterial = (m) => String(m ?? '').trim().toUpperCase().replace(/^0+/, '');
+
+/**
+ * Los faltantes deben venir en los 911 (devolución) que se suben al crear el
+ * reclamo. El PDF no trae el código de barras: cada faltante se busca por su
+ * producto (referencia, color y talla de la descripción, como en el 912) y,
+ * si así no aparece, por el material SAP de su código de barras.
+ * Las cantidades se comparan por producto (sumando filas repetidas).
+ *
+ * @param faltantes   [{ posicion, codigoBarra, descripcion, cantidad }]
+ * @param filas       filas de los PDF ({ material, descripcion, cantidad })
+ * @param materiales  Map<codigoBarra, MATNR> (vacío si SAP no responde)
+ * @returns {{ noEstan, cantidadDistinta: [{ lineas, cantidad, cantidad911 }], sinVerificar }}
+ */
+export function faltantesContra911(faltantes, filas, materiales = new Map()) {
+  const sumar = (mapa, k, n) => mapa.set(k, (mapa.get(k) ?? 0) + (Number(n) || 0));
+  const porClave = new Map();
+  const porMaterial = new Map();
+  for (const f of filas || []) {
+    const k = claveProducto(f.descripcion);
+    if (k) sumar(porClave, k, f.cantidad);
+    if (f.material) sumar(porMaterial, normMaterial(f.material), f.cantidad);
+  }
+  const noEstan = [];
+  const sinVerificar = [];
+  const grupos = new Map(); // producto -> { lineas, cantidad, cantidad911 }
+  for (const l of faltantes || []) {
+    const k = claveProducto(l.descripcion);
+    const m = l.codigoBarra ? materiales.get(String(l.codigoBarra).trim()) : null;
+    let id = null;
+    let en911 = 0;
+    if (k && porClave.has(k)) [id, en911] = [`K:${k}`, porClave.get(k)];
+    else if (m && porMaterial.has(normMaterial(m))) [id, en911] = [`M:${normMaterial(m)}`, porMaterial.get(normMaterial(m))];
+    if (!id) {
+      (k || m ? noEstan : sinVerificar).push(l);
+      continue;
+    }
+    const g = grupos.get(id) ?? { lineas: [], cantidad: 0, cantidad911: en911 };
+    g.lineas.push(l);
+    g.cantidad += Number(l.cantidad) || 0;
+    grupos.set(id, g);
+  }
+  const cantidadDistinta = [...grupos.values()].filter((g) => !mismoNumero(g.cantidad, g.cantidad911));
+  return { noEstan, cantidadDistinta, sinVerificar };
+}

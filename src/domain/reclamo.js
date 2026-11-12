@@ -132,6 +132,26 @@ const describirProducto = (l) => [`#${l.posicion}`, l.codigoBarra, l.descripcion
 const listaCorta = (xs, fn) => xs.slice(0, 10).map(fn).join(' · ') + (xs.length > 10 ? ` · y ${xs.length - 10} más` : '');
 
 /**
+ * Faltantes que no están en los 911 subidos, o con otra cantidad
+ * (resultado de `faltantesContra911`). null si todos cuadran.
+ */
+export function motivoFaltantesNoEn911({ noEstan, cantidadDistinta }) {
+  if (!noEstan.length && !cantidadDistinta.length) return null;
+  const partes = [];
+  if (noEstan.length) partes.push(`No aparecen en los PDF del 911: ${listaCorta(noEstan, describirProducto)}.`);
+  if (cantidadDistinta.length) {
+    partes.push(
+      `Otra cantidad que en el 911: ${listaCorta(cantidadDistinta, (g) => `${g.lineas.map(describirProducto).join(' + ')} (Excel ${g.cantidad}, 911 ${g.cantidad911})`)}.`
+    );
+  }
+  return {
+    mensaje: `Los faltantes del Excel deben estar en el documento 911. ${partes.join(' ')} Revisa el Excel o sube el 911 correcto.`,
+    code: 'FALTANTE_NO_EN_911',
+    productos: [...noEstan, ...cantidadDistinta.flatMap((g) => g.lineas)].map((l) => l.posicion),
+  };
+}
+
+/**
  * Una nota de débito solo puede traer productos que la compradora aprobó.
  * `lineas`: filas del PDF ya cruzadas con los productos del reclamo (`cruzar`
  * de contabilidad/validarDocumento.js: { lineaId, posicion, decision, … }).

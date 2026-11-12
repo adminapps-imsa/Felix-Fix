@@ -126,3 +126,45 @@ test('cruzar: cantidades con decimales o vacías no se dan por iguales', () => {
   assert.equal(lineas[1].resultado, 'cantidad_distinta');
   assert.equal(lineas[2].resultado, 'cantidad_distinta');
 });
+
+import { faltantesContra911 } from '../../src/services/contabilidad/validarDocumento.js';
+import { motivoFaltantesNoEn911 } from '../../src/domain/reclamo.js';
+
+const fila911 = (material, descripcion, cantidad) => ({ material, descripcion, cantidad, valor: 1 });
+const falt = (posicion, codigoBarra, descripcion, cantidad) => ({ posicion, codigoBarra, descripcion, cantidad });
+
+test('911: los faltantes cuadran por producto (referencia, color y talla) aunque la descripción venga recortada', () => {
+  const filas = [
+    fila911('345-300114525004', 'OPKB2011 "T-SHIRT P/H, BRIGHT WHITE, XL', 4),
+    fila911('345-300124308021', 'OCKSB010 "T-SHIRT P/H M/, ULTRAMARINE, S', 1),
+  ];
+  const r = faltantesContra911(
+    [falt(1, '799016645984', 'OPKB2011 "T-SHIRT P/H, BRIGHT WHITE, XL', 4), falt(17, '9246752766', 'OCKSB010 "T-SHIRT P/H M, ULTRAMARINE, S', 1)],
+    filas
+  );
+  assert.deepEqual(r, { noEstan: [], cantidadDistinta: [], sinVerificar: [] });
+  assert.equal(motivoFaltantesNoEn911(r), null);
+});
+
+test('911: faltante que no está, o con otra cantidad, bloquea con la lista', () => {
+  const filas = [fila911('345-1', 'OPKB2011 "T-SHIRT P/H, BRIGHT WHITE, XL', 3)];
+  const r = faltantesContra911([falt(1, '799016645984', 'OPKB2011 "T-SHIRT P/H, BRIGHT WHITE, XL', 4), falt(2, '9246505010', 'OPWB0400 "CAMISA P/H M/, DARK SAPPHIR, S', 1)], filas);
+  assert.deepEqual(r.noEstan.map((l) => l.posicion), [2]);
+  assert.equal(r.cantidadDistinta[0].cantidad911, 3);
+  const m = motivoFaltantesNoEn911(r);
+  assert.equal(m.code, 'FALTANTE_NO_EN_911');
+  assert.deepEqual(m.productos, [2, 1]);
+  assert.match(m.mensaje, /Excel 4, 911 3/);
+});
+
+test('911: líneas repetidas del mismo producto se suman; sin descripción se busca por material SAP', () => {
+  const filas = [fila911('345-300130192003', 'OPWS2619 "CAMISA P/H M/C, BIRCH, M', 2), fila911('345-9', 'X', 1)];
+  const r = faltantesContra911(
+    [falt(1, 'A', 'OPWS2619 "CAMISA P/H M/C, BIRCH, M', 1), falt(2, 'A', 'OPWS2619 "CAMISA P/H M/C, BIRCH, M', 1), falt(3, 'B', 'sin formato', 1), falt(4, 'C', 'sin formato', 1)],
+    filas,
+    new Map([['B', '345-9']])
+  );
+  assert.deepEqual(r.cantidadDistinta, []);
+  assert.deepEqual(r.noEstan, []);
+  assert.deepEqual(r.sinVerificar.map((l) => l.posicion), [4]);
+});
