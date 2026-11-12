@@ -225,7 +225,7 @@ export function ReclamoDetallePage() {
         <EnvioContabilidad reclamo={reclamo} puedeEnviar={puedeEnviarContabilidad && cerrado} onEnviado={setReclamo} />
       )}
 
-      <ProductosSection token={reclamo.Token} lineas={lineas} esAdmin={puedeDecidir} cerrado={cerrado || devuelto} puedeCargarCodigo={Boolean(permisos?.puedeCargarCodigoSap)} onLineaActualizada={actualizarLinea} onLineasActualizadas={actualizarLineas} />
+      <ProductosSection token={reclamo.Token} lineas={lineas} esAdmin={puedeDecidir} cerrado={cerrado || devuelto} puedeCargarCodigo={Boolean(permisos?.puedeCargarCodigoSap) && !reclamo.EnviadoContabilidadAt} onLineaActualizada={actualizarLinea} onLineasActualizadas={actualizarLineas} />
 
       <AdjuntosSection
         reclamo={reclamo}
@@ -285,6 +285,8 @@ function EnvioContabilidad({
   const nPdf = reclamo.AdjuntosExtra.filter((a) => a.tipo === 'pdf').length;
   // Con sobrantes aprobados, primero se sube la nota de débito 912 validada (sección Adjuntos).
   const faltaNota = reclamo.RequiereNotaAprobada && !reclamo.TieneNotaAprobada;
+  // Sobrantes no esperados aprobados que Data todavía no crea en SAP: sin ellos no hay 912.
+  const esperanData = Number(reclamo.LineasEsperaData || 0);
 
   const enviar = async () => {
     setBusy(true);
@@ -323,7 +325,16 @@ function EnvioContabilidad({
       ) : (
         <p className="text-sm opacity-70">Todavía no se ha enviado a contabilidad.</p>
       )}
-      {puedeEnviar && faltaNota && (
+      {puedeEnviar && esperanData > 0 && (
+        <p className="flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-sm">
+          <AlertTriangle size={16} className="mt-0.5 shrink-0 text-warning" />
+          <span>
+            {esperanData === 1 ? 'Un sobrante no esperado aprobado todavía no está creado' : `${esperanData} sobrantes no esperados aprobados todavía no están creados`} en SAP.
+            Se avisó a Data; cuando cargue el código, haz el 912 y envíalo a contabilidad.
+          </span>
+        </p>
+      )}
+      {puedeEnviar && esperanData === 0 && faltaNota && (
         <p className="flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-sm">
           <AlertTriangle size={16} className="mt-0.5 shrink-0 text-warning" />
           <span>
@@ -332,7 +343,7 @@ function EnvioContabilidad({
           </span>
         </p>
       )}
-      {puedeEnviar && !faltaNota && (
+      {puedeEnviar && esperanData === 0 && !faltaNota && (
         <>
           <p className="text-xs opacity-60">
             Se envía por correo con los datos del reclamo, la decisión, los {reclamo.LineasTotal} producto(s) y {nArchivos} archivo(s) adjunto(s)

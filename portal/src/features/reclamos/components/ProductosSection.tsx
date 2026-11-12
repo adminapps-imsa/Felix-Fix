@@ -45,7 +45,7 @@ export function ProductosSection({
   lineas: ReclamoLinea[];
   esAdmin: boolean;
   cerrado: boolean;
-  /** Data: carga el código de los sobrantes no esperados que creó en SAP. */
+  /** Data: carga el código de los sobrantes no esperados aprobados (hasta que se envía a contabilidad). */
   puedeCargarCodigo?: boolean;
   onLineaActualizada: (linea: ReclamoLinea) => void;
   onLineasActualizadas: (lineas: ReclamoLinea[]) => void;
@@ -65,7 +65,8 @@ export function ProductosSection({
     return c;
   }, [manuales]);
   const variosTipos = new Set(manuales.map((l) => l.Tipo)).size > 1;
-  const esperanData = manuales.filter((l) => l.EsperaData && l.DecStatus === 'pendiente').length;
+  // Sobrantes no esperados aprobados que Data todavía no crea en SAP.
+  const esperanData = manuales.filter((l) => l.EsperaData && l.DecStatus === 'aprobado').length;
   const editable = esAdmin && !cerrado;
 
   const [filtro, setFiltro] = useState<Filtro>(() => (manuales.some((l) => l.DecStatus === 'pendiente') ? 'pendiente' : 'todos'));
@@ -87,9 +88,8 @@ export function ProductosSection({
   }, [manuales, filtro, busqueda]);
 
   // Solo cuentan los seleccionados que siguen pendientes (otro usuario pudo decidirlos).
-  // Los que esperan a Data todavía no se pueden decidir.
-  const pendientesSeleccionados = manuales.filter((l) => l.DecStatus === 'pendiente' && !l.EsperaData && seleccion.has(l.Posicion)).map((l) => l.Posicion);
-  const visiblesPendientes = visibles.filter((l) => l.DecStatus === 'pendiente' && !l.EsperaData);
+  const pendientesSeleccionados = manuales.filter((l) => l.DecStatus === 'pendiente' && seleccion.has(l.Posicion)).map((l) => l.Posicion);
+  const visiblesPendientes = visibles.filter((l) => l.DecStatus === 'pendiente');
   const todosVisiblesMarcados = visiblesPendientes.length > 0 && visiblesPendientes.every((l) => seleccion.has(l.Posicion));
 
   const alternar = (pos: number) =>
@@ -384,9 +384,9 @@ const MINI_BOTON =
   'inline-flex h-8 shrink-0 items-center gap-1 rounded-full px-3 text-xs font-semibold transition-[background-color,color,transform,opacity] duration-150 active:scale-[0.96] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50';
 
 /**
- * Sobrante no esperado que no está en SAP: la compradora todavía no lo puede
- * decidir. Data (permiso «Crear artículos en SAP») carga aquí el código ya
- * creado; el backend lo valida contra SAP.
+ * Sobrante no esperado aprobado que no está en SAP: Data (permiso «Crear
+ * artículos en SAP») carga aquí el código ya creado; el backend lo valida
+ * contra SAP. Hasta entonces no se envía a contabilidad.
  */
 function EsperaData({
   token,
@@ -412,7 +412,7 @@ function EsperaData({
     setError(null);
     try {
       onActualizada(await apiReclamos.cargarCodigoSap(token, l.Posicion, c));
-      avisos.ok(`Código del producto ${l.Posicion} cargado: ya lo puede decidir la compradora.`);
+      avisos.ok(`Código del producto ${l.Posicion} cargado.`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo guardar el código.');
     } finally {
@@ -429,7 +429,7 @@ function EsperaData({
     return (
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
         {etiqueta}
-        <span className="opacity-70">{l.CodigoBarra ? 'No está creado en SAP.' : 'Vino sin código.'} Data debe crearlo en SAP antes de decidirlo.</span>
+        <span className="opacity-70">{l.CodigoBarra ? 'No está creado en SAP.' : 'Vino sin código.'} Data debe crearlo en SAP antes del 912.</span>
       </div>
     );
   }
@@ -506,7 +506,9 @@ function ProductoFila({
   };
 
   const decidido = l.DecStatus !== 'pendiente';
-  const esperaData = Boolean(l.EsperaData) && !decidido;
+  // Aprobado por la compradora y todavía sin crear en SAP: le toca a Data.
+  const esperaData = Boolean(l.EsperaData) && l.DecStatus === 'aprobado';
+  const sinSap = Boolean(l.EsperaData) && l.DecStatus === 'pendiente';
   // En celular, con casilla, todo lo que no es la casilla va en la 2ª columna.
   const col2 = onSeleccionar ? 'col-start-2 md:col-start-auto' : '';
   return (
@@ -526,8 +528,8 @@ function ProductoFila({
           type="checkbox"
           className="row-span-3 mt-0.5 h-4 w-4 self-start accent-brand-500 disabled:opacity-30 md:row-span-1 md:mt-0 md:self-center"
           aria-label={`Seleccionar producto ${l.Posicion}`}
-          checked={seleccionado && !decidido && !esperaData}
-          disabled={decidido || esperaData}
+          checked={seleccionado && !decidido}
+          disabled={decidido}
           onChange={onSeleccionar}
         />
       )}
@@ -540,7 +542,8 @@ function ProductoFila({
         <div className="truncate text-xs opacity-60">
           <span className="md:hidden">#{l.Posicion} · </span>
           {l.CodigoBarra ? <span className="font-mono">{l.CodigoBarra}</span> : <span>Sin código</span>}
-          {l.Encontrado === false && l.CodigoBarra && !esperaData && <span className="ml-1 text-danger">· no encontrado en SAP</span>}
+          {l.Encontrado === false && l.CodigoBarra && !l.EsperaData && <span className="ml-1 text-danger">· no encontrado en SAP</span>}
+          {sinSap && <span className="ml-1 text-brand-700 dark:text-brand-300">· no está en SAP: si se aprueba, se avisa a Data para que lo cree</span>}
           {l.CodigoDataBy && <span className="ml-1">· código cargado por {l.CodigoDataByNombre || l.CodigoDataBy} (Data)</span>}
           {mostrarTipo && <span className="ml-1">· {TIPO_LABEL[l.Tipo]}</span>}
         </div>
@@ -558,9 +561,7 @@ function ProductoFila({
       </div>
 
       <div className={cn('min-w-0', col2)}>
-        {esperaData ? (
-          <EsperaData token={token} linea={l} puedeCargar={puedeCargarCodigo && !cerrado} onActualizada={onActualizada} />
-        ) : decidido ? (
+        {decidido ? (
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs md:flex-nowrap">
             <span
               className={cn(
@@ -616,6 +617,11 @@ function ProductoFila({
           </div>
         ) : (
           <span className="text-xs text-warning">Pendiente de revisión</span>
+        )}
+        {esperaData && (
+          <div className="mt-1.5">
+            <EsperaData token={token} linea={l} puedeCargar={puedeCargarCodigo} onActualizada={onActualizada} />
+          </div>
         )}
         {error && <p className="mt-1 text-xs text-danger">{error}</p>}
       </div>

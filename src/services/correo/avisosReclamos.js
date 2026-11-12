@@ -6,8 +6,9 @@
 //   reenviado -> la compradora que lo devolvió: ya está corregido.
 //   devuelto_supervisor  -> quien lo creó: el supervisor GOF lo devolvió con el motivo.
 //   reenviado_supervisor -> el supervisor GOF que lo devolvió: ya está corregido.
-//   listo_data -> la compradora: Data ya creó en SAP los sobrantes no
-//                esperados que faltaban; ya puede decidirlos y cerrar.
+//   listo_data -> quien lo envía a contabilidad (reclamos.enviar_contabilidad):
+//                Data ya creó en SAP los sobrantes no esperados aprobados; ya
+//                puede hacer el 912 y enviarlo.
 //   reabierto -> la compradora: un reclamo cerrado volvió a pendiente porque
 //                quien lo creó cambió productos (hay que decidirlos otra vez).
 //   cerrado   -> quien lo envía a contabilidad (reclamos.enviar_contabilidad):
@@ -85,11 +86,11 @@ const EVENTOS = {
   },
   listo_data: {
     area: {
-      permiso: 'reclamos.decidir',
-      titulo: 'Sobrantes no esperados listos para revisar',
-      estado: 'Pendiente',
-      frase: (de) => `${de} (Data) creó en SAP los artículos de sobrante no esperado de este reclamo. Ya puedes aprobar o rechazar sus productos y cerrarlo.`,
-      boton: 'Abrir y revisar',
+      permiso: 'reclamos.enviar_contabilidad',
+      titulo: 'Sobrantes no esperados creados en SAP',
+      estado: 'Por enviar a contabilidad',
+      frase: (de) => `${de} (Data) creó en SAP los sobrantes no esperados que aprobó la compradora. Ya puedes hacer la nota de débito (912), subirla y enviar el reclamo a contabilidad.`,
+      boton: 'Abrir y enviar',
     },
   },
   reabierto: {
@@ -110,7 +111,9 @@ const EVENTOS = {
       frase: (de, r) =>
         r.DecisionBy === USUARIO_SISTEMA
           ? 'Este reclamo se cerró automáticamente: todos sus productos se aprueban solos (faltante, devolución, diferencias o daños). Ya puedes enviarlo a contabilidad con el documento 911.'
-          : `${de} ${cerradoTexto(r)} este reclamo. Si aprobó sobrantes, sube la nota de débito (912) y envíalo a contabilidad.`,
+          : Number(r.LineasEsperaData) > 0
+            ? `${de} ${cerradoTexto(r)} este reclamo. Aprobó sobrantes no esperados que no están en SAP: se avisó a Data para que los cree. Cuando estén creados te avisaremos para hacer el 912 y enviarlo a contabilidad.`
+            : `${de} ${cerradoTexto(r)} este reclamo. Si aprobó sobrantes, sube la nota de débito (912) y envíalo a contabilidad.`,
       etiquetaComentario: 'Comentario de la compradora',
       boton: 'Abrir y enviar',
     },

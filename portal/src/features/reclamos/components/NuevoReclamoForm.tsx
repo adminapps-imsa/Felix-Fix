@@ -703,7 +703,7 @@ export function NuevoReclamoForm({
                     {preview.sobranteNoEsperado.total === 1 ? '' : 's'}.
                   </strong>{' '}
                   {preview.sobranteNoEsperado.paraData > 0
-                    ? `${preview.sobranteNoEsperado.paraData} no ${preview.sobranteNoEsperado.paraData === 1 ? 'está creado' : 'están creados'} en SAP (o vienen sin código): al crear el reclamo se avisa a Data por correo para que los cree; después pasan a la compradora.`
+                    ? `Los decide la compradora. ${preview.sobranteNoEsperado.paraData} no ${preview.sobranteNoEsperado.paraData === 1 ? 'está creado' : 'están creados'} en SAP (o vienen sin código): los que ella apruebe se avisan a Data por correo para que los cree antes del 912.`
                     : 'Están creados en SAP: los decide la compradora.'}
                   {!preview.sobranteNoEsperado.sapDisponible && ' SAP no respondió: los que traen código se validarán como creados.'}
                 </p>

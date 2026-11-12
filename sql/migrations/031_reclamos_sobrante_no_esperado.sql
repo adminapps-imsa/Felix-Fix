@@ -3,8 +3,9 @@
 --   * El código de barras es opcional en esos productos: CodigoBarra admite NULL.
 --   * Referencia, Color y Talla: las columnas de la hoja, para el aviso a Data.
 --   * EsperaData = 1: el artículo no está creado en SAP (o vino sin código).
---     La compradora no lo puede decidir hasta que Data lo cree en SAP y cargue
---     su código en el portal (CodigoDataBy / CodigoDataAt).
+--     La compradora lo decide igual; si lo aprueba, al cerrar se avisa a Data,
+--     que lo crea en SAP y carga su código (CodigoDataBy / CodigoDataAt). Hasta
+--     entonces no se envía a contabilidad (no hay 912 sin el artículo).
 --   * CK_Reclamos_Tipo acepta el tipo nuevo.
 -- No cambia datos existentes. Idempotente.
 

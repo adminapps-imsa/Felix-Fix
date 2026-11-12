@@ -25,7 +25,6 @@ import { badRequest } from '../../utils/httpError.js';
 import { tienePermiso } from '../acceso/permisos.js';
 import { exigirDivision } from '../divisiones.js';
 import { avisarReclamo } from '../correo/avisosReclamos.js';
-import { avisarDataArticulos } from '../correo/avisoDataArticulos.js';
 import { env } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
 import { normalizarDocSap, motivoDocsRepetidos, motivoDocsEnOtrosReclamos, documentosUsados, motivoFechaLlegadaInvalida, esDevolucion, estadoAlCrear } from '../../domain/reclamo.js';
@@ -142,9 +141,10 @@ export async function previsualizarExcel(multerFile) {
 }
 
 /**
- * Un sobrante no esperado espera a Data si no trae código o su código no está
- * en SAP. Con SAP caído no se puede saber: los que traen código van a la
- * compradora (como cualquier sobrante) y queda en el log.
+ * Un sobrante no esperado necesita a Data si no trae código o su código no
+ * está en SAP: la compradora lo decide igual y, si lo aprueba, al cerrar el
+ * reclamo se avisa a Data. Con SAP caído no se puede saber: los que traen
+ * código cuentan como creados y queda en el log.
  */
 const esperaData = (l, sap) => l.tipo === 'sobrante_no_esperado' && (!l.codigoBarra || (sap.disponible && !sap.productos.has(l.codigoBarra)));
 
@@ -422,14 +422,9 @@ export async function crear(body, multerFile, usuario, pdfs = []) {
     for (const a of adjuntosSap) {
       copiarPdf(reclamoArchivoPath(a.filename), { filename: a.filename, titulo: `${dto.Numero} — ${a.originalname}`, tipoDocumento: TIPO_RECLAMO });
     }
-    // Aviso a las compradoras: solo si hay algo que decidir ya (los «notificados» son solo
-    // informativos; los sobrantes no esperados que esperan a Data se avisan cuando Data termina).
-    if (dto.Status === 'pendiente' && Number(dto.LineasPendientes) > Number(dto.LineasEsperaData || 0)) {
-      avisarReclamo('nuevo', dto, { comentario: dto.Comentario, de: usuario.name || nombreUsuario(usuario) });
-    }
-    // A Data: los sobrantes no esperados que no están creados en SAP.
-    const paraData = lineas.filter((l) => l.esperaData);
-    if (paraData.length) avisarDataArticulos(dto, paraData, { de: usuario.name || nombreUsuario(usuario) });
+    // Aviso a las compradoras: solo si espera su decisión (los «notificados» son solo informativos).
+    // Los sobrantes no esperados que no están en SAP los decide ella primero; a Data se le avisa al cerrar.
+    if (dto.Status === 'pendiente') avisarReclamo('nuevo', dto, { comentario: dto.Comentario, de: usuario.name || nombreUsuario(usuario) });
     // Cerrado solo: al supervisor GOF, que ya lo tiene para enviar a contabilidad.
     if (dto.Status === 'resuelto') avisarReclamo('cerrado', dto);
     return dto;

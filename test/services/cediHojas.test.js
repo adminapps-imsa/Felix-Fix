@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import * as XLSX from 'xlsx';
 import { parsearPlantilla, detectarTipoPorMotivo, motivoFaltantesSinDocumento } from '../../src/services/reclamos/excelParser.js';
 import { TIPOS, esAutoAprobado, TIPOS_SOBRANTE } from '../../src/services/reclamos/tipos.js';
-import { motivoNoDecidir } from '../../src/domain/reclamo.js';
+import { motivoNoDecidir, motivoNoEnviarContabilidad } from '../../src/domain/reclamo.js';
 import { codigoDataSchema, corregirLineasSchema } from '../../src/validators/reclamos.schema.js';
 import { plantillaDataArticulos } from '../../src/services/correo/avisoDataArticulos.js';
 
@@ -102,11 +102,12 @@ test('Tienda: «sobrante no esperado» cuenta como sobrante (el motivo nuevo es 
   assert.equal(r.lineas[0].tipo, 'sobrante_real');
 });
 
-test('cerrar el reclamo: no mientras haya sobrantes no esperados esperando a Data', () => {
-  const m = motivoNoDecidir({ Status: 'pendiente', LineasPendientes: 2, LineasEsperaData: 2 });
+test('enviar a contabilidad: no mientras haya sobrantes no esperados aprobados esperando a Data', () => {
+  const m = motivoNoEnviarContabilidad({ Status: 'resuelto', LineasEsperaData: 2, LineasSobranteAprobadas: 2 }, []);
   assert.equal(m.code, 'ESPERA_DATA');
-  assert.match(m.mensaje, /2 productos/);
-  assert.equal(motivoNoDecidir({ Status: 'pendiente', LineasPendientes: 0, LineasEsperaData: 0 }), null);
+  assert.match(m.mensaje, /2 sobrantes no esperados aprobados/);
+  // La compradora sí puede cerrar aunque haya sobrantes no esperados sin SAP.
+  assert.equal(motivoNoDecidir({ Status: 'pendiente', LineasPendientes: 0, LineasEsperaData: 2 }), null);
 });
 
 test('código de Data: obligatorio y solo números', () => {
@@ -131,6 +132,6 @@ test('aviso a Data: tabla con código, referencia, color, talla y cantidad', () 
   );
   assert.equal(asunto, 'Artículos por crear en SAP: REC-000099 — GIGIO');
   assert.match(texto, /Sin código \| TY1374 \| OFF WHITE MIX \| S \| 2/);
-  assert.match(texto, /un sobrante no esperado que no está creado en SAP/);
+  assert.match(texto, /Ana aprobó en un reclamo de CEDI un sobrante no esperado que no está creado en SAP/);
   assert.match(html, /OFF WHITE MIX/);
 });

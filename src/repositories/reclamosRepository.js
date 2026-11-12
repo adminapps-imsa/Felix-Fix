@@ -17,7 +17,7 @@ const SELECT_BASE = `
     (SELECT COUNT(*) FROM ${S}.ReclamoLineas l WHERE l.ReclamoToken = r.Token AND l.DecStatus = 'pendiente') AS LineasPendientes,
     (SELECT COUNT(*) FROM ${S}.ReclamoLineas l WHERE l.ReclamoToken = r.Token AND l.DecStatus = 'aprobado') AS LineasAprobadas,
     (SELECT COUNT(*) FROM ${S}.ReclamoLineas l WHERE l.ReclamoToken = r.Token AND l.DecStatus = 'aprobado' AND l.Tipo IN ('sobrante_real', 'sobrante_no_esperado')) AS LineasSobranteAprobadas,
-    (SELECT COUNT(*) FROM ${S}.ReclamoLineas l WHERE l.ReclamoToken = r.Token AND l.EsperaData = 1 AND l.DecStatus = 'pendiente') AS LineasEsperaData,
+    (SELECT COUNT(*) FROM ${S}.ReclamoLineas l WHERE l.ReclamoToken = r.Token AND l.EsperaData = 1 AND l.DecStatus = 'aprobado') AS LineasEsperaData,
     (SELECT COUNT(*) FROM ${S}.ReclamoLineas l WHERE l.ReclamoToken = r.Token AND l.Tipo = 'devolucion') AS LineasDevolucion
   FROM ${S}.Reclamos r
 `;
@@ -385,7 +385,6 @@ async function updateDecisionLinea(req, token, posicion, { desde, hacia, comenta
     UPDATE ${S}.ReclamoLineas
     SET DecStatus = @hacia, DecComentario = @comentario, DecAt = ${setDecAt}, DecBy = @usuario
     WHERE ReclamoToken = @token AND Posicion = @pos AND ${condDesde}
-      AND EsperaData = 0
       ${bloqueados.length ? `AND Tipo NOT IN (${bloqueados.join(', ')})` : ''}
       AND EXISTS (SELECT 1 FROM ${S}.Reclamos r WHERE r.Token = @token AND r.Status IN ('pendiente', 'notificado'))
   `);
@@ -393,10 +392,10 @@ async function updateDecisionLinea(req, token, posicion, { desde, hacia, comenta
 }
 
 /**
- * Data cargó el código de un sobrante no esperado que ya creó en SAP: la línea
- * deja de esperar y la compradora la puede decidir. Solo si sigue esperando y
- * el reclamo está abierto. Devuelve { ok, quedan } (quedan = líneas que aún
- * esperan a Data en el reclamo).
+ * Data cargó el código de un sobrante no esperado (aprobado por la compradora)
+ * que ya creó en SAP: la línea deja de esperar. Solo si sigue esperando y el
+ * reclamo no se ha enviado a contabilidad. Devuelve { ok, quedan } (quedan =
+ * aprobados que aún esperan a Data en el reclamo).
  */
 export async function asignarCodigoData(token, posicion, { codigo, descripcion, usuario }) {
   const pool = await getPool();
@@ -411,10 +410,10 @@ export async function asignarCodigoData(token, posicion, { codigo, descripcion, 
     UPDATE ${S}.ReclamoLineas
     SET CodigoBarra = @codigo, EsperaData = 0, CodigoDataBy = @usuario, CodigoDataAt = SYSUTCDATETIME(),
         DescripcionExcel = COALESCE(DescripcionExcel, @descripcion)
-    WHERE ReclamoToken = @token AND Posicion = @pos AND Tipo = 'sobrante_no_esperado' AND EsperaData = 1 AND DecStatus = 'pendiente'
-      AND EXISTS (SELECT 1 FROM ${S}.Reclamos r WHERE r.Token = @token AND r.Status IN ('pendiente', 'devuelto'));
+    WHERE ReclamoToken = @token AND Posicion = @pos AND Tipo = 'sobrante_no_esperado' AND EsperaData = 1 AND DecStatus = 'aprobado'
+      AND EXISTS (SELECT 1 FROM ${S}.Reclamos r WHERE r.Token = @token AND r.EnviadoContabilidadAt IS NULL);
     SELECT @@ROWCOUNT AS ok,
-           (SELECT COUNT(*) FROM ${S}.ReclamoLineas WHERE ReclamoToken = @token AND EsperaData = 1 AND DecStatus = 'pendiente') AS quedan;
+           (SELECT COUNT(*) FROM ${S}.ReclamoLineas WHERE ReclamoToken = @token AND EsperaData = 1 AND DecStatus = 'aprobado') AS quedan;
   `);
   return { ok: recordset[0].ok > 0, quedan: recordset[0].quedan };
 }
