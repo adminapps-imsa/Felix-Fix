@@ -10,7 +10,9 @@
 // Otros proveedores usan un código corto al inicio:
 //   011756 "MAIA, IVORY NAVY, M      030766-1 "VERSALLES, PEACH, M
 // Ahí el mismo código y talla se repite en varios colores, así que la clave
-// lleva también el color (el segmento antes de la talla).
+// lleva también el color (el segmento antes de la talla). El código corto
+// también puede ser alfanumérico (con al menos un dígito):
+//   OPWB1205 "CAMISA OXFORD, AMPARO BLUE, S      TE2032 "BLUSA, ROSA, M
 
 const DECISIONES = new Set(['aprobado', 'rechazado']);
 
@@ -25,10 +27,10 @@ export function claveProducto(descripcion) {
   if (!talla) return null;
   const modelo = texto.match(/(?:^|\D)(\d{8,})(?!\d)/);
   if (modelo) return `${modelo[1]}|${talla}`;
-  const codigo = texto.match(/^(\d{4,7}(?:-\d+)?)(?=\s|")/);
+  const codigo = texto.match(/^((?=[A-Z0-9]*\d)[A-Z0-9]{4,12}(?:-\d+)?)(?=\s|")/i);
   if (!codigo) return null;
   const color = segmentos.length >= 3 ? limpiarSegmento(segmentos[segmentos.length - 2]) : '';
-  return `${codigo[1]}|${color}|${talla}`;
+  return `${codigo[1].toUpperCase()}|${color}|${talla}`;
 }
 
 const mismoNumero = (a, b) => a !== null && b !== null && Math.abs(Number(a) - Number(b)) < 0.0005;

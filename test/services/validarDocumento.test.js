@@ -14,6 +14,25 @@ test('clave: código corto lleva también el color (se repite en varios colores)
   assert.notEqual(claveProducto('011756 "MAIA, IVORY NAVY, M'), claveProducto('011756 "MAIA, BLACK, M'));
 });
 
+test('clave: código alfanumérico (OPWB1205, TE2032) con color y talla', () => {
+  assert.equal(claveProducto('OPWB1205 "CAMISA OXFORD, AMPARO BLUE, S'), 'OPWB1205|AMPARO BLUE|S');
+  assert.equal(claveProducto('opwb1205 "CAMISA OXFOR, AMPARO BLUE, xl'), 'OPWB1205|AMPARO BLUE|XL');
+  assert.equal(claveProducto('TE2032 "BLUSA, ROSA, M'), 'TE2032|ROSA|M');
+  assert.notEqual(claveProducto('OPWB1205 "CAMISA OXFORD, BRIGHT WHITE, S'), claveProducto('OPWB1205 "CAMISA OXFORD, AMPARO BLUE, S'));
+});
+
+test('REC-000030: el 912 con los sobrantes AMPARO BLUE cruza solo con ellos', () => {
+  const desc = (c, t) => `OPWB1205 "CAMISA OXFORD, ${c}, ${t}`;
+  const lineas = [
+    ...['S', 'M', 'L', 'XL'].map((t, i) => ({ LineaId: i + 1, Posicion: i + 1, Cantidad: [1, 2, 2, 1][i], Tipo: 'faltante_real', DescripcionExcel: desc('BRIGHT WHITE', t), DecStatus: 'aprobado' })),
+    ...['S', 'M', 'L', 'XL'].map((t, i) => ({ LineaId: i + 5, Posicion: i + 5, Cantidad: [1, 2, 2, 1][i], Tipo: 'sobrante_real', DescripcionExcel: desc('AMPARO BLUE', t), DecStatus: 'aprobado' })),
+  ];
+  const filas = ['S', 'M', 'L', 'XL'].map((t, i) => ({ material: '300-000123', descripcion: desc('AMPARO BLUE', t), cantidad: [1, 2, 2, 1][i], valor: 10 }));
+  const { lineas: r, validacion } = cruzar(filas, lineas);
+  assert.equal(validacion.estado, 'ok');
+  assert.deepEqual(r.map((l) => l.posicion), [5, 6, 7, 8]);
+});
+
 test('clave: null si la descripción no tiene el formato', () => {
   for (const d of [null, undefined, '', 'SIN COMAS', 'TROUSERS BOY, RED, 7', '15803206513 "TROUSERS,', '123 "X, Y, M']) {
     assert.equal(claveProducto(d), null, String(d));
