@@ -1,7 +1,11 @@
-/** Los 6 tipos de reclamo (fijos, no configurables). */
+/** Los tipos de reclamo (fijos, no configurables). */
 export const TIPOS = [
   'faltante_real',
   'sobrante_real',
+  // Hoja «Sobrante NO esperado» de la plantilla CEDI: el código de barras es
+  // opcional. Si el artículo está en SAP lo decide la compradora (y el 912 lo
+  // hace Torre de Control); si no, espera a que Data lo cree en SAP.
+  'sobrante_no_esperado',
   'diferencias',
   'danos_textil',
   'danos_perfumeria_cliente',
@@ -35,6 +39,9 @@ export const COMENTARIO_AUTO_APROBADO =
 export const USUARIO_SISTEMA = 'sistema';
 
 export const esAutoAprobado = (tipo) => TIPOS_AUTO_APROBADOS.has(tipo);
+
+/** Sobrantes: los decide la compradora y, si los aprueba, piden la nota de débito 912. */
+export const TIPOS_SOBRANTE = ['sobrante_real', 'sobrante_no_esperado'];
 
 /**
  * Categoría para comparar tipos: el detector por texto no distingue el

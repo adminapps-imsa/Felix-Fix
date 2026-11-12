@@ -6,6 +6,7 @@ import { plantillaAvisoReclamo } from './avisosReclamos.js';
 import { plantillaReporteProveedor } from './plantillaReporteProveedor.js';
 import { plantillaReclamoContabilidad } from './plantillaReclamoContabilidad.js';
 import { plantillaBienvenida } from './plantillaBienvenida.js';
+import { plantillaDataArticulos } from './avisoDataArticulos.js';
 
 const AHORA = () => new Date();
 
@@ -147,6 +148,29 @@ const CORREOS_RECLAMOS = [
     quien: 'La compradora que lo devolvió',
     generar: () =>
       plantillaAvisoReclamo('reenviado', reclamo(), { comentario: 'Listo, corregí la marca.', de: 'Gof de ejemplo', nombre: 'Compradora de ejemplo', para: 'persona' }),
+  },
+  {
+    id: 'rec-data-articulos',
+    nombre: 'Artículos por crear en SAP',
+    cuando: 'Se crea un reclamo de CEDI con sobrantes no esperados que no están en SAP (o vienen sin código).',
+    quien: 'Data (permiso «Crear artículos en SAP (Data)»), con la hoja «Sobrante NO esperado»',
+    generar: () =>
+      plantillaDataArticulos(
+        reclamo({ Tipo: 'sobrante_no_esperado', Origen: 'cedi', Sucursal: null }),
+        [
+          { posicion: 9, codigoBarra: null, referencia: 'TY1374', color: 'OFF WHITE MIX', talla: 'S', cantidad: 2 },
+          { posicion: 10, codigoBarra: null, referencia: 'TY1374', color: 'OFF WHITE MIX', talla: 'M', cantidad: 2 },
+          { posicion: 11, codigoBarra: '7701234500042', referencia: 'TY1374', color: 'OFF WHITE MIX', talla: 'L', cantidad: 2 },
+        ],
+        { de: 'CEDI de ejemplo' }
+      ),
+  },
+  {
+    id: 'rec-listo-data',
+    nombre: 'Sobrantes no esperados listos para revisar',
+    cuando: 'Data carga el código del último sobrante no esperado que faltaba en SAP.',
+    quien: 'La compradora del reclamo',
+    generar: () => plantillaAvisoReclamo('listo_data', reclamo({ Tipo: 'sobrante_no_esperado', Origen: 'cedi' }), { de: 'Data de ejemplo', para: 'area' }),
   },
   {
     id: 'rec-cerrado-area',

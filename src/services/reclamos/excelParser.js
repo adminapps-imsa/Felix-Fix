@@ -42,6 +42,8 @@ export function detectarTipoPorMotivo(texto) {
   // no sobrante/faltante real: la plantilla CEDI usa FALTANTE REAL para esos.
   if (t.startsWith('DIFERENCIA')) return 'diferencias';
   if (t.includes('FALTANTE')) return 'faltante_real';
+  // Antes que SOBRANTE: «SOBRANTE NO ESPERADO» es su propio motivo.
+  if (t.includes('SOBRANTE') && t.includes('NO ESPERADO')) return 'sobrante_no_esperado';
   if (t.includes('SOBRANTE')) return 'sobrante_real';
   if (t.includes('DIFERENCIA')) return 'diferencias';
   // «DEVOLUCIÓN», «DEVOLUCION AL PROVEEDOR», «DEVOLUCIONES»…
@@ -456,7 +458,9 @@ function parsearTienda(filas, filaEncabezado) {
     if (!codigoBarra || !/\d/.test(codigoBarra)) continue;
     const motivoTexto = textoCelda(fila[iMotivo]);
     const cantidad = iCantidad >= 0 ? aNumero(fila[iCantidad]) : null;
-    const tipo = detectarTipoPorMotivo(motivoTexto);
+    // «Sobrante no esperado» es solo de CEDI: en Tienda cuenta como sobrante.
+    const detectado = detectarTipoPorMotivo(motivoTexto);
+    const tipo = detectado === 'sobrante_no_esperado' ? 'sobrante_real' : detectado;
     const abs = cantidad === null ? null : Math.abs(cantidad);
     lineas.push({
       codigoBarra,
@@ -503,6 +507,204 @@ function parsearTienda(filas, filaEncabezado) {
   };
 }
 
+// ------------------------------------------------------------------
+// Plantilla CEDI por hojas (desde 2026-11-12): «Averia», «Diferencia» y
+// «Sobrante NO esperado». La primera hoja (resumen) no se lee.
+//   Averia      -> productos defectuosos o con daño (daños).
+//   Diferencia  -> diferencia negativa = faltante (con DOCUMENTO obligatorio),
+//                  positiva = sobrante. COMENTARIO es opcional.
+//   Sobrante NO esperado -> CODIGO (opcional), REFERENCIA, COLOR, TALLA, CANTIDAD.
+// ------------------------------------------------------------------
+
+const HOJAS_CEDI = [
+  { clave: 'averia', nombre: (n) => n.startsWith('AVERIA'), encabezado: (h) => h.includes('BARCODE') && h.some((x) => x.startsWith('AVERIA')) },
+  { clave: 'diferencia', nombre: (n) => n.startsWith('DIFERENCIA'), encabezado: (h) => h.includes('BARCODE') && h.some((x) => x.startsWith('DIFERENCIA')) },
+  {
+    clave: 'sobrante',
+    nombre: (n) => n.includes('SOBRANTE') && n.includes('NO ESPERADO'),
+    encabezado: (h) => h.some((x) => x.startsWith('REFERENCIA')) && h.some((x) => x.startsWith('CANTIDAD')),
+  },
+];
+
+/** Hojas de la plantilla CEDI por hojas que trae el libro: [{ clave, nombreHoja, filas, filaEncabezado }]. */
+function hojasCedi(wb) {
+  const encontradas = [];
+  for (const nombreHoja of wb.SheetNames) {
+    const def = HOJAS_CEDI.find((d) => d.nombre(normalizar(nombreHoja)));
+    if (!def || encontradas.some((e) => e.clave === def.clave)) continue;
+    const filas = filasDeHoja(wb.Sheets[nombreHoja]);
+    const limite = Math.min(filas.length, 15);
+    for (let r = 0; r < limite; r += 1) {
+      if (def.encabezado((filas[r] || []).map(normalizar))) {
+        encontradas.push({ clave: def.clave, nombreHoja, filas, filaEncabezado: r });
+        break;
+      }
+    }
+  }
+  return encontradas;
+}
+
+/** Hoja «Averia»: unidades = suma de las columnas numéricas entre AVERIA y FOTO (p. ej. «Manchado»). */
+function lineasAveria({ filas, filaEncabezado }) {
+  const headers = (filas[filaEncabezado] || []).map(normalizar);
+  const iBarcode = headers.indexOf('BARCODE');
+  const iProducto = headers.indexOf('PRODUCTO');
+  const iDescripcion = buscarColumna(headers, (h) => h.startsWith('DESCRIPCION'));
+  const iAveria = buscarColumna(headers, (h) => h.startsWith('AVERIA'));
+  const iFoto = buscarColumna(headers, (h) => h.startsWith('FOTO'));
+  const fin = iFoto > iAveria ? iFoto : headers.length;
+  const lineas = [];
+  for (const fila of filas.slice(filaEncabezado + 1)) {
+    const codigoBarra = aCodigoBarra(fila[iBarcode]);
+    if (!codigoBarra || !/\d/.test(codigoBarra)) continue;
+    let unidades = null;
+    for (let c = iAveria + 1; c < fin; c += 1) {
+      const n = aNumero(fila[c]);
+      if (n !== null) unidades = (unidades ?? 0) + Math.abs(n);
+    }
+    const averia = textoCelda(fila[iAveria]);
+    lineas.push({
+      codigoBarra,
+      cantidad: unidades,
+      tipo: 'danos_textil',
+      motivoTexto: `DEFECTUOSO / AVERÍA${averia ? ` (${averia})` : ''}`,
+      descripcion: iDescripcion >= 0 ? textoCelda(fila[iDescripcion]) || null : null,
+      cedi: {
+        fecha: null,
+        producto: iProducto >= 0 ? aCodigoBarra(fila[iProducto]) || null : null,
+        esperada: null,
+        recibida: null,
+        diferencia: null,
+        averiadas: unidades,
+        documento: null,
+      },
+    });
+  }
+  return lineas;
+}
+
+/** Hoja «Diferencia»: el signo decide faltante (negativa) o sobrante (positiva). */
+function lineasDiferencia({ filas, filaEncabezado, nombreHoja }, faltantesSinDocumento) {
+  const headers = (filas[filaEncabezado] || []).map(normalizar);
+  const iBarcode = headers.indexOf('BARCODE');
+  const iProducto = headers.indexOf('PRODUCTO');
+  const iDescripcion = buscarColumna(headers, (h) => h.startsWith('DESCRIPCION'));
+  const iEsperada = buscarColumna(headers, (h) => h.includes('ESPERADA'));
+  const iRecibida = buscarColumna(headers, (h) => h.includes('RECIBIDA'));
+  const iDiferencia = buscarColumna(headers, (h) => h.startsWith('DIFERENCIA'));
+  const iDocumento = buscarColumna(headers, (h) => h.startsWith('DOCUMENTO'));
+  const lineas = [];
+  filas.slice(filaEncabezado + 1).forEach((fila, i) => {
+    const codigoBarra = aCodigoBarra(fila[iBarcode]);
+    if (!codigoBarra || !/\d/.test(codigoBarra)) return;
+    const esperada = iEsperada >= 0 ? aNumero(fila[iEsperada]) : null;
+    const recibida = iRecibida >= 0 ? aNumero(fila[iRecibida]) : null;
+    let diferencia = iDiferencia >= 0 ? aNumero(fila[iDiferencia]) : null;
+    if (diferencia === null && esperada !== null && recibida !== null) diferencia = recibida - esperada;
+    if (!diferencia) return; // sin diferencia no hay nada que reclamar
+    const faltante = diferencia < 0;
+    const documento = iDocumento >= 0 ? textoCelda(fila[iDocumento]) || null : null;
+    if (faltante && !documento) faltantesSinDocumento.push({ hoja: nombreHoja.trim(), fila: filaEncabezado + i + 2, codigoBarra });
+    lineas.push({
+      codigoBarra,
+      cantidad: Math.abs(diferencia),
+      tipo: faltante ? 'faltante_real' : 'sobrante_real',
+      motivoTexto: faltante ? 'FALTANTE' : 'SOBRANTE',
+      descripcion: iDescripcion >= 0 ? textoCelda(fila[iDescripcion]) || null : null,
+      cedi: {
+        fecha: null,
+        producto: iProducto >= 0 ? aCodigoBarra(fila[iProducto]) || null : null,
+        esperada,
+        recibida,
+        diferencia,
+        averiadas: null,
+        documento,
+      },
+    });
+  });
+  return lineas;
+}
+
+/** Hoja «Sobrante NO esperado»: el código es opcional; la descripción es «REFERENCIA, COLOR, TALLA». */
+function lineasSobranteNoEsperado({ filas, filaEncabezado }) {
+  const headers = (filas[filaEncabezado] || []).map(normalizar);
+  const iCodigo = buscarColumna(headers, (h) => h.startsWith('CODIGO') || h === 'BARCODE');
+  const iReferencia = buscarColumna(headers, (h) => h.startsWith('REFERENCIA'));
+  const iColor = buscarColumna(headers, (h) => h.startsWith('COLOR'));
+  const iTalla = buscarColumna(headers, (h) => h.startsWith('TALLA'));
+  const iCantidad = buscarColumna(headers, (h) => h.startsWith('CANTIDAD'));
+  const lineas = [];
+  for (const fila of filas.slice(filaEncabezado + 1)) {
+    const codigo = iCodigo >= 0 ? aCodigoBarra(fila[iCodigo]) : '';
+    const referencia = iReferencia >= 0 ? textoCelda(fila[iReferencia]).slice(0, 100) || null : null;
+    const color = iColor >= 0 ? textoCelda(fila[iColor]).slice(0, 100) || null : null;
+    const talla = iTalla >= 0 ? textoCelda(fila[iTalla]).slice(0, 50) || null : null;
+    const n = iCantidad >= 0 ? aNumero(fila[iCantidad]) : null;
+    if (!codigo && !referencia && !color && !talla && n === null) continue;
+    const cantidad = n === null ? null : Math.abs(n);
+    lineas.push({
+      codigoBarra: codigo && /\d/.test(codigo) ? codigo : null,
+      cantidad,
+      tipo: 'sobrante_no_esperado',
+      motivoTexto: 'SOBRANTE NO ESPERADO',
+      descripcion: [referencia, color, talla].filter(Boolean).join(', ') || null,
+      referencia,
+      color,
+      talla,
+      cedi: { fecha: null, producto: null, esperada: null, recibida: null, diferencia: cantidad, averiadas: null, documento: null },
+    });
+  }
+  return lineas;
+}
+
+function parsearCediHojas(hojas) {
+  const faltantesSinDocumento = [];
+  const lineas = [];
+  for (const h of hojas) {
+    if (h.clave === 'averia') lineas.push(...lineasAveria(h));
+    else if (h.clave === 'diferencia') lineas.push(...lineasDiferencia(h, faltantesSinDocumento));
+    else lineas.push(...lineasSobranteNoEsperado(h));
+  }
+  const dif = hojas.find((h) => h.clave === 'diferencia');
+  let documentos = [];
+  let comentario = null;
+  if (dif) {
+    const headers = (dif.filas[dif.filaEncabezado] || []).map(normalizar);
+    const datos = dif.filas.slice(dif.filaEncabezado + 1);
+    const iBarcode = headers.indexOf('BARCODE');
+    documentos = documentosSap(datos, buscarColumna(headers, (h) => h.startsWith('DOCUMENTO')), iBarcode);
+    comentario = comentarioGeneral(datos, buscarColumna(headers, (h) => h.startsWith('COMENTARIO')), iBarcode);
+  }
+  return {
+    formato: 'cedi',
+    plantilla: 'cedi_hojas',
+    hojaNombre: hojas.map((h) => h.nombreHoja.trim()).join(', '),
+    fechaRegistro: null,
+    numeroEmbarqueFactura: null,
+    documentosSap: documentos,
+    comentario,
+    proveedor: null,
+    sucursal: null,
+    division: null,
+    mundo: null,
+    departamento: null,
+    marca: null,
+    faltantesSinDocumento,
+    lineas,
+  };
+}
+
+/** Mensaje para los faltantes de la hoja Diferencia que no traen DOCUMENTO (null si no hay). */
+export function motivoFaltantesSinDocumento(faltantes) {
+  if (!faltantes?.length) return null;
+  const lista = faltantes.slice(0, 10).map((f) => `fila ${f.fila} (${f.codigoBarra})`).join(', ');
+  const mas = faltantes.length > 10 ? ` y ${faltantes.length - 10} más` : '';
+  return {
+    mensaje: `Los faltantes deben tener su documento: en la hoja «${faltantes[0].hoja}» falta la columna DOCUMENTO en ${lista}${mas}.`,
+    code: 'FALTANTE_SIN_DOCUMENTO',
+  };
+}
+
 function resumirTipos(lineas) {
   const desglose = {};
   const orden = [];
@@ -535,6 +737,14 @@ export function leerLibro(buffer) {
  */
 export function parsearPlantilla(buffer) {
   const wb = leerLibro(buffer);
+
+  // Plantilla CEDI por hojas (Averia / Diferencia / Sobrante NO esperado).
+  const hojas = hojasCedi(wb);
+  if (hojas.length) {
+    const { hojaNombre, ...resultado } = parsearCediHojas(hojas);
+    resultado.lineas = resultado.lineas.map((l, i) => ({ posicion: i + 1, ...l }));
+    return { hoja: hojaNombre, ...resultado, ...resumirTipos(resultado.lineas) };
+  }
 
   for (const nombreHoja of wb.SheetNames) {
     const filas = filasDeHoja(wb.Sheets[nombreHoja]);

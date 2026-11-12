@@ -83,6 +83,10 @@ sí mismo en `dbo.SchemaMigrations` al terminar.
    decide sobrantes. Aprueba como `sistema` los productos pendientes de
    Devolución y Diferencias y cierra (como la 029) los que quedan todos
    aprobados por el sistema. No manda correos.
+32. `031_reclamos_sobrante_no_esperado.sql` — Reclamos: motivo «Sobrante no
+   esperado» (plantilla CEDI por hojas). `CodigoBarra` admite NULL; columnas
+   `Referencia`, `Color`, `Talla`, `EsperaData` (no está en SAP: espera a
+   Data) y quién/cuándo cargó Data el código. No cambia datos.
 
 ## Esquemas QA y Prod
 

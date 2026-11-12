@@ -1,6 +1,7 @@
 export type TipoReclamo =
   | 'faltante_real'
   | 'sobrante_real'
+  | 'sobrante_no_esperado'
   | 'diferencias'
   | 'danos_textil'
   | 'danos_perfumeria_cliente'
@@ -108,7 +109,8 @@ export interface Reclamo {
 export interface ReclamoLinea {
   LineaId: number;
   Posicion: number;
-  CodigoBarra: string;
+  /** null: sobrante no esperado que vino sin código (lo crea Data). */
+  CodigoBarra: string | null;
   Cantidad: number | null;
   Tipo: TipoReclamo;
   Descripcion: string | null;
@@ -118,6 +120,15 @@ export interface ReclamoLinea {
   /** null = no se pudo validar contra SAP (no disponible). */
   Encontrado: boolean | null;
   AutoAprobado: boolean;
+  /** Sobrante no esperado que no está en SAP: espera a que Data lo cree y cargue el código. */
+  EsperaData?: boolean;
+  Referencia?: string | null;
+  Color?: string | null;
+  Talla?: string | null;
+  /** Quién de Data cargó el código y cuándo. */
+  CodigoDataBy?: string | null;
+  CodigoDataByNombre?: string | null;
+  CodigoDataAt?: string | null;
   DecStatus: DecStatus;
   DecComentario: string | null;
   DecAt: string | null;
@@ -163,6 +174,10 @@ export interface PreviewExcel {
   desglose: Partial<Record<TipoReclamo, number>>;
   lineasTotal: number;
   lineasSinMotivo: number;
+  /** Plantilla CEDI por hojas: faltantes sin DOCUMENTO (no deja crear el reclamo). */
+  faltantesSinDocumento?: string | null;
+  /** Sobrante no esperado: cuántos hay y cuántos irán a Data (no están en SAP o sin código). */
+  sobranteNoEsperado?: { total: number; paraData: number; sapDisponible: boolean } | null;
   validacionCodigos: { disponible: boolean; encontrados: number | null; noEncontrados: string[] };
   /** Cada producto con las columnas de la plantilla: es lo que llena el formulario. */
   filas: FilaProducto[];
@@ -173,7 +188,7 @@ export interface FilaProducto {
   posicion: number;
   fecha: string | null;
   producto: string | null;
-  codigoBarra: string;
+  codigoBarra: string | null;
   descripcion: string | null;
   esperada: number | null;
   recibida: number | null;
@@ -231,6 +246,8 @@ export interface PermisosReclamos {
   puedeEliminarCualquiera: boolean;
   /** Reclamos de devolución: marcar que el proveedor retiró el producto (Gof). */
   puedeRegistrarRetiro: boolean;
+  /** Data: carga el código de los sobrantes no esperados que creó en SAP. */
+  puedeCargarCodigoSap?: boolean;
   /** Igual a puedeDecidir (compatibilidad). */
   esAdmin: boolean;
   username: string;

@@ -116,13 +116,20 @@ export const devolverSchema = z.object({ comentario: texto(1000) });
 
 /** Reenviar a la compradora: respuesta opcional de quien lo corrigió. */
 /** Productos corregidos de un reclamo devuelto: `lineaId` de los que ya estaban, sin él los nuevos. */
-const lineaCorregidaSchema = z.object({
-  lineaId: z.number().int().positive().nullable().optional(),
-  codigoBarra: z.string({ required_error: 'Cada producto necesita su código de barra.' }).trim().min(1, 'Cada producto necesita su código de barra.').max(50, 'El código de barra admite hasta 50 caracteres.'),
-  descripcion: texto(300).optional().default(''),
-  cantidad: z.number({ invalid_type_error: 'La cantidad debe ser un número.' }).finite().min(0, 'La cantidad no puede ser negativa.').max(1e12).nullable().optional().default(null),
-  tipo: z.enum(TIPOS, { errorMap: () => ({ message: 'Motivo de producto inválido.' }) }),
-});
+// El código es obligatorio salvo en «Sobrante no esperado» (puede venir sin código: lo crea Data).
+const lineaCorregidaSchema = z
+  .object({
+    lineaId: z.number().int().positive().nullable().optional(),
+    codigoBarra: z.string().trim().max(50, 'El código de barra admite hasta 50 caracteres.').nullable().optional().transform((v) => v || ''),
+    descripcion: texto(300).optional().default(''),
+    cantidad: z.number({ invalid_type_error: 'La cantidad debe ser un número.' }).finite().min(0, 'La cantidad no puede ser negativa.').max(1e12).nullable().optional().default(null),
+    tipo: z.enum(TIPOS, { errorMap: () => ({ message: 'Motivo de producto inválido.' }) }),
+  })
+  .superRefine((l, ctx) => {
+    if (!l.codigoBarra && l.tipo !== 'sobrante_no_esperado') {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['codigoBarra'], message: 'Cada producto necesita su código de barra.' });
+    }
+  });
 
 export const corregirLineasSchema = z.object({
   lineas: z.array(lineaCorregidaSchema).min(1, 'El reclamo debe tener al menos un producto.').max(2000, 'Máximo 2000 productos.'),
@@ -155,6 +162,16 @@ export const corregirDatosSchema = z.object({
 export const decisionReclamoSchema = z.object({
   status: z.enum(['resuelto', 'rechazado']),
   comentario: texto(1000).optional().default(''),
+});
+
+/** Data carga el código de barras de un sobrante no esperado que ya creó en SAP. */
+export const codigoDataSchema = z.object({
+  codigoBarra: z
+    .string({ required_error: 'Escribe el código de barras.' })
+    .trim()
+    .min(1, 'Escribe el código de barras.')
+    .max(50, 'El código de barras admite hasta 50 caracteres.')
+    .regex(/^\d+$/, 'El código de barras solo lleva números.'),
 });
 
 export const decisionLineaSchema = z.object({

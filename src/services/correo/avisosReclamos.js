@@ -6,6 +6,8 @@
 //   reenviado -> la compradora que lo devolvió: ya está corregido.
 //   devuelto_supervisor  -> quien lo creó: el supervisor GOF lo devolvió con el motivo.
 //   reenviado_supervisor -> el supervisor GOF que lo devolvió: ya está corregido.
+//   listo_data -> la compradora: Data ya creó en SAP los sobrantes no
+//                esperados que faltaban; ya puede decidirlos y cerrar.
 //   reabierto -> la compradora: un reclamo cerrado volvió a pendiente porque
 //                quien lo creó cambió productos (hay que decidirlos otra vez).
 //   cerrado   -> quien lo envía a contabilidad (reclamos.enviar_contabilidad):
@@ -79,6 +81,15 @@ const EVENTOS = {
       frase: (de) => `${de} corrigió el reclamo que devolviste. Ya siguió su curso; revísalo si hace falta.`,
       etiquetaComentario: 'Su respuesta',
       boton: 'Abrir',
+    },
+  },
+  listo_data: {
+    area: {
+      permiso: 'reclamos.decidir',
+      titulo: 'Sobrantes no esperados listos para revisar',
+      estado: 'Pendiente',
+      frase: (de) => `${de} (Data) creó en SAP los artículos de sobrante no esperado de este reclamo. Ya puedes aprobar o rechazar sus productos y cerrarlo.`,
+      boton: 'Abrir y revisar',
     },
   },
   reabierto: {
@@ -176,7 +187,7 @@ export function plantillaAvisoReclamo(evento, r, { comentario, de, nombre, fecha
 
 /**
  * Manda los avisos del evento. No espera ni lanza: se llama después de guardar.
- * @param evento 'nuevo' | 'devuelto' | 'reenviado' | 'devuelto_supervisor' | 'reenviado_supervisor' | 'reabierto' | 'cerrado'
+ * @param evento 'nuevo' | 'devuelto' | 'reenviado' | 'devuelto_supervisor' | 'reenviado_supervisor' | 'reabierto' | 'listo_data' | 'cerrado'
  * @param r      detalle del reclamo
  * @param opts   { para: username de la persona (por defecto quien lo creó), comentario, de: nombre de quien actuó }
  */

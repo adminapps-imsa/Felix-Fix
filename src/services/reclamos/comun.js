@@ -114,8 +114,12 @@ export async function conNombres(dtos) {
 }
 
 export async function lineasConNombres(lineas) {
-  const nombres = await nombresDeUsuarios(lineas.map((l) => l.DecBy));
-  return lineas.map((l) => ({ ...l, DecByNombre: l.DecBy ? nombres.get(l.DecBy) || l.DecBy : null }));
+  const nombres = await nombresDeUsuarios(lineas.flatMap((l) => [l.DecBy, l.CodigoDataBy]));
+  return lineas.map((l) => ({
+    ...l,
+    DecByNombre: l.DecBy ? nombres.get(l.DecBy) || l.DecBy : null,
+    ...(l.CodigoDataBy && { CodigoDataByNombre: nombres.get(l.CodigoDataBy) || l.CodigoDataBy }),
+  }));
 }
 
 export function nombreUsuario(usuario) {

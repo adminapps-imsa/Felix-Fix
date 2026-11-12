@@ -78,6 +78,10 @@ export const decidirLineas = asyncHandler(async (req, res) => {
   res.json(await service.decidirLineas(req.params.token, req.body, req.user));
 });
 
+export const cargarCodigoData = asyncHandler(async (req, res) => {
+  res.json(await service.cargarCodigoData(req.params.token, req.params.pos, req.body, req.user));
+});
+
 export const deshacerLinea = asyncHandler(async (req, res) => {
   res.json(await service.deshacerLinea(req.params.token, req.params.pos, req.user));
 });
