@@ -55,7 +55,7 @@ export function ArticuloDataModal({
       precioVenta,
       categoria: campos.categoria.trim(),
       tipoProducto: campos.tipoProducto.trim(),
-      cicloVida: campos.cicloVida.trim(),
+      cicloVida: campos.cicloVida.trim() || null,
       descripcion: campos.descripcion.trim(),
       marca: campos.marca.trim(),
     };
@@ -89,8 +89,8 @@ export function ArticuloDataModal({
           <Field label="Tipo de producto">
             <Input required maxLength={100} value={campos.tipoProducto} onChange={(e) => set('tipoProducto', e.target.value)} />
           </Field>
-          <Field label="Ciclo de vida">
-            <Input required maxLength={100} value={campos.cicloVida} onChange={(e) => set('cicloVida', e.target.value)} />
+          <Field label="Ciclo de vida" opcional>
+            <Input maxLength={100} value={campos.cicloVida} onChange={(e) => set('cicloVida', e.target.value)} />
           </Field>
           <Field label="Costo (USD)">
             <Input required inputMode="decimal" value={campos.costo} onChange={(e) => set('costo', e.target.value)} placeholder="0.00" />

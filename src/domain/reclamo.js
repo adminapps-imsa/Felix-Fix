@@ -243,7 +243,7 @@ export function motivoNoDecidir({ Status, LineasPendientes }) {
 
 /** Aprobar un sobrante no esperado sin SAP sin los datos del artículo para Data. */
 export const MOTIVO_FALTAN_DATOS_ARTICULO = {
-  mensaje: 'Este sobrante no esperado no está en SAP: para aprobarlo llena costo, precio de venta, categoría, tipo de producto, ciclo de vida, descripción y marca (le llegan a Data para crearlo).',
+  mensaje: 'Este sobrante no esperado no está en SAP: para aprobarlo llena costo, precio de venta, categoría, tipo de producto, descripción y marca (y, si lo sabes, el ciclo de vida) (le llegan a Data para crearlo).',
   code: 'FALTAN_DATOS_ARTICULO',
 };
 
