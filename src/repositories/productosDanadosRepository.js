@@ -1,6 +1,6 @@
 import { getPool, sql, S } from '../config/db.js';
 import { registrarEvento } from './historialRepository.js';
-import { TRANSICIONES } from '../domain/productoDanado.js';
+import { TRANSICIONES, ESTADO_ENVIO_PROVEEDOR } from '../domain/productoDanado.js';
 import { condicionReporte } from '../services/acceso/alcanceCompradora.js';
 import { condicionReporteTienda } from '../services/acceso/alcanceTienda.js';
 
@@ -46,7 +46,11 @@ function aplicarFiltros(request, filtros) {
     request.input('creador', sql.VarChar(150), filtros.creador);
     condiciones.push('r.EmpleadoReportaUsuario = @creador');
   }
-  if (filtros.estado) {
+  if (filtros.estado === 'EnviadoProveedor') {
+    // «Enviados al proveedor»: siguen Pendientes, pero ya salió el correo al proveedor.
+    request.input('estado', sql.VarChar(20), ESTADO_ENVIO_PROVEEDOR);
+    condiciones.push('r.Estado = @estado AND r.EnviadoProveedorAt IS NOT NULL');
+  } else if (filtros.estado) {
     request.input('estado', sql.VarChar(20), filtros.estado);
     condiciones.push('r.Estado = @estado');
   }
@@ -97,6 +101,7 @@ export async function obtenerKpis(filtros) {
   const result = await request.query(`
     SELECT
       SUM(CASE WHEN Estado = 'Pendiente' THEN 1 ELSE 0 END) AS pendientes,
+      SUM(CASE WHEN Estado = 'Pendiente' AND EnviadoProveedorAt IS NOT NULL THEN 1 ELSE 0 END) AS enviadosProveedor,
       SUM(CASE WHEN Estado = 'Devuelto' THEN 1 ELSE 0 END) AS devueltos,
       SUM(CASE WHEN Estado = 'Aprobado' THEN 1 ELSE 0 END) AS aprobados,
       SUM(CASE WHEN Estado = 'Rechazado' THEN 1 ELSE 0 END) AS rechazados,
@@ -111,6 +116,7 @@ export async function obtenerKpis(filtros) {
   const row = result.recordset[0];
   return {
     pendientes: row.pendientes || 0,
+    enviadosProveedor: row.enviadosProveedor || 0,
     devueltos: row.devueltos || 0,
     aprobados: row.aprobados || 0,
     rechazados: row.rechazados || 0,

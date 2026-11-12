@@ -16,3 +16,8 @@ test('filtro por tienda: entero positivo o vacío; lo demás es inválido', () =
   for (const tienda of ['1', '42', '', undefined]) assert.equal(listarQuerySchema.safeParse({ tienda }).success, true, String(tienda));
   for (const tienda of ['abc', '0', '-1', '1.5', '99999999999', '1e3']) assert.equal(listarQuerySchema.safeParse({ tienda }).success, false, tienda);
 });
+
+test('filtro «Enviados al proveedor»: se acepta aunque no sea un estado del dominio', () => {
+  assert.equal(listarQuerySchema.safeParse({ estado: 'EnviadoProveedor' }).success, true);
+  assert.equal(ESTADOS.includes('EnviadoProveedor'), false);
+});
