@@ -496,6 +496,8 @@ function ProductoFila({
   const [comentario, setComentario] = useState('');
   // Qué se está guardando (su botón lleva la ruedita).
   const [busy, setBusy] = useState<'aprobado' | 'rechazado' | 'deshacer' | null>(null);
+  // Aprobar un sobrante no esperado sin SAP abre el formulario de datos para Data.
+  const [articuloAbierto, setArticuloAbierto] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const avisos = useAvisos();
 
@@ -509,7 +511,9 @@ function ProductoFila({
         accion === 'deshacer' ? `Decisión del producto ${l.Posicion} deshecha.` : `Producto ${l.Posicion} ${accion === 'aprobado' ? 'aprobado' : 'rechazado'}.`
       );
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'No se pudo guardar la decisión.');
+      // El servidor pide los datos del artículo para Data (sobrante no esperado sin SAP): se abre el formulario.
+      if (err instanceof ApiError && (err.payload as { code?: string } | undefined)?.code === 'FALTAN_DATOS_ARTICULO') setArticuloAbierto(true);
+      else setError(err instanceof ApiError ? err.message : 'No se pudo guardar la decisión.');
     } finally {
       setBusy(null);
     }
@@ -519,8 +523,6 @@ function ProductoFila({
   // Aprobado por la compradora y todavía sin crear en SAP: le toca a Data.
   const esperaData = Boolean(l.EsperaData) && l.DecStatus === 'aprobado';
   const sinSap = Boolean(l.EsperaData) && l.DecStatus === 'pendiente';
-  // Aprobar un sobrante no esperado sin SAP abre el formulario de datos para Data.
-  const [articuloAbierto, setArticuloAbierto] = useState(false);
   // En celular, con casilla, todo lo que no es la casilla va en la 2ª columna.
   const col2 = onSeleccionar ? 'col-start-2 md:col-start-auto' : '';
   return (
