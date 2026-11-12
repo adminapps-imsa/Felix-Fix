@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Loader2, Search, ShieldCheck, UserX } from 'lucide-react';
+import { Loader2, Search, ShieldCheck, Store, UserRound, UserX } from 'lucide-react';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { Esqueleto } from '../../../components/ui/Esqueleto';
 import { BotonReintentar, EstadoVacio } from '../../../components/ui/EstadoVacio';
@@ -37,11 +37,21 @@ export function UsuariosTab() {
   const [tanda, setTanda] = useState(0);
   const avisos = useAvisos();
 
+  // Tienda de cada persona (Configuración → Tiendas), para verla junto a su nombre.
+  const [tiendaDe, setTiendaDe] = useState<Map<string, { tienda: string | null; soloPropios: boolean }>>(new Map());
+
   useEffect(() => {
     apiConfig
       .obtenerRoles()
       .then((r) => setRoles(r.roles))
       .catch((e) => setError(e instanceof ApiError ? e.message : 'No se pudieron cargar los roles.'));
+    apiConfig
+      .obtenerTiendas()
+      .then(({ tiendas, usuarios }) => {
+        const nombre = new Map(tiendas.map((t) => [t.TiendaId, t.Nombre]));
+        setTiendaDe(new Map(usuarios.map((u) => [u.id, { tienda: u.tiendaId != null ? nombre.get(u.tiendaId) ?? null : null, soloPropios: u.soloPropios }])));
+      })
+      .catch(() => {}); // Solo informativo: sin esto la tabla funciona igual.
   }, []);
 
   useEffect(() => {
@@ -80,6 +90,7 @@ export function UsuariosTab() {
           x.id === u.id ? { ...x, roles: asignar ? [...x.roles, rol].sort() : x.roles.filter((r) => r !== rol) } : x
         )
       );
+      setRoles((rs) => rs.map((r) => (r.nombre === rol ? { ...r, usuarios: Math.max(0, r.usuarios + (asignar ? 1 : -1)) } : r)));
       avisos.ok(asignar ? `Rol ${nombreRol(rol)} asignado a ${u.nombre}.` : `Rol ${nombreRol(rol)} quitado a ${u.nombre}.`);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'No se pudo guardar el cambio.');
@@ -125,13 +136,14 @@ export function UsuariosTab() {
         <table className="w-full min-w-[40rem] text-sm">
           <thead>
             <tr className="border-b border-black/10 text-left text-xs opacity-60 dark:border-white/10">
-              <th className="px-4 py-3 font-semibold">Usuario</th>
+              <th className="sticky left-0 z-[1] bg-[var(--glass-bg)] px-4 py-3 font-semibold backdrop-blur">Usuario</th>
               {roles.map((r) => (
                 <th key={r.nombre} className="px-3 py-3 text-center font-semibold" title={r.descripcion}>
                   <span className="inline-flex items-center gap-1">
                     {r.superAdmin && <ShieldCheck size={13} className="text-brand-500" />}
                     {nombreRol(r.nombre)}
                   </span>
+                  <span className="block text-[10.5px] font-medium opacity-70">{r.usuarios} {r.usuarios === 1 ? 'persona' : 'personas'}</span>
                 </th>
               ))}
             </tr>
@@ -182,7 +194,7 @@ export function UsuariosTab() {
                   className="anim-fila border-b border-black/5 transition-colors last:border-0 hover:bg-brand-500/5 dark:border-white/5"
                   style={{ ['--i' as string]: i }}
                 >
-                  <td className="px-4 py-3">
+                  <td className="sticky left-0 z-[1] bg-[var(--glass-bg)] px-4 py-3 backdrop-blur">
                     <div className="font-semibold">
                       {u.nombre}
                       {!u.activo && (
@@ -195,6 +207,20 @@ export function UsuariosTab() {
                       {u.username}
                       {u.email && u.email !== u.username && ` · ${u.email}`}
                     </div>
+                    {(tiendaDe.get(u.id)?.tienda || tiendaDe.get(u.id)?.soloPropios) && (
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {tiendaDe.get(u.id)?.tienda && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-brand-500/10 px-2 py-0.5 text-[11px] font-semibold text-brand-700 dark:text-brand-300">
+                            <Store size={11} aria-hidden /> {tiendaDe.get(u.id)?.tienda}
+                          </span>
+                        )}
+                        {tiendaDe.get(u.id)?.soloPropios && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-black/5 px-2 py-0.5 text-[11px] font-semibold opacity-80 dark:bg-white/10">
+                            <UserRound size={11} aria-hidden /> Solo lo que crea
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </td>
                   {roles.map((r) => {
                     const tiene = u.roles.includes(r.nombre);

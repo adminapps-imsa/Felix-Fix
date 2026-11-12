@@ -121,7 +121,8 @@ export function NuevoReporteForm({
         <SeccionForm titulo="Dónde se encontró" ayuda="La tienda y la persona que lo reporta.">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Tienda o sucursal">
-              <Select name="tiendaId" required defaultValue={reporte?.TiendaId ?? ''}>
+              {/* Con una sola tienda (la del usuario) ya va elegida. */}
+              <Select name="tiendaId" required key={tiendas.length} defaultValue={reporte?.TiendaId ?? (tiendas.length === 1 ? tiendas[0].TiendaId : '')}>
                 <option value="" disabled>
                   Selecciona una tienda
                 </option>

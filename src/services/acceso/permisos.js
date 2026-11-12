@@ -5,36 +5,40 @@
 // Agregar un permiso nuevo = agregarlo aquí y usarlo en la ruta; no requiere
 // migración (RolPermisos guarda el código como texto).
 //
+// `grupo` ordena las casillas dentro de cada módulo en Configuración:
+//   ver (qué puede ver) · hacer (su parte del flujo, en orden) ·
+//   limite (quitan opciones en vez de darlas) · eliminar.
+//
 // Configuración NO es asignable: solo la tiene el rol de super administrador
 // (Administrador). No aparece como casilla y, aunque quedara guardado para
 // otro rol, permisosDeRoles() no se lo da.
 
 export const PERMISOS = [
-  { codigo: 'productos_danados.ver', modulo: 'Productos dañados', nombre: 'Ver reportes', descripcion: 'Ver la lista y el detalle de los reportes.' },
-  { codigo: 'productos_danados.crear', modulo: 'Productos dañados', nombre: 'Crear reportes', descripcion: 'Registrar un producto dañado con su evidencia.' },
-  { codigo: 'productos_danados.enviar', modulo: 'Productos dañados', nombre: 'Enviar al proveedor', descripcion: 'Enviar el reporte por correo al proveedor (con la foto y los adjuntos).' },
-  { codigo: 'productos_danados.aprobar', modulo: 'Productos dañados', nombre: 'Devolución aprobada o NF', descripcion: 'Registrar la respuesta del proveedor: Devolución aprobada o NF.' },
-  { codigo: 'productos_danados.ver_nf', modulo: 'Productos dañados', nombre: 'Ver solo NF y devoluciones', descripcion: 'Ver solo los reportes NF y, si el rol también sube el documento para contabilidad, las devoluciones aprobadas; no los pendientes. Con «Ver reportes» ve todos (Gof).' },
-  { codigo: 'productos_danados.solo_propios', modulo: 'Productos dañados', nombre: 'Solo los reportes que creó', descripcion: 'Ver solo los reportes que creó el mismo usuario (lista, detalle, tarjetas y Tablero), no los de otras personas ni otras tiendas (Tienda).' },
-  { codigo: 'productos_danados.nf_documento', modulo: 'Productos dañados', nombre: 'Documento 1700 de los NF', descripcion: 'En los reportes NF, marcar el check «Documento 1700» y pasarlo al supervisor GOF (Gof).' },
-  { codigo: 'productos_danados.nf', modulo: 'Productos dañados', nombre: 'Validar NF', descripcion: 'Recibir los NF con el documento 1700 marcado, escribir el «Documento salida de NF», validarlos y cerrarlos (supervisor GOF).' },
-  { codigo: 'productos_danados.documentar', modulo: 'Productos dañados', nombre: 'Documento para contabilidad', descripcion: 'En las devoluciones aprobadas, subir el PDF o Excel y enviarlo a contabilidad (GOF).' },
-  { codigo: 'productos_danados.pago', modulo: 'Productos dañados', nombre: 'Confirmar pago del proveedor', descripcion: 'Registrar que se recibió el pago del proveedor y cerrar el reporte (contabilidad).' },
-  { codigo: 'productos_danados.eliminar', modulo: 'Productos dañados', nombre: 'Eliminar', descripcion: 'Eliminar reportes con su foto y adjuntos (no los que están en contabilidad, cerrados o dados de baja en SAP).' },
-  { codigo: 'productos_danados.procesar', modulo: 'Productos dañados', nombre: 'Procesar en SAP', descripcion: 'Dar de baja en SAP los reportes aprobados.' },
+  { codigo: 'productos_danados.ver', grupo: 'ver', modulo: 'Productos dañados', nombre: 'Ver reportes', descripcion: 'Ver la lista y el detalle de los reportes.' },
+  { codigo: 'productos_danados.ver_nf', grupo: 'ver', modulo: 'Productos dañados', nombre: 'Ver solo NF y devoluciones', descripcion: 'Ver solo los reportes NF y, si el rol también sube el documento para contabilidad, las devoluciones aprobadas; no los pendientes. Con «Ver reportes» ve todos (Gof).' },
+  { codigo: 'productos_danados.crear', grupo: 'hacer', modulo: 'Productos dañados', nombre: 'Crear reportes', descripcion: 'Registrar un producto dañado con su evidencia.' },
+  { codigo: 'productos_danados.enviar', grupo: 'hacer', modulo: 'Productos dañados', nombre: 'Enviar al proveedor', descripcion: 'Enviar el reporte por correo al proveedor (con la foto y los adjuntos).' },
+  { codigo: 'productos_danados.aprobar', grupo: 'hacer', modulo: 'Productos dañados', nombre: 'Devolución aprobada o NF', descripcion: 'Registrar la respuesta del proveedor: Devolución aprobada o NF.' },
+  { codigo: 'productos_danados.nf_documento', grupo: 'hacer', modulo: 'Productos dañados', nombre: 'Documento 1700 de los NF', descripcion: 'En los reportes NF, marcar el check «Documento 1700» y pasarlo al supervisor GOF (Gof).' },
+  { codigo: 'productos_danados.nf', grupo: 'hacer', modulo: 'Productos dañados', nombre: 'Validar NF', descripcion: 'Recibir los NF con el documento 1700 marcado, escribir el «Documento salida de NF», validarlos y cerrarlos (supervisor GOF).' },
+  { codigo: 'productos_danados.documentar', grupo: 'hacer', modulo: 'Productos dañados', nombre: 'Documento para contabilidad', descripcion: 'En las devoluciones aprobadas, subir el PDF o Excel y enviarlo a contabilidad (GOF).' },
+  { codigo: 'productos_danados.pago', grupo: 'hacer', modulo: 'Productos dañados', nombre: 'Confirmar pago del proveedor', descripcion: 'Registrar que se recibió el pago del proveedor y cerrar el reporte (contabilidad).' },
+  { codigo: 'productos_danados.procesar', grupo: 'hacer', modulo: 'Productos dañados', nombre: 'Procesar en SAP', descripcion: 'Dar de baja en SAP los reportes aprobados.' },
+  { codigo: 'productos_danados.solo_propios', grupo: 'limite', modulo: 'Productos dañados', nombre: 'Solo los reportes que creó', descripcion: 'Ver solo los reportes que creó el mismo usuario (lista, detalle, tarjetas y Tablero), no los de otras personas ni otras tiendas (Tienda).' },
+  { codigo: 'productos_danados.eliminar', grupo: 'eliminar', modulo: 'Productos dañados', nombre: 'Eliminar', descripcion: 'Eliminar reportes con su foto y adjuntos (no los que están en contabilidad, cerrados o dados de baja en SAP).' },
 
-  { codigo: 'reclamos.ver', modulo: 'Reclamos', nombre: 'Ver reclamos', descripcion: 'Ver la lista, el detalle, los productos y los adjuntos.' },
-  { codigo: 'reclamos.crear', modulo: 'Reclamos', nombre: 'Crear reclamos', descripcion: 'Subir el Excel, crear el reclamo y adjuntar archivos a los propios.' },
-  { codigo: 'reclamos.adjuntar', modulo: 'Reclamos', nombre: 'Adjuntar en cualquier reclamo', descripcion: 'Subir PDF o Excel en el detalle de cualquier reclamo, no solo en los propios (Torre de Control).' },
-  { codigo: 'reclamos.decidir', modulo: 'Reclamos', nombre: 'Aprobar o rechazar', descripcion: 'Decidir reclamos y productos, adjuntar archivos a cualquier reclamo y enviar los reclamos cerrados a contabilidad.' },
-  { codigo: 'reclamos.enviar_contabilidad', modulo: 'Reclamos', nombre: 'Enviar reclamos a contabilidad', descripcion: 'Enviar a contabilidad los reclamos ya cerrados por la compradora (Gof, Torre de Control), después de subir el documento con lo aprobado.' },
-  { codigo: 'reclamos.contabilidad', modulo: 'Reclamos', nombre: 'Recibir reclamos en contabilidad', descripcion: 'Recibir por correo los reclamos que la compradora envía a contabilidad, con sus productos y adjuntos.' },
-  { codigo: 'reclamos.devolver_supervisor', modulo: 'Reclamos', nombre: 'Devolver al creador (supervisor GOF)', descripcion: 'Devolver a quien lo creó un reclamo con algo mal (adjunto, datos o productos), con el motivo, en cualquier estado mientras no se haya enviado a contabilidad. Al reenviarlo vuelve al estado que tenía (supervisor GOF).' },
-  { codigo: 'reclamos.retiro_proveedor', modulo: 'Reclamos', nombre: 'Registrar entrega al proveedor', descripcion: 'En los reclamos que el proveedor retira, marcar «Entregado al proveedor» con la foto y el día (Gof). Hasta entonces el reclamo no queda terminado.' },
-  { codigo: 'reclamos.solo_tienda', modulo: 'Reclamos', nombre: 'Solo reclamos de Tienda', descripcion: 'Al crear un reclamo solo puede elegir Tienda, no CEDI (Gof).' },
-  { codigo: 'reclamos.solo_cedi', modulo: 'Reclamos', nombre: 'Solo reclamos de CEDI', descripcion: 'Al crear un reclamo solo puede elegir CEDI, no Tienda (Torre de Control).' },
-  { codigo: 'reclamos.articulos_sap', modulo: 'Reclamos', nombre: 'Crear artículos en SAP (Data)', descripcion: 'Recibir por correo los sobrantes no esperados de CEDI que aprobó la compradora y no están creados en SAP y, ya creados, cargar su código de barras en el reclamo para que Torre de Control haga el 912 (Data).' },
-  { codigo: 'reclamos.eliminar', modulo: 'Reclamos', nombre: 'Eliminar', descripcion: 'Eliminar reclamos y sus adjuntos.' },
+  { codigo: 'reclamos.ver', grupo: 'ver', modulo: 'Reclamos', nombre: 'Ver reclamos', descripcion: 'Ver la lista, el detalle, los productos y los adjuntos.' },
+  { codigo: 'reclamos.crear', grupo: 'hacer', modulo: 'Reclamos', nombre: 'Crear reclamos', descripcion: 'Subir el Excel, crear el reclamo y adjuntar archivos a los propios.' },
+  { codigo: 'reclamos.adjuntar', grupo: 'hacer', modulo: 'Reclamos', nombre: 'Adjuntar en cualquier reclamo', descripcion: 'Subir PDF o Excel en el detalle de cualquier reclamo, no solo en los propios (Torre de Control).' },
+  { codigo: 'reclamos.decidir', grupo: 'hacer', modulo: 'Reclamos', nombre: 'Aprobar o rechazar', descripcion: 'Decidir reclamos y productos, adjuntar archivos a cualquier reclamo y enviar los reclamos cerrados a contabilidad.' },
+  { codigo: 'reclamos.devolver_supervisor', grupo: 'hacer', modulo: 'Reclamos', nombre: 'Devolver al creador (supervisor GOF)', descripcion: 'Devolver a quien lo creó un reclamo con algo mal (adjunto, datos o productos), con el motivo, en cualquier estado mientras no se haya enviado a contabilidad. Al reenviarlo vuelve al estado que tenía (supervisor GOF).' },
+  { codigo: 'reclamos.retiro_proveedor', grupo: 'hacer', modulo: 'Reclamos', nombre: 'Registrar entrega al proveedor', descripcion: 'En los reclamos que el proveedor retira, marcar «Entregado al proveedor» con la foto y el día (Gof). Hasta entonces el reclamo no queda terminado.' },
+  { codigo: 'reclamos.enviar_contabilidad', grupo: 'hacer', modulo: 'Reclamos', nombre: 'Enviar reclamos a contabilidad', descripcion: 'Enviar a contabilidad los reclamos ya cerrados por la compradora (Gof, Torre de Control), después de subir el documento con lo aprobado.' },
+  { codigo: 'reclamos.contabilidad', grupo: 'hacer', modulo: 'Reclamos', nombre: 'Recibir reclamos en contabilidad', descripcion: 'Recibir por correo los reclamos que la compradora envía a contabilidad, con sus productos y adjuntos.' },
+  { codigo: 'reclamos.articulos_sap', grupo: 'hacer', modulo: 'Reclamos', nombre: 'Crear artículos en SAP (Data)', descripcion: 'Recibir por correo los sobrantes no esperados de CEDI que aprobó la compradora y no están creados en SAP y, ya creados, cargar su código de barras en el reclamo para que Torre de Control haga el 912 (Data).' },
+  { codigo: 'reclamos.solo_tienda', grupo: 'limite', modulo: 'Reclamos', nombre: 'Solo reclamos de Tienda', descripcion: 'Al crear un reclamo solo puede elegir Tienda, no CEDI (Gof).' },
+  { codigo: 'reclamos.solo_cedi', grupo: 'limite', modulo: 'Reclamos', nombre: 'Solo reclamos de CEDI', descripcion: 'Al crear un reclamo solo puede elegir CEDI, no Tienda (Torre de Control).' },
+  { codigo: 'reclamos.eliminar', grupo: 'eliminar', modulo: 'Reclamos', nombre: 'Eliminar', descripcion: 'Eliminar reclamos y sus adjuntos.' },
 ];
 
 export const PERMISO_CONFIGURACION = 'configuracion.administrar';

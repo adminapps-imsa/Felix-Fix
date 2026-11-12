@@ -19,6 +19,8 @@ import { datosDeUsuario } from '../acceso/keycloakAdmin.js';
 import { env } from '../../config/env.js';
 import { badRequest, notFound } from '../../utils/httpError.js';
 import { logger } from '../../utils/logger.js';
+import { tiendaDe } from '../acceso/alcanceTienda.js';
+import { motivoTiendaReclamo } from '../../domain/tienda.js';
 import { obtenerOFallar, validarToken, exigir, nombreUsuario, detalle, conDocumentos } from './comun.js';
 
 const SAP_DOC_OPCIONAL = env.reclamos.sapDocOpcional && env.nodeEnv !== 'production';
@@ -112,6 +114,9 @@ export async function corregirDatos(token, body, usuario) {
   const d = result.data;
 
   if (r.Origen === 'tienda' && !d.sucursal) throw badRequest('La sucursal es obligatoria para reclamos de tienda.');
+  // Usuario en una tienda: no lo puede pasar a otra sucursal.
+  const ajena = motivoTiendaReclamo(await tiendaDe(usuario), { origen: r.Origen, sucursal: d.sucursal });
+  if (ajena) throw badRequest(ajena, { code: 'TIENDA_AJENA' });
   // División: ya no se pide (2026-11-12); se conserva la que tenía el reclamo.
   const division = r.Origen === 'cedi' ? r.Division || '' : '';
   const fechaLlegada = dominio.motivoFechaLlegadaInvalida(d.fechaLlegadaMercancia, diaPanama(new Date()));

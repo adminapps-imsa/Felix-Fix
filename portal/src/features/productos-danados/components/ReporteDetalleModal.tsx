@@ -1,3 +1,4 @@
+import { TiendaDestacada } from '../../../components/ui/TiendaDestacada';
 import { useEffect, useState } from 'react';
 import { ArrowRight, ClipboardList, FileCheck2, FileX2, Package, PencilLine, Send, Trash2, Undo2 } from 'lucide-react';
 import { Modal } from '../../../components/ui/Modal';
@@ -183,9 +184,12 @@ export function ReporteDetalleModal({
         <EsqueletoReporte />
       ) : (
         <div className="flex flex-col gap-5">
-          <div className="flex flex-wrap items-center gap-2">
-            <EstadoBadge estado={reporte.Estado} />
-            <MotivoBadge motivo={reporte.Motivo} />
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <EstadoBadge estado={reporte.Estado} />
+              <MotivoBadge motivo={reporte.Motivo} />
+            </div>
+            <TiendaDestacada nombre={reporte.TiendaNombre} codigo={reporte.TiendaCodigo} />
           </div>
 
           <RutaCaso pasos={rutaReporte(reporte)} className="rounded-xl bg-black/[0.025] p-4 dark:bg-white/[0.04]" />
@@ -227,7 +231,6 @@ export function ReporteDetalleModal({
               <SeccionDatos icono={<ClipboardList size={15} />} titulo="Reporte" className="md:pl-5">
                 <Dato label="Motivo" value={motivoLabel(reporte.Motivo)} />
                 {reporte.Resolucion && <Dato label="Resolución" value={reporte.Resolucion === 'NF' ? 'NF' : 'Devolución al proveedor'} />}
-                <Dato label="Tienda" value={reporte.TiendaNombre} />
                 <Dato label="Reportado por" value={reporte.EmpleadoReportaNombre} />
                 <Dato label="Fecha" value={formatFecha(reporte.FechaCreacion)} />
                 {reporte.SapDocumentoId && <Dato label="Documento SAP" value={reporte.SapDocumentoId} mono />}

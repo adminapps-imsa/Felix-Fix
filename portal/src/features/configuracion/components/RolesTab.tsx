@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Check, KeyRound, Save, ShieldCheck, Undo2, Users } from 'lucide-react';
+import { Check, Eye, KeyRound, ListChecks, Lock, Save, Search, ShieldCheck, Trash2, Undo2, Users } from 'lucide-react';
+import { Input } from '../../../components/ui/Input';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { Button } from '../../../components/ui/Button';
 import { Esqueleto } from '../../../components/ui/Esqueleto';
@@ -7,11 +8,27 @@ import { BotonReintentar, EstadoVacio } from '../../../components/ui/EstadoVacio
 import { useAvisos } from '../../../components/ui/Avisos';
 import { ApiError } from '../../../api/client';
 import * as apiConfig from '../../../api/configuracion';
-import type { PermisoDef, RolConfig } from '../../../api/configuracion';
+import type { GrupoPermiso, PermisoDef, RolConfig } from '../../../api/configuracion';
 import { nombreRol } from '../../../lib/roles';
 import { cn } from '../../../lib/cn';
 
 const iguales = (a: Set<string>, b: string[]) => a.size === b.length && b.every((p) => a.has(p));
+
+/** Subgrupos dentro de cada módulo, en este orden. Los límites quitan opciones: van aparte y en ámbar. */
+const GRUPOS: { id: GrupoPermiso; titulo: string; ayuda: string; icono: typeof Eye }[] = [
+  { id: 'ver', titulo: 'Qué puede ver', ayuda: 'Sin ninguno de estos, el módulo no aparece (salvo que tenga alguno de «Qué puede hacer»).', icono: Eye },
+  { id: 'hacer', titulo: 'Qué puede hacer', ayuda: 'Su parte del flujo, en el orden en que pasa el caso.', icono: ListChecks },
+  { id: 'limite', titulo: 'Límites', ayuda: 'No dan nada: quitan opciones o recortan lo que ve. Márcalos solo si el rol debe estar limitado.', icono: Lock },
+  { id: 'eliminar', titulo: 'Eliminar', ayuda: 'Borra casos con sus archivos. No se puede deshacer.', icono: Trash2 },
+];
+
+/** «… (Gof).» al final de la descripción: el rol que suele llevarlo, para mostrarlo como etiqueta. */
+function separarRolTipico(descripcion: string): { texto: string; rol: string | null } {
+  const m = descripcion.match(/^(.*?)\s*\(([^()]{2,40})\)\.?\s*$/);
+  return m ? { texto: `${m[1].replace(/[.,;:]\s*$/, '')}.`, rol: m[2] } : { texto: descripcion, rol: null };
+}
+
+const sinAcentos = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
 /**
  * Roles y permisos en dos partes: a la izquierda la lista de roles (corta,
@@ -151,8 +168,12 @@ function EditorRol({
   const [mensaje, setMensaje] = useState<{ tipo: 'ok' | 'error'; texto: string } | null>(null);
   // Palomita breve en «Guardar» al terminar (la barra se queda ese rato y luego se va).
   const [listo, setListo] = useState(false);
+  const [buscar, setBuscar] = useState('');
   const avisos = useAvisos();
   const cambiado = !iguales(seleccion, rol.permisos);
+  const texto = sinAcentos(buscar.trim());
+  const coincide = (p: PermisoDef) => !texto || sinAcentos(`${p.nombre} ${p.descripcion}`).includes(texto);
+  const limites = modulos.flatMap(([, l]) => l).filter((p) => p.grupo === 'limite' && seleccion.has(p.codigo));
 
   useEffect(() => {
     if (!listo) return;
@@ -167,11 +188,12 @@ function EditorRol({
     onCambiar(n);
     setMensaje(null);
   };
+  // «Marcar todo» no enciende los límites (quitan opciones; Solo Tienda + Solo CEDI juntos no dejarían crear nada).
   const todos = (lista: PermisoDef[], marcar: boolean) => {
     const n = new Set(seleccion);
     for (const p of lista) {
-      if (marcar) n.add(p.codigo);
-      else n.delete(p.codigo);
+      if (marcar && p.grupo !== 'limite') n.add(p.codigo);
+      else if (!marcar) n.delete(p.codigo);
     }
     onCambiar(n);
     setMensaje(null);
@@ -216,35 +238,72 @@ function EditorRol({
           <span className="opacity-80">Es el único rol que ve y usa Configuración.</span>
         </p>
       ) : (
-        <div className="flex flex-col gap-6 px-5 pb-5 sm:px-6">
+        <div className="flex flex-col gap-5 px-5 pb-5 sm:px-6">
+          {/* Resumen del rol y buscador de permisos. */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative min-w-[14rem] flex-1">
+              <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 opacity-50" />
+              <Input className="pl-9" placeholder="Buscar un permiso (p. ej. contabilidad, NF, eliminar)" value={buscar} onChange={(e) => setBuscar(e.target.value)} />
+            </div>
+            <span className="rounded-full bg-brand-500/10 px-3 py-1 text-xs font-semibold text-brand-700 dark:text-brand-300">
+              {seleccion.size - limites.length} {seleccion.size - limites.length === 1 ? 'permiso' : 'permisos'}
+            </span>
+            {limites.length > 0 && (
+              <span className="flex items-center gap-1 rounded-full bg-warning/15 px-3 py-1 text-xs font-semibold" title={limites.map((p) => p.nombre).join(', ')}>
+                <Lock size={12} aria-hidden /> {limites.length} {limites.length === 1 ? 'límite' : 'límites'}
+              </span>
+            )}
+          </div>
+
           {modulos.map(([modulo, lista]) => {
-            const marcados = lista.filter((p) => seleccion.has(p.codigo)).length;
+            const otorgables = lista.filter((p) => p.grupo !== 'limite');
+            const marcados = otorgables.filter((p) => seleccion.has(p.codigo)).length;
+            const visibles = lista.filter(coincide);
+            if (!visibles.length) return null;
             return (
-              <fieldset key={modulo} className="flex flex-col gap-3">
+              <fieldset key={modulo} className="flex flex-col gap-4 rounded-2xl border border-black/10 p-4 dark:border-white/10">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <legend className="flex items-center gap-2 font-semibold">
-                    {modulo}
-                    <span className="rounded-full bg-black/5 px-2 py-0.5 text-xs font-semibold opacity-70 dark:bg-white/10">
-                      {marcados} de {lista.length}
+                  <legend className="contents">
+                    <span className="flex items-center gap-2 text-base font-bold">
+                      {modulo}
+                      <span className="rounded-full bg-black/5 px-2 py-0.5 text-xs font-semibold opacity-70 dark:bg-white/10">
+                        {marcados} de {otorgables.length}
+                      </span>
                     </span>
                   </legend>
                   <span className="flex gap-1 text-xs font-semibold">
-                    <button type="button" onClick={() => todos(lista, true)} disabled={marcados === lista.length} className="rounded-full px-2.5 py-1 text-brand-600 hover:bg-brand-500/10 disabled:opacity-35 dark:text-brand-400">
+                    <button type="button" onClick={() => todos(lista, true)} disabled={marcados === otorgables.length} className="rounded-full px-2.5 py-1 text-brand-600 hover:bg-brand-500/10 disabled:opacity-35 dark:text-brand-400">
                       Marcar todo
                     </button>
-                    <button type="button" onClick={() => todos(lista, false)} disabled={marcados === 0} className="rounded-full px-2.5 py-1 opacity-70 hover:bg-black/5 hover:opacity-100 disabled:opacity-35 dark:hover:bg-white/10">
+                    <button type="button" onClick={() => todos(lista, false)} disabled={!lista.some((p) => seleccion.has(p.codigo))} className="rounded-full px-2.5 py-1 opacity-70 hover:bg-black/5 hover:opacity-100 disabled:opacity-35 dark:hover:bg-white/10">
                       Quitar todo
                     </button>
                   </span>
                 </div>
-                <div className="grid gap-2 md:grid-cols-2">
-                  {lista.map((p) => (
-                    <Permiso key={p.codigo} permiso={p} activo={seleccion.has(p.codigo)} onAlternar={() => alternar(p.codigo)} />
-                  ))}
-                </div>
+                {GRUPOS.map((g) => {
+                  const delGrupo = visibles.filter((p) => (p.grupo ?? 'hacer') === g.id);
+                  if (!delGrupo.length) return null;
+                  const GIcono = g.icono;
+                  return (
+                    <div key={g.id} className="flex flex-col gap-2">
+                      <div className="flex items-baseline gap-2">
+                        <h3 className={cn('flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide', g.id === 'limite' ? 'text-warning' : g.id === 'eliminar' ? 'text-danger' : 'opacity-60')}>
+                          <GIcono size={13} aria-hidden /> {g.titulo}
+                        </h3>
+                        <span className="hidden text-xs opacity-50 md:inline">{g.ayuda}</span>
+                      </div>
+                      <div className="grid gap-2 md:grid-cols-2">
+                        {delGrupo.map((p) => (
+                          <Permiso key={p.codigo} permiso={p} activo={seleccion.has(p.codigo)} onAlternar={() => alternar(p.codigo)} />
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
               </fieldset>
             );
           })}
+          {texto && !modulos.some(([, l]) => l.some(coincide)) && <p className="text-sm opacity-60">Ningún permiso coincide con «{buscar.trim()}».</p>}
           {seleccion.size === 0 && <p className="text-sm opacity-60">Sin permisos: quien tenga solo este rol no verá nada en el portal.</p>}
         </div>
       )}
@@ -279,11 +338,16 @@ function EditorRol({
 
 /** Un permiso como interruptor: nombre arriba y para qué sirve debajo, en gris. */
 function Permiso({ permiso, activo, onAlternar }: { permiso: PermisoDef; activo: boolean; onAlternar: () => void }) {
+  const { texto, rol } = separarRolTipico(permiso.descripcion);
+  const tono = permiso.grupo === 'limite' ? 'warning' : permiso.grupo === 'eliminar' ? 'danger' : 'brand';
   return (
     <label
       className={cn(
         'flex cursor-pointer items-start gap-3 rounded-xl border px-3.5 py-3 text-sm transition-colors',
-        activo ? 'border-brand-500/40 bg-brand-500/[0.06]' : 'border-black/10 hover:bg-black/[0.02] dark:border-white/10 dark:hover:bg-white/[0.03]'
+        !activo && 'border-black/10 hover:bg-black/[0.02] dark:border-white/10 dark:hover:bg-white/[0.03]',
+        activo && tono === 'brand' && 'border-brand-500/40 bg-brand-500/[0.06]',
+        activo && tono === 'warning' && 'border-warning/50 bg-warning/10',
+        activo && tono === 'danger' && 'border-danger/40 bg-danger/[0.06]'
       )}
     >
       <input type="checkbox" role="switch" className="peer sr-only" checked={activo} onChange={onAlternar} />
@@ -292,16 +356,19 @@ function Permiso({ permiso, activo, onAlternar }: { permiso: PermisoDef; activo:
         aria-hidden
         className={cn(
           'relative mt-0.5 inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-brand-500 peer-focus-visible:ring-offset-2',
-          activo ? 'bg-brand-500 dark:bg-brand-400' : 'bg-black/15 dark:bg-white/20'
+          !activo ? 'bg-black/15 dark:bg-white/20' : tono === 'warning' ? 'bg-warning' : tono === 'danger' ? 'bg-danger' : 'bg-brand-500 dark:bg-brand-400'
         )}
       >
         <span className={cn('grid size-4 place-items-center rounded-full bg-white shadow transition-transform duration-150', activo ? 'translate-x-[18px]' : 'translate-x-0.5')}>
-          {activo && <Check size={10} strokeWidth={3} className="text-brand-600" />}
+          {activo && <Check size={10} strokeWidth={3} className={tono === 'warning' ? 'text-warning' : tono === 'danger' ? 'text-danger' : 'text-brand-600'} />}
         </span>
       </span>
-      <span className="min-w-0">
-        <span className="block font-semibold leading-snug">{permiso.nombre}</span>
-        <span className="mt-0.5 block text-xs leading-snug opacity-60">{permiso.descripcion}</span>
+      <span className="min-w-0 flex-1">
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="font-semibold leading-snug">{permiso.nombre}</span>
+          {rol && <span className="rounded-full bg-black/5 px-2 py-px text-[10.5px] font-semibold opacity-70 dark:bg-white/10">{rol}</span>}
+        </span>
+        <span className="mt-0.5 block text-xs leading-snug opacity-60">{texto}</span>
       </span>
     </label>
   );

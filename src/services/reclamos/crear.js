@@ -33,6 +33,8 @@ import { normalizarDocSap, motivoDocsRepetidos, motivoDocsEnOtrosReclamos, docum
 import { diaPanama } from '../../domain/tablero.js';
 import { tipoReal, tipoRealDeArchivo, nombreUsuario, detalle, exigir, conDocumentos } from './comun.js';
 import { reclamoArchivoPath } from '../../config/almacenamiento.js';
+import { tiendaDe } from '../acceso/alcanceTienda.js';
+import { motivoTiendaReclamo } from '../../domain/tienda.js';
 import { copiarPdf, TIPO_RECLAMO } from '../evidenceStorage/copiasPdf.js';
 
 export const ORIGEN_PRINCIPAL = 'principal';
@@ -352,6 +354,9 @@ export async function crear(body, multerFile, usuario, pdfs = []) {
     if (data.origen === 'tienda' && tienePermiso(usuario, 'reclamos.solo_cedi')) {
       throw badRequest('Tu rol solo crea reclamos de CEDI, no de Tienda.', { code: 'SOLO_CEDI' });
     }
+    // Usuario en una tienda (Configuración → Tiendas): solo reclamos de su tienda.
+    const ajena = motivoTiendaReclamo(await tiendaDe(usuario), data);
+    if (ajena) throw badRequest(ajena, { code: 'TIENDA_AJENA' });
     // Un documento SAP pertenece a un solo reclamo: se revisa antes de leer
     // archivos (aviso rápido) y otra vez dentro de la transacción del alta.
     const docsSap = [data.sapDoc1, data.sapDoc2, data.sapDoc3, ...data.sapDocsExtra].filter(Boolean);

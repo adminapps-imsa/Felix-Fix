@@ -6,6 +6,7 @@ import { uploadExcelReclamo, uploadExcelPreview, uploadPdfPreview, uploadAdjunto
 import { validateBody, validateQuery } from '../validators/validate.js';
 import { borrarSiFalla } from '../middleware/upload.js';
 import { exigirAlcance } from '../services/acceso/alcanceCompradora.js';
+import { exigirTienda } from '../services/acceso/alcanceTienda.js';
 import { devolverSchema, reenviarSchema, corregirLineasSchema, retiroSchema, cambiarRetiroSchema, decisionReclamoSchema, decisionLineaSchema, decisionLineasSchema, codigoDataSchema, listarQuerySchema, proveedorQuerySchema, documentosSapQuerySchema, adjuntoQuerySchema } from '../validators/reclamos.schema.js';
 
 const router = Router();
@@ -15,6 +16,8 @@ const router = Router();
 router.use(requireAuth, requirePermiso('reclamos.ver', 'reclamos.crear', 'reclamos.adjuntar', 'reclamos.decidir', 'reclamos.eliminar', 'reclamos.contabilidad', 'reclamos.enviar_contabilidad', 'reclamos.retiro_proveedor', 'reclamos.devolver_supervisor', 'reclamos.articulos_sap'));
 // Cada compradora solo abre (y decide) los reclamos de sus mundos y marcas: los demás responden 404.
 router.param('token', exigirAlcance('reclamo'));
+// Usuario en una tienda (Configuración → Tiendas): los de otras sucursales y los de CEDI responden 404.
+router.param('token', exigirTienda('reclamo'));
 const crear = requirePermiso('reclamos.crear');
 const decidir = requirePermiso('reclamos.decidir');
 const eliminar = requirePermiso('reclamos.eliminar');

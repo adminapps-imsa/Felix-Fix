@@ -2,6 +2,10 @@ import { getPool, sql, S } from '../config/db.js';
 import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 import { condicionReclamo } from '../services/acceso/alcanceCompradora.js';
+import { condicionAlcanceReclamo, condicionSucursal } from '../services/acceso/alcanceTienda.js';
+
+/** Reclamos que ve el usuario (alias `a`): `alcance` = { compradora, tienda } (o solo el nombre de la compradora). */
+export const condicionAlcance = (request, alcance, a = 'r') => condicionAlcanceReclamo(request, alcance, a, condicionReclamo);
 
 const SELECT_BASE = `
   SELECT
@@ -25,7 +29,12 @@ const SELECT_BASE = `
 function aplicarFiltros(request, filtros) {
   const condiciones = [];
   // Compradora con alcance: solo los de sus mundos y marcas (alcanceCompradora.js).
-  if (filtros.compradora) condiciones.push(condicionReclamo(request, filtros.compradora));
+  // Usuario en una tienda: solo los de su sucursal (alcanceTienda.js).
+  const alcance = condicionAlcance(request, { compradora: filtros.compradora, tienda: filtros.alcanceTienda });
+  if (alcance !== '1 = 1') condiciones.push(alcance);
+  // Filtro de la lista: «CEDI» o una tienda ({ nombre, codigo }).
+  if (filtros.origen === 'cedi') condiciones.push("r.Origen = 'cedi'");
+  if (filtros.tienda) condiciones.push(condicionSucursal(request, filtros.tienda, 'r', 'fil'));
   if (filtros.status) {
     request.input('status', sql.VarChar(15), filtros.status);
     condiciones.push('r.Status = @status');
@@ -70,12 +79,12 @@ export async function listar(filtros, { offset, pageSize }) {
 /**
  * KPIs globales (no dependen del filtro de estado, para que sirvan de pestañas).
  * `username` (opcional): además cuenta los devueltos que creó ese usuario (los que le toca corregir).
- * `compradora` (opcional): solo los reclamos de su alcance.
+ * `alcance` (opcional): { compradora, tienda } o el nombre de la compradora: solo los reclamos que ve.
  */
-export async function obtenerKpis(username = null, compradora = null) {
+export async function obtenerKpis(username = null, alcance = null) {
   const pool = await getPool();
   const request = pool.request().input('username', sql.VarChar(150), username);
-  const enAlcance = (a) => (compradora ? condicionReclamo(request, compradora, a) : '1 = 1');
+  const enAlcance = (a) => condicionAlcance(request, alcance, a);
   const { recordset } = await request.query(`
     SELECT
       COUNT(*) AS total,

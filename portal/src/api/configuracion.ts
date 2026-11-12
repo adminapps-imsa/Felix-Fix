@@ -1,8 +1,12 @@
 import { api } from './client';
 import type { PaginationMeta } from '../types/productoDanado';
 
+/** Cómo se agrupa un permiso dentro de su módulo: qué ve, qué hace, qué lo limita y eliminar. */
+export type GrupoPermiso = 'ver' | 'hacer' | 'limite' | 'eliminar';
+
 export interface PermisoDef {
   codigo: string;
+  grupo: GrupoPermiso;
   modulo: string;
   nombre: string;
   descripcion: string;
@@ -26,7 +30,7 @@ export interface UsuarioConfig {
 }
 
 export interface EventoAuditoria {
-  Accion: 'asignar_rol' | 'quitar_rol' | 'permisos_rol' | 'bienvenida';
+  Accion: 'asignar_rol' | 'quitar_rol' | 'permisos_rol' | 'bienvenida' | 'tienda_usuario';
   Detalle: string;
   Usuario: string;
   Fecha: string;
@@ -53,6 +57,28 @@ export const quitarRol = (userId: string, rol: string) =>
   api.del<void>(`${BASE}/usuarios/${encodeURIComponent(userId)}/roles/${encodeURIComponent(rol)}`);
 
 export const obtenerAuditoria = () => api.get<EventoAuditoria[]>(`${BASE}/auditoria`);
+
+// ---------- Tiendas ----------
+
+export interface TiendaConfig {
+  TiendaId: number;
+  Codigo: string;
+  Nombre: string;
+  /** Personas asignadas a la tienda. */
+  usuarios: number;
+}
+
+export interface UsuarioTienda extends UsuarioConfig {
+  /** null = todas las tiendas. */
+  tiendaId: number | null;
+  /** Ve solo los casos que creó. */
+  soloPropios: boolean;
+}
+
+export const obtenerTiendas = () => api.get<{ tiendas: TiendaConfig[]; usuarios: UsuarioTienda[] }>(`${BASE}/tiendas`);
+
+export const guardarTiendaUsuario = (userId: string, datos: { tiendaId: number | null; soloPropios: boolean }) =>
+  api.put<{ id: string; tiendaId: number | null; soloPropios: boolean }>(`${BASE}/tiendas/usuarios/${encodeURIComponent(userId)}`, datos);
 
 // ---------- Correos ----------
 

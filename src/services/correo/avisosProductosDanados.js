@@ -130,8 +130,8 @@ export const EVENTOS = {
 
 const PIE = 'Aviso automático de Felix Fix. No respondas este correo.';
 
-async function correosDelArea(area) {
-  const porPermiso = area.permiso ? await destinatarios(area.permiso) : [];
+async function correosDelArea(area, r) {
+  const porPermiso = area.permiso ? await destinatarios(area.permiso, { reporte: r }) : [];
   return [...new Set([...porPermiso, ...filtrarDominios(area.correos || [])].map((c) => c.toLowerCase()))];
 }
 
@@ -196,7 +196,7 @@ export function avisarEtapa(evento, r, opts = {}) {
   if (!env.correo.avisos || env.correo.desactivado || !correoConfigurado() || !ev || !r) return;
   (async () => {
     // Avisos de compradoras: solo a la asignada (dueña de la marca), no a todas.
-    const area = !ev.area ? [] : PERMISOS_COMPRADORA.has(ev.area.permiso) ? await correosDeAsignadas({ reporteId: r.ReporteId }) : await correosDelArea(ev.area);
+    const area = !ev.area ? [] : PERMISOS_COMPRADORA.has(ev.area.permiso) ? await correosDeAsignadas({ reporteId: r.ReporteId }) : await correosDelArea(ev.area, r);
     const creador = ev.creador ? await deUsuario(r.EmpleadoReportaUsuario) : { correos: [], nombre: '' };
     const paraCreador = creador.correos.filter((c) => !area.includes(c));
     // El dato extra solo sale si el evento lo nombra (p. ej. el motivo del NF); si no, repetiría la frase.

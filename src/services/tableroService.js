@@ -7,6 +7,7 @@ import { obtenerKpis as kpisReclamos } from '../repositories/reclamosRepository.
 import { tienePermiso } from './acceso/permisos.js';
 import { alcanceVista, creadorVisible } from '../domain/productoDanado.js';
 import { compradoraDe } from './acceso/alcanceCompradora.js';
+import { tiendaDe } from './acceso/alcanceTienda.js';
 import { periodoValido, granularidad, inicioPeriodo, serie, resumirCola, promedioTramo, topConOtros } from '../domain/tablero.js';
 
 const algunPermiso = (usuario, permisos) => permisos.some((p) => tienePermiso(usuario, p));
@@ -31,6 +32,8 @@ export async function obtenerTablero(query, usuario) {
 
   // Cada compradora ve solo lo de sus mundos y marcas (alcanceCompradora.js).
   ctx.compradora = await compradoraDe(usuario);
+  // Quien está en una tienda ve solo lo de su tienda (alcanceTienda.js).
+  ctx.tienda = await tiendaDe(usuario);
 
   const [productos, reclamos, contabilidad] = await Promise.all([
     algunPermiso(usuario, PERMISOS_PRODUCTOS) ? tableroProductos(usuario, ctx) : null,
@@ -41,8 +44,9 @@ export async function obtenerTablero(query, usuario) {
   return { periodo: { dias, desde, granularidad: gran, generado: ahora }, productos, reclamos, contabilidad };
 }
 
-async function tableroProductos(usuario, { desde, ahora, gran, compradora }) {
-  const alcance = { resoluciones: alcanceVista(usuario.permisos || new Set()), compradora, creador: creadorVisible(usuario) };
+async function tableroProductos(usuario, { desde, ahora, gran, compradora, tienda }) {
+  // `alcanceTienda` lo lee la lista (kpisProductos); `tienda`, las consultas del Tablero.
+  const alcance = { resoluciones: alcanceVista(usuario.permisos || new Set()), compradora, creador: creadorVisible(usuario), alcanceTienda: tienda, tienda };
   const [kpis, abiertos, hitos, desglose, miTrabajo] = await Promise.all([
     kpisProductos(alcance),
     repo.pdAbiertos(alcance),
@@ -100,12 +104,13 @@ async function tableroProductos(usuario, { desde, ahora, gran, compradora }) {
   };
 }
 
-async function tableroReclamos(usuario, { desde, ahora, gran, compradora }) {
+async function tableroReclamos(usuario, { desde, ahora, gran, compradora, tienda }) {
+  const alcance = { compradora, tienda };
   const [kpis, abiertos, hitos, desglose, miTrabajo] = await Promise.all([
-    kpisReclamos(usuario.username, compradora),
-    repo.recAbiertos(compradora),
-    repo.recHitos(desde, compradora),
-    repo.recDesglose(desde, compradora),
+    kpisReclamos(usuario.username, alcance),
+    repo.recAbiertos(alcance),
+    repo.recHitos(desde, alcance),
+    repo.recDesglose(desde, alcance),
     repo.recMiTrabajo(usuario, desde),
   ]);
 

@@ -200,7 +200,7 @@ export function avisarReclamo(evento, r, { para, comentario, de } = {}) {
   const fecha = new Date();
   (async () => {
     // Avisos de compradoras: solo a la elegida en «Compradora», no a todas.
-    const area = !ev.area ? [] : PERMISOS_COMPRADORA.has(ev.area.permiso) ? await correosDeAsignadas({ reclamo: r }) : await destinatarios(ev.area.permiso);
+    const area = !ev.area ? [] : PERMISOS_COMPRADORA.has(ev.area.permiso) ? await correosDeAsignadas({ reclamo: r }) : await destinatarios(ev.area.permiso, { reclamo: r });
     const persona = ev.persona ? await deUsuario(para || r.CreatedBy) : { correos: [], nombre: '' };
     const paraPersona = persona.correos.filter((c) => !area.includes(c));
 

@@ -3,11 +3,11 @@ import { RequirePermiso } from '../../../auth/RequirePermiso';
 import { P } from '../../../auth/permisos';
 import type React from 'react';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
-import { Bell, CheckCircle2, ChevronRight, ClipboardList, Clock, FilterX, Plus, Search, SearchX, Undo2, X, XCircle } from 'lucide-react';
+import { Bell, CheckCircle2, ChevronRight, ClipboardList, Clock, FilterX, Plus, Search, SearchX, Store, Undo2, Warehouse, X, XCircle } from 'lucide-react';
 import { BandaPagina, TituloPagina } from '../../../components/ui/TituloPagina';
 import { Button } from '../../../components/ui/Button';
 import { GlassCard } from '../../../components/ui/GlassCard';
-import { Input } from '../../../components/ui/Input';
+import { Input, Select } from '../../../components/ui/Input';
 import { Pagination } from '../../../components/ui/Pagination';
 import { Cifra } from '../../../components/ui/Cifra';
 import { EsqueletoFilas } from '../../../components/ui/Esqueleto';
@@ -36,7 +36,9 @@ export function ReclamosPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const tiendas = useTiendas();
-  const { puede } = useAuth();
+  const { puede, user } = useAuth();
+  // Quien está en una tienda ya ve solo la suya: no necesita el filtro.
+  const tiendaFija = user?.tienda?.tiendaId != null ? user.tienda.nombre : null;
   // Desde Inicio se llega con el filtro en el enlace (?estado=pendiente, ?porEnviar=1, ?nuevo=1).
   const [params] = useSearchParams();
   const estadoInicial = params.get('estado');
@@ -44,6 +46,8 @@ export function ReclamosPage() {
   const [porEnviar, setPorEnviar] = useState(params.get('porEnviar') === '1');
   const [q, setQ] = useState('');
   const [qDebounced, setQDebounced] = useState('');
+  // Filtro por lugar: '' (todos), 'cedi' o el TiendaId.
+  const [tienda, setTienda] = useState(params.get('tienda') ?? '');
   const [page, setPage] = useState(1);
   const [data, setData] = useState<Reclamo[]>([]);
   const [pagination, setPagination] = useState<PaginationMeta | null>(null);
@@ -56,8 +60,9 @@ export function ReclamosPage() {
   // Sube con cada lista que llega: las filas entran en cascada al cargar o al
   // cambiar de filtro o de página, no en cada re-render.
   const [tanda, setTanda] = useState(0);
-  const conFiltros = Boolean(status || porEnviar || qDebounced);
+  const conFiltros = Boolean(status || porEnviar || qDebounced || tienda);
   const quitarFiltros = () => {
+    setTienda('');
     setStatus('');
     setPorEnviar(false);
     setQ('');
@@ -75,7 +80,7 @@ export function ReclamosPage() {
     setLoading(true);
     setError(null);
     apiReclamos
-      .listarReclamos({ status, porEnviar, q: qDebounced, page, pageSize: 20 })
+      .listarReclamos({ status, porEnviar, q: qDebounced, tienda, page, pageSize: 20 })
       .then((res) => {
         if (cancelado) return;
         setData(res.data);
@@ -88,7 +93,7 @@ export function ReclamosPage() {
     return () => {
       cancelado = true;
     };
-  }, [status, porEnviar, qDebounced, page, intento]);
+  }, [status, porEnviar, qDebounced, tienda, page, intento]);
 
   // Primera carga (o si no había nada que dejar a la vista): esqueleto. Después,
   // la lista anterior queda (atenuada) mientras llega la nueva.
@@ -99,7 +104,9 @@ export function ReclamosPage() {
     <div className="flex flex-col gap-6">
       <BandaPagina solape className="flex flex-wrap items-center justify-between gap-3">
         <TituloPagina icono={ClipboardList} titulo="Reclamos">
-          <p className="bajada-pagina">Faltantes, sobrantes, diferencias y daños de mercadería.</p>
+          <p className="bajada-pagina">
+            {tiendaFija ? `Reclamos de la tienda ${tiendaFija}.` : 'Faltantes, sobrantes, diferencias y daños de mercadería.'}
+          </p>
         </TituloPagina>
         <RequirePermiso permiso={P.recCrear}>
           <Button onClick={() => setShowNuevo(true)}>
@@ -147,6 +154,32 @@ export function ReclamosPage() {
             }}
           />
         </div>
+        {!tiendaFija && (
+          <div className="relative sm:w-56">
+            {tienda === 'cedi' ? (
+              <Warehouse size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 opacity-50" />
+            ) : (
+              <Store size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 opacity-50" />
+            )}
+            <Select
+              aria-label="Tienda"
+              className={cn('pl-9', tienda && 'border-brand-500/40 bg-brand-500/[0.06] font-semibold')}
+              value={tienda}
+              onChange={(e) => {
+                setTienda(e.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="">Todas las tiendas y CEDI</option>
+              <option value="cedi">CEDI</option>
+              {tiendas.map((t) => (
+                <option key={t.TiendaId} value={t.TiendaId}>
+                  {t.Nombre}
+                </option>
+              ))}
+            </Select>
+          </div>
+        )}
         {porEnviar && (
           <button
             type="button"
@@ -256,7 +289,7 @@ export function ReclamosPage() {
                 <tr className="border-b border-black/10 text-left text-xs opacity-70 dark:border-white/10">
                   <th className="px-3 py-3">Reclamo</th>
                   <th className="px-3 py-3">Proveedor</th>
-                  <th className="hidden xl:table-cell px-3 py-3">Origen</th>
+                  <th className="hidden xl:table-cell px-3 py-3">Tienda</th>
                   <th className="hidden xl:table-cell px-3 py-3">Fecha</th>
                   <th className="px-3 py-3 text-right">Productos</th>
                   <th className="px-3 py-3">Estado</th>
@@ -284,7 +317,10 @@ export function ReclamosPage() {
                   >
                     <td className="px-3 py-3.5">
                       <span className="numero-caso block text-base leading-tight">{r.Numero}</span>
-                      <span className="sub">{TIPO_LABEL_CORTO[r.Tipo]}</span>
+                      <span className="sub">
+                        {TIPO_LABEL_CORTO[r.Tipo]}
+                        <span className="xl:hidden"> · {r.Origen === 'cedi' ? 'CEDI' : r.Sucursal || 'Tienda'}</span>
+                      </span>
                     </td>
                     <td className="max-w-[13rem] px-3 py-3.5 xl:max-w-[17rem]">
                       <span className="celda-larga font-medium" title={r.Proveedor ?? undefined}>
@@ -297,7 +333,7 @@ export function ReclamosPage() {
                       )}
                     </td>
                     <td className="hidden xl:table-cell max-w-[10rem] px-3 py-3.5">
-                      <span className="celda-larga">{r.Origen === 'cedi' ? 'CEDI' : r.Sucursal || 'Tienda'}</span>
+                      <span className="celda-larga font-medium">{r.Origen === 'cedi' ? 'CEDI' : r.Sucursal || 'Tienda'}</span>
                     </td>
                     <td className="hidden xl:table-cell px-3 py-3.5">{formatFechaCorta(r.FechaRegistro)}</td>
                     <td className="px-3 py-3.5 text-right tabular-nums">

@@ -22,7 +22,7 @@ import type { Estado, Filtros, ReporteProductoDanado } from '../../../types/prod
 const FILTROS_INICIALES: Filtros = { page: 1, pageSize: 20 };
 
 export function ProductosDanadosPage() {
-  const { puede } = useAuth();
+  const { puede, user } = useAuth();
   // Desde Inicio se llega con la etapa en el enlace (?estado=Pendiente) o a crear uno (?nuevo=1).
   const [params] = useSearchParams();
   const estadoEnlace = params.get('estado');
@@ -85,7 +85,11 @@ export function ProductosDanadosPage() {
       <BandaPagina solape className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <TituloPagina icono={PackageSearch} titulo="Productos Dañados">
           <p className="bajada-pagina">
-            {puede(P.pdSoloPropios) ? 'Tus reportes: aquí ves solo los que creaste.' : 'Bajas por deterioro, daño, vencimiento o cambio/devolución.'}
+            {puede(P.pdSoloPropios) || user?.tienda?.soloPropios
+              ? `Tus reportes: aquí ves solo los que creaste${user?.tienda?.nombre ? ` en ${user.tienda.nombre}` : ''}.`
+              : user?.tienda?.nombre
+                ? `Reportes de la tienda ${user.tienda.nombre}.`
+                : 'Bajas por deterioro, daño, vencimiento o cambio/devolución.'}
           </p>
         </TituloPagina>
         <RequirePermiso permiso={P.pdCrear}>

@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useEffect, useRef, useState } from 'react';
-import { clearSession, getIdToken, getSessionExp, getToken, getVista, loadSession, saveSession, setVista, type AuthUser, type Limites } from './session';
+import { clearSession, getIdToken, getSessionExp, getToken, getVista, loadSession, saveSession, setVista, type AuthUser, type Limites, type TiendaUsuario } from './session';
 
 export type { AuthUser };
 
@@ -46,6 +46,7 @@ interface Me {
   vista: string | null;
   puedeVistaPor: boolean;
   limites?: Limites;
+  tienda?: TiendaUsuario | null;
 }
 
 /** Permisos actuales del usuario (en la vista activa). null = la sesión ya no es válida. */
@@ -68,6 +69,7 @@ const aUsuario = (me: Me): AuthUser => ({
   vista: me.vista,
   puedeVistaPor: me.puedeVistaPor,
   limites: me.limites,
+  tienda: me.tienda ?? null,
 });
 
 // Solo para desarrollo local, mientras no hay realm/client real de Keycloak.

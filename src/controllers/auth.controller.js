@@ -3,6 +3,8 @@ import { iniciarSesionConCodigo } from '../services/keycloakAuthService.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { forbidden } from '../utils/httpError.js';
 import { vistasDisponibles } from '../services/acceso/configuracionService.js';
+import { tiendaDe } from '../services/acceso/alcanceTienda.js';
+import { logger } from '../utils/logger.js';
 
 export const keycloakCode = asyncHandler(async (req, res) => {
   const { code, redirectUri, codeVerifier } = req.body;
@@ -15,7 +17,14 @@ export const keycloakCode = asyncHandler(async (req, res) => {
 });
 
 export const me = asyncHandler(async (req, res) => {
+  // Tienda del usuario (Configuración → Tiendas): el portal la muestra y fija el filtro.
+  // Si no se puede leer, el portal sigue (el backend filtra igual en cada consulta).
+  const tienda = await tiendaDe(req.user).catch((err) => {
+    logger.warn({ err: err.message }, 'No se pudo leer la tienda del usuario para /me');
+    return null;
+  });
   res.json({
+    tienda: tienda ? { tiendaId: tienda.tiendaId, codigo: tienda.codigo, nombre: tienda.nombre, soloPropios: tienda.soloPropios } : null,
     username: req.user.username,
     name: req.user.name,
     roles: [...req.user.roles],

@@ -8,6 +8,7 @@ import { validateBody, validateQuery } from '../validators/validate.js';
 import { env } from '../config/env.js';
 import { serviceUnavailable } from '../utils/httpError.js';
 import { exigirAlcance } from '../services/acceso/alcanceCompradora.js';
+import { exigirTienda } from '../services/acceso/alcanceTienda.js';
 import {
   crearReporteSchema,
   corregirReporteSchema,
@@ -31,6 +32,8 @@ router.use(requireAuth);
 router.param('id', exigirAlcance('reporte'));
 // Tienda («Solo los reportes que creó»): los de otras personas también responden 404.
 router.param('id', controller.exigirPropio);
+// Usuario en una tienda (Configuración → Tiendas): los de otras tiendas también responden 404.
+router.param('id', exigirTienda('reporte'));
 
 // Quien crea o envía al proveedor también ve la lista, el detalle y los KPIs.
 const ver = requirePermiso(
