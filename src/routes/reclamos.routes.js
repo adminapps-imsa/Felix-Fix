@@ -6,13 +6,13 @@ import { uploadExcelReclamo, uploadExcelPreview, uploadPdfPreview, uploadAdjunto
 import { validateBody, validateQuery } from '../validators/validate.js';
 import { borrarSiFalla } from '../middleware/upload.js';
 import { exigirAlcance } from '../services/acceso/alcanceCompradora.js';
-import { devolverSchema, reenviarSchema, corregirLineasSchema, retiroSchema, cambiarRetiroSchema, decisionReclamoSchema, decisionLineaSchema, decisionLineasSchema, listarQuerySchema, proveedorQuerySchema, documentosSapQuerySchema, adjuntoQuerySchema } from '../validators/reclamos.schema.js';
+import { devolverSchema, reenviarSchema, corregirLineasSchema, retiroSchema, cambiarRetiroSchema, decisionReclamoSchema, decisionLineaSchema, decisionLineasSchema, codigoDataSchema, listarQuerySchema, proveedorQuerySchema, documentosSapQuerySchema, adjuntoQuerySchema } from '../validators/reclamos.schema.js';
 
 const router = Router();
 
 // Cualquier permiso de Reclamos incluye verlos (no se puede crear ni decidir
 // lo que no se ve). Crear, decidir y eliminar se exigen en cada ruta.
-router.use(requireAuth, requirePermiso('reclamos.ver', 'reclamos.crear', 'reclamos.adjuntar', 'reclamos.decidir', 'reclamos.eliminar', 'reclamos.contabilidad', 'reclamos.enviar_contabilidad', 'reclamos.retiro_proveedor', 'reclamos.devolver_supervisor'));
+router.use(requireAuth, requirePermiso('reclamos.ver', 'reclamos.crear', 'reclamos.adjuntar', 'reclamos.decidir', 'reclamos.eliminar', 'reclamos.contabilidad', 'reclamos.enviar_contabilidad', 'reclamos.retiro_proveedor', 'reclamos.devolver_supervisor', 'reclamos.articulos_sap'));
 // Cada compradora solo abre (y decide) los reclamos de sus mundos y marcas: los demás responden 404.
 router.param('token', exigirAlcance('reclamo'));
 const crear = requirePermiso('reclamos.crear');
@@ -70,6 +70,8 @@ router.get('/:token/lineas', controller.lineas);
 router.post('/:token/lineas/decision', decidir, validateBody(decisionLineasSchema), controller.decidirLineas);
 router.post('/:token/lineas/:pos/decision', decidir, validateBody(decisionLineaSchema), controller.decidirLinea);
 router.delete('/:token/lineas/:pos/decision', decidir, controller.deshacerLinea);
+// Data: código del sobrante no esperado que ya creó en SAP.
+router.put('/:token/lineas/:pos/codigo-sap', requirePermiso('reclamos.articulos_sap'), validateBody(codigoDataSchema), controller.cargarCodigoData);
 
 router.get('/:token/imagen/:idx', controller.imagen);
 

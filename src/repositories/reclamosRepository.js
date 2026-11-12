@@ -16,7 +16,8 @@ const SELECT_BASE = `
     (SELECT COUNT(*) FROM ${S}.ReclamoLineas l WHERE l.ReclamoToken = r.Token) AS LineasTotal,
     (SELECT COUNT(*) FROM ${S}.ReclamoLineas l WHERE l.ReclamoToken = r.Token AND l.DecStatus = 'pendiente') AS LineasPendientes,
     (SELECT COUNT(*) FROM ${S}.ReclamoLineas l WHERE l.ReclamoToken = r.Token AND l.DecStatus = 'aprobado') AS LineasAprobadas,
-    (SELECT COUNT(*) FROM ${S}.ReclamoLineas l WHERE l.ReclamoToken = r.Token AND l.DecStatus = 'aprobado' AND l.Tipo = 'sobrante_real') AS LineasSobranteAprobadas,
+    (SELECT COUNT(*) FROM ${S}.ReclamoLineas l WHERE l.ReclamoToken = r.Token AND l.DecStatus = 'aprobado' AND l.Tipo IN ('sobrante_real', 'sobrante_no_esperado')) AS LineasSobranteAprobadas,
+    (SELECT COUNT(*) FROM ${S}.ReclamoLineas l WHERE l.ReclamoToken = r.Token AND l.EsperaData = 1 AND l.DecStatus = 'pendiente') AS LineasEsperaData,
     (SELECT COUNT(*) FROM ${S}.ReclamoLineas l WHERE l.ReclamoToken = r.Token AND l.Tipo = 'devolucion') AS LineasDevolucion
   FROM ${S}.Reclamos r
 `;
@@ -214,19 +215,23 @@ export async function crear(data, lineas, { docsSap = [], motivoBloqueo } = {}) 
       const values = lote.map((l, j) => {
         req
           .input(`pos${j}`, sql.Int, l.posicion)
-          .input(`cod${j}`, sql.VarChar(50), l.codigoBarra.slice(0, 50))
+          .input(`cod${j}`, sql.VarChar(50), l.codigoBarra ? l.codigoBarra.slice(0, 50) : null)
           .input(`cant${j}`, sql.Decimal(18, 3), l.cantidad ?? null)
           .input(`tipo${j}`, sql.VarChar(40), l.tipo)
           .input(`desc${j}`, sql.NVarChar(300), l.descripcion ? l.descripcion.slice(0, 300) : null)
           .input(`st${j}`, sql.VarChar(10), l.decStatus)
           .input(`com${j}`, sql.NVarChar(500), l.decComentario || null)
-          .input(`by${j}`, sql.VarChar(150), l.decBy || null);
+          .input(`by${j}`, sql.VarChar(150), l.decBy || null)
+          .input(`ref${j}`, sql.NVarChar(100), l.referencia || null)
+          .input(`col${j}`, sql.NVarChar(100), l.color || null)
+          .input(`tal${j}`, sql.NVarChar(50), l.talla || null)
+          .input(`ed${j}`, sql.Bit, l.esperaData ? 1 : 0);
         const decAt = l.decStatus === 'pendiente' ? 'NULL' : 'SYSUTCDATETIME()';
-        return `(@token, @pos${j}, @cod${j}, @cant${j}, @tipo${j}, @desc${j}, @st${j}, @com${j}, ${decAt}, @by${j})`;
+        return `(@token, @pos${j}, @cod${j}, @cant${j}, @tipo${j}, @desc${j}, @st${j}, @com${j}, ${decAt}, @by${j}, @ref${j}, @col${j}, @tal${j}, @ed${j})`;
       });
       await req.query(`
         INSERT INTO ${S}.ReclamoLineas
-          (ReclamoToken, Posicion, CodigoBarra, Cantidad, Tipo, DescripcionExcel, DecStatus, DecComentario, DecAt, DecBy)
+          (ReclamoToken, Posicion, CodigoBarra, Cantidad, Tipo, DescripcionExcel, DecStatus, DecComentario, DecAt, DecBy, Referencia, Color, Talla, EsperaData)
         VALUES ${values.join(',\n')}
       `);
     }
@@ -306,7 +311,8 @@ export async function listarLineas(token) {
   const pool = await getPool();
   const { recordset } = await pool.request().input('token', sql.UniqueIdentifier, token).query(`
     SELECT LineaId, Posicion, CodigoBarra, Cantidad, Tipo, DescripcionExcel,
-           DecStatus, DecComentario, DecAt, DecBy, CreatedAt
+           DecStatus, DecComentario, DecAt, DecBy, CreatedAt,
+           Referencia, Color, Talla, EsperaData, CodigoDataBy, CodigoDataAt
     FROM ${S}.ReclamoLineas
     WHERE ReclamoToken = @token
     ORDER BY Posicion
@@ -379,10 +385,38 @@ async function updateDecisionLinea(req, token, posicion, { desde, hacia, comenta
     UPDATE ${S}.ReclamoLineas
     SET DecStatus = @hacia, DecComentario = @comentario, DecAt = ${setDecAt}, DecBy = @usuario
     WHERE ReclamoToken = @token AND Posicion = @pos AND ${condDesde}
+      AND EsperaData = 0
       ${bloqueados.length ? `AND Tipo NOT IN (${bloqueados.join(', ')})` : ''}
       AND EXISTS (SELECT 1 FROM ${S}.Reclamos r WHERE r.Token = @token AND r.Status IN ('pendiente', 'notificado'))
   `);
   return result.rowsAffected[0] > 0;
+}
+
+/**
+ * Data cargó el código de un sobrante no esperado que ya creó en SAP: la línea
+ * deja de esperar y la compradora la puede decidir. Solo si sigue esperando y
+ * el reclamo está abierto. Devuelve { ok, quedan } (quedan = líneas que aún
+ * esperan a Data en el reclamo).
+ */
+export async function asignarCodigoData(token, posicion, { codigo, descripcion, usuario }) {
+  const pool = await getPool();
+  const req = pool
+    .request()
+    .input('token', sql.UniqueIdentifier, token)
+    .input('pos', sql.Int, posicion)
+    .input('codigo', sql.VarChar(50), codigo)
+    .input('descripcion', sql.NVarChar(300), descripcion ? descripcion.slice(0, 300) : null)
+    .input('usuario', sql.VarChar(150), usuario);
+  const { recordset } = await req.query(`
+    UPDATE ${S}.ReclamoLineas
+    SET CodigoBarra = @codigo, EsperaData = 0, CodigoDataBy = @usuario, CodigoDataAt = SYSUTCDATETIME(),
+        DescripcionExcel = COALESCE(DescripcionExcel, @descripcion)
+    WHERE ReclamoToken = @token AND Posicion = @pos AND Tipo = 'sobrante_no_esperado' AND EsperaData = 1 AND DecStatus = 'pendiente'
+      AND EXISTS (SELECT 1 FROM ${S}.Reclamos r WHERE r.Token = @token AND r.Status IN ('pendiente', 'devuelto'));
+    SELECT @@ROWCOUNT AS ok,
+           (SELECT COUNT(*) FROM ${S}.ReclamoLineas WHERE ReclamoToken = @token AND EsperaData = 1 AND DecStatus = 'pendiente') AS quedan;
+  `);
+  return { ok: recordset[0].ok > 0, quedan: recordset[0].quedan };
 }
 
 /**
@@ -676,7 +710,7 @@ export async function corregirLineas(token, { verificar, plan }) {
       await new sql.Request(transaction)
         .input('token', sql.UniqueIdentifier, token)
         .input('id', sql.BigInt, l.lineaId)
-        .input('codigo', sql.VarChar(50), l.codigoBarra)
+        .input('codigo', sql.VarChar(50), l.codigoBarra || null)
         .input('cantidad', sql.Decimal(18, 3), l.cantidad)
         .input('tipo', sql.VarChar(40), l.tipo)
         .input('descripcion', sql.NVarChar(300), l.descripcion)
@@ -685,6 +719,8 @@ export async function corregirLineas(token, { verificar, plan }) {
         .input('by', sql.VarChar(150), l.decBy || null).query(`
           UPDATE ${S}.ReclamoLineas
           SET CodigoBarra = @codigo, Cantidad = @cantidad, Tipo = @tipo, DescripcionExcel = @descripcion,
+              -- Sobrante no esperado sin código: sigue esperando a Data.
+              EsperaData = CASE WHEN @codigo IS NULL AND @tipo = 'sobrante_no_esperado' THEN 1 WHEN @tipo = 'sobrante_no_esperado' THEN EsperaData ELSE 0 END,
               DecStatus = @dec, DecComentario = @com, DecBy = @by, DecAt = CASE WHEN @dec = 'aprobado' THEN SYSUTCDATETIME() ELSE NULL END
           WHERE ReclamoToken = @token AND LineaId = @id`);
     }
@@ -698,15 +734,16 @@ export async function corregirLineas(token, { verificar, plan }) {
         await new sql.Request(transaction)
           .input('token', sql.UniqueIdentifier, token)
           .input('pos', sql.Int, pos)
-          .input('codigo', sql.VarChar(50), l.codigoBarra)
+          .input('codigo', sql.VarChar(50), l.codigoBarra || null)
           .input('cantidad', sql.Decimal(18, 3), l.cantidad)
           .input('tipo', sql.VarChar(40), l.tipo)
           .input('descripcion', sql.NVarChar(300), l.descripcion)
           .input('dec', sql.VarChar(10), l.decStatus)
           .input('com', sql.NVarChar(500), l.decComentario || null)
           .input('by', sql.VarChar(150), l.decBy || null).query(`
-            INSERT INTO ${S}.ReclamoLineas (ReclamoToken, Posicion, CodigoBarra, Cantidad, Tipo, DescripcionExcel, DecStatus, DecComentario, DecAt, DecBy)
-            VALUES (@token, @pos, @codigo, @cantidad, @tipo, @descripcion, @dec, @com, CASE WHEN @dec = 'aprobado' THEN SYSUTCDATETIME() ELSE NULL END, @by)`);
+            INSERT INTO ${S}.ReclamoLineas (ReclamoToken, Posicion, CodigoBarra, Cantidad, Tipo, DescripcionExcel, DecStatus, DecComentario, DecAt, DecBy, EsperaData)
+            VALUES (@token, @pos, @codigo, @cantidad, @tipo, @descripcion, @dec, @com, CASE WHEN @dec = 'aprobado' THEN SYSUTCDATETIME() ELSE NULL END, @by,
+                    CASE WHEN @codigo IS NULL AND @tipo = 'sobrante_no_esperado' THEN 1 ELSE 0 END)`);
       }
     }
     await transaction.commit();

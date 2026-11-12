@@ -234,12 +234,24 @@ export function motivoNoEliminarAdjunto({ EnviadoContabilidadAt }) {
 }
 
 /** Cerrar el reclamo (Confirmar / Rechazar): solo con todos los productos decididos y si no es de notificación. */
-export function motivoNoDecidir({ Status, LineasPendientes }) {
+export function motivoNoDecidir({ Status, LineasPendientes, LineasEsperaData }) {
   if (Status === 'notificado') return { mensaje: 'Este reclamo es solo de notificación: no requiere aprobación.' };
   if (Status === STATUS_DEVUELTO) return MOTIVO_DEVUELTO;
+  if (Status === 'pendiente' && LineasEsperaData > 0) {
+    return {
+      mensaje: `${LineasEsperaData === 1 ? 'Un producto' : `${LineasEsperaData} productos`} de sobrante no esperado ${LineasEsperaData === 1 ? 'espera' : 'esperan'} que Data ${LineasEsperaData === 1 ? 'lo cree' : 'los cree'} en SAP. Podrás cerrar el reclamo cuando Data cargue el código y decidas esos productos.`,
+      code: 'ESPERA_DATA',
+    };
+  }
   if (Status === 'pendiente' && LineasPendientes > 0) return motivoLineasPendientes(LineasPendientes);
   return null;
 }
+
+/** Decidir un sobrante no esperado que todavía no está creado en SAP. */
+export const MOTIVO_ESPERA_DATA = {
+  mensaje: 'Este producto todavía no está creado en SAP. Data debe crearlo y cargar su código antes de que se pueda aprobar o rechazar.',
+  code: 'ESPERA_DATA',
+};
 
 export const motivoLineasPendientes = (n) => ({
   mensaje: `Decide todos los productos antes de cerrar el reclamo (${n} pendientes).`,

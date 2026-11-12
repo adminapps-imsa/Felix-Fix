@@ -89,6 +89,10 @@ export const decidirLinea = (token: string, pos: number, decision: Exclude<DecSt
 export const deshacerLinea = (token: string, pos: number) =>
   api.del<ReclamoLinea>(`${ruta(token)}/lineas/${pos}/decision`);
 
+/** Data: código de barras del sobrante no esperado que ya creó en SAP (se valida contra SAP). */
+export const cargarCodigoSap = (token: string, pos: number, codigoBarra: string) =>
+  api.put<ReclamoLinea>(`${ruta(token)}/lineas/${pos}/codigo-sap`, { codigoBarra });
+
 export const descargarExcel = (token: string) => fetchBlob(`${ruta(token)}/excel`);
 export const descargarAdjunto = (token: string, idx: number, filename?: string) => fetchBlob(`${ruta(token)}/adjuntos/${idx}${conArchivo(filename)}`);
 export const imagenPath = (token: string, idx: number) => `${ruta(token)}/imagen/${idx}`;

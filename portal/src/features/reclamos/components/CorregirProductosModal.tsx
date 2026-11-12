@@ -30,7 +30,7 @@ interface Fila {
 const aFila = (l: ReclamoLinea): Fila => ({
   clave: `l${l.LineaId}`,
   lineaId: l.LineaId,
-  codigoBarra: l.CodigoBarra,
+  codigoBarra: l.CodigoBarra ?? '',
   // Lo guardado del Excel; si no hay, la de SAP que se ve en el detalle.
   descripcion: l.DescripcionExcel ?? l.Descripcion ?? '',
   cantidad: l.Cantidad === null ? '' : String(l.Cantidad),
@@ -65,7 +65,7 @@ export function CorregirProductosModal({
     if (!o) return false;
     const cant = f.cantidad.trim() === '' ? null : Number(f.cantidad);
     return (
-      o.CodigoBarra.trim() !== f.codigoBarra.trim() ||
+      (o.CodigoBarra ?? '').trim() !== f.codigoBarra.trim() ||
       (o.DescripcionExcel ?? o.Descripcion ?? '').trim() !== f.descripcion.trim() ||
       (o.Cantidad === null ? null : Number(o.Cantidad)) !== cant ||
       o.Tipo !== f.tipo
@@ -98,7 +98,8 @@ export function CorregirProductosModal({
     e.preventDefault();
     setError(null);
     if (!vigentes.length) return setError('El reclamo debe tener al menos un producto.');
-    const sinCodigo = vigentes.find((f) => !f.codigoBarra.trim());
+    // Sobrante no esperado puede ir sin código: lo crea Data en SAP.
+    const sinCodigo = vigentes.find((f) => !f.codigoBarra.trim() && f.tipo !== 'sobrante_no_esperado');
     if (sinCodigo) return setError('Cada producto necesita su código de barra.');
     const cantidadMala = vigentes.find((f) => f.cantidad.trim() !== '' && !(Number(f.cantidad) >= 0));
     if (cantidadMala) return setError(`La cantidad «${cantidadMala.cantidad}» no es válida.`);
@@ -162,7 +163,8 @@ export function CorregirProductosModal({
                     <td className="px-3 py-2">
                       <Input
                         aria-label="Código de barra"
-                        required={!f.quitada}
+                        required={!f.quitada && f.tipo !== 'sobrante_no_esperado'}
+                        placeholder={f.tipo === 'sobrante_no_esperado' ? 'Sin código' : undefined}
                         disabled={f.quitada}
                         maxLength={50}
                         value={f.codigoBarra}

@@ -448,6 +448,7 @@ export function NuevoReclamoForm({
     parsing && 'Se está leyendo el Excel; espera un momento.',
     excel && !parsing && !tipo && 'Selecciona el tipo de reclamo.',
     desajuste && 'El tipo elegido no coincide con lo que indica el Excel.',
+    preview?.faltantesSinDocumento,
     ...[...new Set(docsRepetidos)].map((d) => `El documento SAP ${d} está escrito más de una vez.`),
     ...docsEnOtros.map((d) => `El documento SAP ${d} ya está en ${usadosDe(d)!.map((r) => r.numero).join(', ')}: no se puede crear otro reclamo con el mismo documento.`),
     pdfsLeyendo && 'Se están leyendo los PDF de los documentos SAP; espera un momento.',
@@ -691,6 +692,21 @@ export function NuevoReclamoForm({
               )}
               {preview && preview.validacionCodigos.noEncontrados.length > 0 && (
                 <p className="rounded-lg bg-warning/10 px-2 py-1 font-mono text-xs">{preview.validacionCodigos.noEncontrados.join(', ')}</p>
+              )}
+              {preview?.faltantesSinDocumento && (
+                <p className="rounded-lg bg-danger/10 px-2.5 py-1.5 text-xs text-danger">{preview.faltantesSinDocumento} Corrige el Excel y vuelve a subirlo.</p>
+              )}
+              {preview?.sobranteNoEsperado && (
+                <p className="rounded-lg bg-brand-500/10 px-2.5 py-1.5 text-xs">
+                  <strong>
+                    {preview.sobranteNoEsperado.total} sobrante{preview.sobranteNoEsperado.total === 1 ? '' : 's'} no esperado
+                    {preview.sobranteNoEsperado.total === 1 ? '' : 's'}.
+                  </strong>{' '}
+                  {preview.sobranteNoEsperado.paraData > 0
+                    ? `${preview.sobranteNoEsperado.paraData} no ${preview.sobranteNoEsperado.paraData === 1 ? 'está creado' : 'están creados'} en SAP (o vienen sin código): al crear el reclamo se avisa a Data por correo para que los cree; después pasan a la compradora.`
+                    : 'Están creados en SAP: los decide la compradora.'}
+                  {!preview.sobranteNoEsperado.sapDisponible && ' SAP no respondió: los que traen código se validarán como creados.'}
+                </p>
               )}
 
               {desglose.length > 0 && (

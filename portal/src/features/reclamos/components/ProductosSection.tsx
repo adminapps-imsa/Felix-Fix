@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Check, CheckCircle2, ChevronRight, FileSpreadsheet, Loader2, RotateCcw, Search, SearchX, ShieldCheck, X } from 'lucide-react';
+import { Check, CheckCircle2, ChevronRight, Database, FileSpreadsheet, Loader2, RotateCcw, Search, SearchX, ShieldCheck, X } from 'lucide-react';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { EstadoVacio } from '../../../components/ui/EstadoVacio';
 import { useAvisos } from '../../../components/ui/Avisos';
@@ -37,6 +37,7 @@ export function ProductosSection({
   lineas,
   esAdmin,
   cerrado,
+  puedeCargarCodigo = false,
   onLineaActualizada,
   onLineasActualizadas,
 }: {
@@ -44,6 +45,8 @@ export function ProductosSection({
   lineas: ReclamoLinea[];
   esAdmin: boolean;
   cerrado: boolean;
+  /** Data: carga el código de los sobrantes no esperados que creó en SAP. */
+  puedeCargarCodigo?: boolean;
   onLineaActualizada: (linea: ReclamoLinea) => void;
   onLineasActualizadas: (lineas: ReclamoLinea[]) => void;
 }) {
@@ -62,6 +65,7 @@ export function ProductosSection({
     return c;
   }, [manuales]);
   const variosTipos = new Set(manuales.map((l) => l.Tipo)).size > 1;
+  const esperanData = manuales.filter((l) => l.EsperaData && l.DecStatus === 'pendiente').length;
   const editable = esAdmin && !cerrado;
 
   const [filtro, setFiltro] = useState<Filtro>(() => (manuales.some((l) => l.DecStatus === 'pendiente') ? 'pendiente' : 'todos'));
@@ -75,7 +79,7 @@ export function ProductosSection({
       .filter(
         (l) =>
           !q ||
-          l.CodigoBarra.toLowerCase().includes(q) ||
+          (l.CodigoBarra || '').toLowerCase().includes(q) ||
           (l.Descripcion || '').toLowerCase().includes(q) ||
           String(l.Posicion) === q
       )
@@ -83,8 +87,9 @@ export function ProductosSection({
   }, [manuales, filtro, busqueda]);
 
   // Solo cuentan los seleccionados que siguen pendientes (otro usuario pudo decidirlos).
-  const pendientesSeleccionados = manuales.filter((l) => l.DecStatus === 'pendiente' && seleccion.has(l.Posicion)).map((l) => l.Posicion);
-  const visiblesPendientes = visibles.filter((l) => l.DecStatus === 'pendiente');
+  // Los que esperan a Data todavía no se pueden decidir.
+  const pendientesSeleccionados = manuales.filter((l) => l.DecStatus === 'pendiente' && !l.EsperaData && seleccion.has(l.Posicion)).map((l) => l.Posicion);
+  const visiblesPendientes = visibles.filter((l) => l.DecStatus === 'pendiente' && !l.EsperaData);
   const todosVisiblesMarcados = visiblesPendientes.length > 0 && visiblesPendientes.every((l) => seleccion.has(l.Posicion));
 
   const alternar = (pos: number) =>
@@ -125,6 +130,7 @@ export function ProductosSection({
               <Contador valor={conteo.pendiente} label="por decidir" clase="border-warning/30 bg-warning/15 text-warning" />
               <Contador valor={conteo.aprobado} label="aprobados" clase="border-success/30 bg-success/15 text-success" />
               <Contador valor={conteo.rechazado} label="rechazados" clase="border-danger/30 bg-danger/15 text-danger" />
+              {esperanData > 0 && <Contador valor={esperanData} label="esperan a Data" clase="border-brand-500/30 bg-brand-500/10 text-brand-700 dark:text-brand-300" />}
               {lineas.length > manuales.length && (
                 <Contador valor={lineas.length - manuales.length} label="automáticos" clase="border-black/10 bg-black/5 dark:border-white/10 dark:bg-white/5" />
               )}
@@ -211,6 +217,7 @@ export function ProductosSection({
                     linea={l}
                     esAdmin={esAdmin}
                     cerrado={cerrado}
+                    puedeCargarCodigo={puedeCargarCodigo}
                     mostrarTipo={variosTipos}
                     seleccionado={seleccion.has(l.Posicion)}
                     onSeleccionar={editable ? () => alternar(l.Posicion) : undefined}
@@ -346,7 +353,7 @@ function GrupoAutomatico({ grupo }: { grupo: Grupo }) {
                 <tr key={l.Posicion} className="anim-fila border-t border-black/5 dark:border-white/5" style={{ ['--i' as string]: i }}>
                   <td className="px-4 py-2 opacity-50">{l.Posicion}</td>
                   <td className="px-4 py-2 font-mono text-xs">
-                    {l.CodigoBarra}
+                    {l.CodigoBarra || 'Sin código'}
                     {l.Encontrado === false && <span className="ml-1 text-danger">(no en SAP)</span>}
                   </td>
                   <td className="px-4 py-2">{l.Descripcion || '—'}</td>
@@ -376,6 +383,80 @@ const Ruedita = () => <Loader2 size={13} className="animate-spin" aria-hidden />
 const MINI_BOTON =
   'inline-flex h-8 shrink-0 items-center gap-1 rounded-full px-3 text-xs font-semibold transition-[background-color,color,transform,opacity] duration-150 active:scale-[0.96] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50';
 
+/**
+ * Sobrante no esperado que no está en SAP: la compradora todavía no lo puede
+ * decidir. Data (permiso «Crear artículos en SAP») carga aquí el código ya
+ * creado; el backend lo valida contra SAP.
+ */
+function EsperaData({
+  token,
+  linea: l,
+  puedeCargar,
+  onActualizada,
+}: {
+  token: string;
+  linea: ReclamoLinea;
+  puedeCargar: boolean;
+  onActualizada: (linea: ReclamoLinea) => void;
+}) {
+  const [codigo, setCodigo] = useState(l.CodigoBarra || '');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const avisos = useAvisos();
+
+  const guardar = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const c = codigo.trim();
+    if (!/^\d+$/.test(c)) return setError('Escribe el código de barras (solo números).');
+    setBusy(true);
+    setError(null);
+    try {
+      onActualizada(await apiReclamos.cargarCodigoSap(token, l.Posicion, c));
+      avisos.ok(`Código del producto ${l.Posicion} cargado: ya lo puede decidir la compradora.`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo guardar el código.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const etiqueta = (
+    <span className="badge-pill shrink-0 border border-brand-500/30 bg-brand-500/10 px-2 py-0.5 text-brand-700 dark:text-brand-300">
+      <Database size={12} /> Espera a Data
+    </span>
+  );
+  if (!puedeCargar) {
+    return (
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+        {etiqueta}
+        <span className="opacity-70">{l.CodigoBarra ? 'No está creado en SAP.' : 'Vino sin código.'} Data debe crearlo en SAP antes de decidirlo.</span>
+      </div>
+    );
+  }
+  return (
+    <form onSubmit={guardar} className="flex flex-wrap items-center gap-1.5 md:max-w-md md:flex-nowrap">
+      {etiqueta}
+      <input
+        className="h-8 min-w-0 flex-1 rounded-lg border border-black/10 bg-white/70 px-2.5 font-mono text-xs outline-none focus:ring-2 focus:ring-brand-500/50 dark:border-white/10 dark:bg-white/5"
+        placeholder="Código de barras creado en SAP"
+        aria-label={`Código de barras del producto ${l.Posicion}`}
+        inputMode="numeric"
+        maxLength={50}
+        value={codigo}
+        onChange={(e) => setCodigo(e.target.value)}
+      />
+      <button
+        type="submit"
+        className={cn(MINI_BOTON, 'bg-brand-500 text-white hover:bg-brand-600 dark:bg-brand-400 dark:text-slate-950 dark:hover:bg-brand-500')}
+        disabled={busy}
+      >
+        {busy ? <Ruedita /> : <Check size={13} />} Guardar código
+      </button>
+      {error && <p className="basis-full text-xs text-danger">{error}</p>}
+    </form>
+  );
+}
+
 /** Un producto por fila, compacto: datos a la izquierda y la decisión a la derecha. */
 function ProductoFila({
   indice,
@@ -383,6 +464,7 @@ function ProductoFila({
   linea: l,
   esAdmin,
   cerrado,
+  puedeCargarCodigo,
   mostrarTipo,
   seleccionado,
   onSeleccionar,
@@ -394,6 +476,7 @@ function ProductoFila({
   linea: ReclamoLinea;
   esAdmin: boolean;
   cerrado: boolean;
+  puedeCargarCodigo: boolean;
   mostrarTipo: boolean;
   seleccionado: boolean;
   /** Presente solo si se puede decidir; la casilla solo se habilita en pendientes. */
@@ -423,6 +506,7 @@ function ProductoFila({
   };
 
   const decidido = l.DecStatus !== 'pendiente';
+  const esperaData = Boolean(l.EsperaData) && !decidido;
   // En celular, con casilla, todo lo que no es la casilla va en la 2ª columna.
   const col2 = onSeleccionar ? 'col-start-2 md:col-start-auto' : '';
   return (
@@ -442,8 +526,8 @@ function ProductoFila({
           type="checkbox"
           className="row-span-3 mt-0.5 h-4 w-4 self-start accent-brand-500 disabled:opacity-30 md:row-span-1 md:mt-0 md:self-center"
           aria-label={`Seleccionar producto ${l.Posicion}`}
-          checked={seleccionado && !decidido}
-          disabled={decidido}
+          checked={seleccionado && !decidido && !esperaData}
+          disabled={decidido || esperaData}
           onChange={onSeleccionar}
         />
       )}
@@ -455,8 +539,9 @@ function ProductoFila({
         </div>
         <div className="truncate text-xs opacity-60">
           <span className="md:hidden">#{l.Posicion} · </span>
-          <span className="font-mono">{l.CodigoBarra}</span>
-          {l.Encontrado === false && <span className="ml-1 text-danger">· no encontrado en SAP</span>}
+          {l.CodigoBarra ? <span className="font-mono">{l.CodigoBarra}</span> : <span>Sin código</span>}
+          {l.Encontrado === false && l.CodigoBarra && !esperaData && <span className="ml-1 text-danger">· no encontrado en SAP</span>}
+          {l.CodigoDataBy && <span className="ml-1">· código cargado por {l.CodigoDataByNombre || l.CodigoDataBy} (Data)</span>}
           {mostrarTipo && <span className="ml-1">· {TIPO_LABEL[l.Tipo]}</span>}
         </div>
       </div>
@@ -473,7 +558,9 @@ function ProductoFila({
       </div>
 
       <div className={cn('min-w-0', col2)}>
-        {decidido ? (
+        {esperaData ? (
+          <EsperaData token={token} linea={l} puedeCargar={puedeCargarCodigo && !cerrado} onActualizada={onActualizada} />
+        ) : decidido ? (
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs md:flex-nowrap">
             <span
               className={cn(

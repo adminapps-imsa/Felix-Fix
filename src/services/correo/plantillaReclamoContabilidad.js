@@ -46,6 +46,7 @@ export function validacionTexto(doc) {
 export const TIPO_LABEL = {
   faltante_real: 'Faltante Real',
   sobrante_real: 'Sobrante Real',
+  sobrante_no_esperado: 'Sobrante no esperado',
   diferencias: 'Diferencias',
   danos_textil: 'Daños y Averías — Textil',
   danos_perfumeria_cliente: 'Daños y Averías — Perfumería (cliente devuelve)',
@@ -104,7 +105,7 @@ export function plantillaReclamoContabilidad(r, lineas, { remitente, archivos = 
     .map(
       (l) => `
             <tr>
-              <td style="${celda}">${esc(l.DescripcionExcel || 'Sin descripción')}<div style="color:${SUAVE};word-break:break-all;">#${esc(l.Posicion)} · <span style="font-family:Consolas,monospace;">${esc(l.CodigoBarra)}</span></div></td>
+              <td style="${celda}">${esc(l.DescripcionExcel || 'Sin descripción')}<div style="color:${SUAVE};word-break:break-all;">#${esc(l.Posicion)} · <span style="font-family:Consolas,monospace;">${esc(l.CodigoBarra || 'Sin código')}</span></div></td>
               <td style="${celda}text-align:right;white-space:nowrap;">${esc(cantidad(l.Cantidad))}</td>
               <td style="${celda}"><strong style="color:${DEC_COLOR[l.DecStatus] || TEXTO};">${esc(decisionTexto(l).etiqueta)}</strong>${
                 decisionTexto(l).comentario ? `<div style="color:${SUAVE};">${esc(decisionTexto(l).comentario)}</div>` : ''
@@ -189,7 +190,7 @@ export function plantillaReclamoContabilidad(r, lineas, { remitente, archivos = 
     `PRODUCTOS (${lineas.length})`,
     ...lineas.map(
       (l) =>
-        `${l.Posicion}. ${l.CodigoBarra} · ${l.DescripcionExcel || ''} · Cant. ${cantidad(l.Cantidad)} · ${decisionTexto(l).etiqueta}${
+        `${l.Posicion}. ${l.CodigoBarra || 'Sin código'} · ${l.DescripcionExcel || ''} · Cant. ${cantidad(l.Cantidad)} · ${decisionTexto(l).etiqueta}${
           decisionTexto(l).comentario ? ` (${decisionTexto(l).comentario})` : ''
         }`
     ),

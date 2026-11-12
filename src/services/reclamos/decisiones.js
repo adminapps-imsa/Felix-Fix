@@ -34,6 +34,8 @@ function aLineaDto(l, sap) {
     // null = no se pudo validar (SAP no disponible), distinto de "no encontrado".
     Encontrado: sap.disponible ? Boolean(prod) : null,
     AutoAprobado: esAutoAprobado(l.Tipo),
+    // Sobrante no esperado que no está en SAP: espera a que Data lo cree y cargue el código.
+    EsperaData: Boolean(l.EsperaData),
   };
 }
 
@@ -55,6 +57,7 @@ async function lineaDecidible(token, posicion) {
     });
   }
   exigir(dominio.motivoNoCambiarLineas(r));
+  if (linea.EsperaData) exigir(dominio.MOTIVO_ESPERA_DATA);
   return { pos, reclamo: r };
 }
 

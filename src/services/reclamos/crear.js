@@ -14,6 +14,7 @@ import {
   FechaInvalidaError,
   detectarTipoPorMotivo,
   cantidadCedi,
+  motivoFaltantesSinDocumento,
 } from './excelParser.js';
 import { extraerImagenesExcel, borrarArchivos } from './excelImages.js';
 import { TIPOS_SOLO_NOTIFICACION, COMENTARIO_AUTO_APROBADO, USUARIO_SISTEMA, esAutoAprobado, resolverTipoLinea } from './tipos.js';
@@ -24,6 +25,7 @@ import { badRequest } from '../../utils/httpError.js';
 import { tienePermiso } from '../acceso/permisos.js';
 import { exigirDivision } from '../divisiones.js';
 import { avisarReclamo } from '../correo/avisosReclamos.js';
+import { avisarDataArticulos } from '../correo/avisoDataArticulos.js';
 import { env } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
 import { normalizarDocSap, motivoDocsRepetidos, motivoDocsEnOtrosReclamos, documentosUsados, motivoFechaLlegadaInvalida, esDevolucion, estadoAlCrear } from '../../domain/reclamo.js';
@@ -49,7 +51,7 @@ async function autocompletarProveedor(parsed) {
   let proveedor = parsed.proveedor;
   if (!proveedor) {
     // CEDI no trae proveedor: primer código de barra válido -> última OC en SAP.
-    for (const l of parsed.lineas.slice(0, 20)) {
+    for (const l of parsed.lineas.filter((x) => x.codigoBarra).slice(0, 20)) {
       proveedor = await proveedorPorCodigoBarra(l.codigoBarra);
       if (proveedor) break;
     }
@@ -97,7 +99,7 @@ export async function previsualizarExcel(multerFile) {
     throw badRequest('No se pudo leer el Excel. Verifica que no esté dañado ni protegido con contraseña.');
   }
 
-  const codigos = [...new Set(parsed.lineas.map((l) => l.codigoBarra))];
+  const codigos = [...new Set(parsed.lineas.map((l) => l.codigoBarra).filter(Boolean))];
   const [auto, sap, sucursal] = await Promise.all([
     autocompletarProveedor(parsed),
     consultarProductos(codigos),
@@ -119,11 +121,15 @@ export async function previsualizarExcel(multerFile) {
     desglose: parsed.desglose,
     lineasTotal: parsed.lineas.length,
     lineasSinMotivo: parsed.lineasSinMotivo,
+    // Plantilla CEDI por hojas: faltantes sin DOCUMENTO (no deja crear el reclamo).
+    faltantesSinDocumento: motivoFaltantesSinDocumento(parsed.faltantesSinDocumento)?.mensaje || null,
+    // Sobrante no esperado: los que no están en SAP (o sin código) se avisan a Data.
+    sobranteNoEsperado: resumenSobranteNoEsperado(parsed.lineas, sap),
     // Las filas con las columnas de la plantilla: son el formulario de productos.
     filas: parsed.lineas.slice(0, MAX_FILAS_FORM).map((l) => ({
       posicion: l.posicion,
       ...l.cedi,
-      codigoBarra: l.codigoBarra,
+      codigoBarra: l.codigoBarra || null,
       descripcion: l.descripcion,
       motivo: l.motivoTexto || null,
     })),
@@ -133,6 +139,30 @@ export async function previsualizarExcel(multerFile) {
       noEncontrados: sap.disponible ? codigos.filter((c) => !sap.productos.has(c)) : [],
     },
   };
+}
+
+/**
+ * Un sobrante no esperado espera a Data si no trae código o su código no está
+ * en SAP. Con SAP caído no se puede saber: los que traen código van a la
+ * compradora (como cualquier sobrante) y queda en el log.
+ */
+const esperaData = (l, sap) => l.tipo === 'sobrante_no_esperado' && (!l.codigoBarra || (sap.disponible && !sap.productos.has(l.codigoBarra)));
+
+function resumenSobranteNoEsperado(lineas, sap) {
+  const sne = lineas.filter((l) => l.tipo === 'sobrante_no_esperado');
+  if (!sne.length) return null;
+  return { total: sne.length, paraData: sne.filter((l) => esperaData(l, sap)).length, sapDisponible: sap.disponible };
+}
+
+/** Marca `esperaData` en los sobrantes no esperados (consulta SAP una sola vez). */
+async function marcarEsperaData(lineas) {
+  const sne = lineas.filter((l) => l.tipo === 'sobrante_no_esperado');
+  if (!sne.length) return lineas;
+  const sap = await consultarProductos(sne.map((l) => l.codigoBarra).filter(Boolean));
+  if (!sap.disponible && sne.some((l) => l.codigoBarra)) {
+    logger.warn('SAP no disponible al crear: los sobrantes no esperados con código van a la compradora sin validar en SAP');
+  }
+  return lineas.map((l) => (l.tipo === 'sobrante_no_esperado' ? { ...l, esperaData: esperaData(l, sap) } : l));
 }
 
 // ------------------------------------------------------------------
@@ -266,9 +296,12 @@ function construirLineas(parsed, tipoReclamo) {
     const auto = esAutoAprobado(tipo);
     return {
       posicion: l.posicion,
-      codigoBarra: l.codigoBarra,
+      codigoBarra: l.codigoBarra || null,
       cantidad: l.cantidad,
       descripcion: l.descripcion,
+      referencia: l.referencia || null,
+      color: l.color || null,
+      talla: l.talla || null,
       tipo,
       decStatus: auto ? 'aprobado' : 'pendiente',
       decComentario: auto ? COMENTARIO_AUTO_APROBADO : null,
@@ -315,14 +348,22 @@ export async function crear(body, multerFile, usuario, pdfs = []) {
     if (data.lineas) {
       lineas = construirLineas({ lineas: lineasDelFormulario(data.lineas) }, data.tipo);
     } else {
+      let parsed = null;
       try {
-        lineas = construirLineas(parsearPlantilla(buffer), data.tipo);
+        parsed = parsearPlantilla(buffer);
       } catch (err) {
         // Una fecha inválida es un error de validación del Excel, no "sin detalle".
         if (err instanceof FechaInvalidaError) throw badRequest(err.message, { code: 'FECHA_INVALIDA' });
         logger.warn({ err: err.message }, 'Reclamo creado sin líneas: no se pudo extraer el detalle del Excel');
       }
+      if (parsed) {
+        // Plantilla CEDI por hojas: cada faltante debe traer su documento.
+        const sinDocumento = motivoFaltantesSinDocumento(parsed.faltantesSinDocumento);
+        if (sinDocumento) throw badRequest(sinDocumento.mensaje, { code: sinDocumento.code });
+        lineas = construirLineas(parsed, data.tipo);
+      }
     }
+    lineas = await marcarEsperaData(lineas);
 
     // División: solo las del catálogo (Perfumería o Cosméticos), como están
     // escritas allí (no escribe nada).
@@ -381,8 +422,14 @@ export async function crear(body, multerFile, usuario, pdfs = []) {
     for (const a of adjuntosSap) {
       copiarPdf(reclamoArchivoPath(a.filename), { filename: a.filename, titulo: `${dto.Numero} — ${a.originalname}`, tipoDocumento: TIPO_RECLAMO });
     }
-    // Aviso a las compradoras: solo si espera su decisión (los «notificados» son solo informativos).
-    if (dto.Status === 'pendiente') avisarReclamo('nuevo', dto, { comentario: dto.Comentario, de: usuario.name || nombreUsuario(usuario) });
+    // Aviso a las compradoras: solo si hay algo que decidir ya (los «notificados» son solo
+    // informativos; los sobrantes no esperados que esperan a Data se avisan cuando Data termina).
+    if (dto.Status === 'pendiente' && Number(dto.LineasPendientes) > Number(dto.LineasEsperaData || 0)) {
+      avisarReclamo('nuevo', dto, { comentario: dto.Comentario, de: usuario.name || nombreUsuario(usuario) });
+    }
+    // A Data: los sobrantes no esperados que no están creados en SAP.
+    const paraData = lineas.filter((l) => l.esperaData);
+    if (paraData.length) avisarDataArticulos(dto, paraData, { de: usuario.name || nombreUsuario(usuario) });
     // Cerrado solo: al supervisor GOF, que ya lo tiene para enviar a contabilidad.
     if (dto.Status === 'resuelto') avisarReclamo('cerrado', dto);
     return dto;

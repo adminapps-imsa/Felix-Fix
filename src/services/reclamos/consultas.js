@@ -29,6 +29,8 @@ export function permisos(usuario) {
     puedeDevolverSupervisor: tienePermiso(usuario, 'reclamos.devolver_supervisor'),
     // Marcar «Entregado al proveedor» en los reclamos que el proveedor retira (Gof).
     puedeRegistrarRetiro: tienePermiso(usuario, 'reclamos.retiro_proveedor'),
+    // Data: carga el código de los sobrantes no esperados que creó en SAP.
+    puedeCargarCodigoSap: tienePermiso(usuario, 'reclamos.articulos_sap'),
     esAdmin: puedeDecidir,
     username: nombreUsuario(usuario),
   };

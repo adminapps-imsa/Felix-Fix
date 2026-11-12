@@ -3,6 +3,7 @@ import type { StatusReclamo, TipoReclamo } from '../../../types/reclamo';
 export const TIPOS: TipoReclamo[] = [
   'faltante_real',
   'sobrante_real',
+  'sobrante_no_esperado',
   'diferencias',
   'danos_textil',
   'danos_perfumeria_cliente',
@@ -13,6 +14,7 @@ export const TIPOS: TipoReclamo[] = [
 export const TIPO_LABEL: Record<TipoReclamo, string> = {
   faltante_real: 'Faltante Real',
   sobrante_real: 'Sobrante Real',
+  sobrante_no_esperado: 'Sobrante no esperado',
   diferencias: 'Diferencias',
   danos_textil: 'Daños y Averías — Textil',
   danos_perfumeria_cliente: 'Daños y Averías — Perfumería (cliente devuelve)',
@@ -23,6 +25,7 @@ export const TIPO_LABEL: Record<TipoReclamo, string> = {
 export const TIPO_LABEL_CORTO: Record<TipoReclamo, string> = {
   faltante_real: 'Faltante Real',
   sobrante_real: 'Sobrante Real',
+  sobrante_no_esperado: 'Sobrante no esperado',
   diferencias: 'Diferencias',
   danos_textil: 'Daños Textil',
   danos_perfumeria_cliente: 'Daños Perfumería (cliente)',
