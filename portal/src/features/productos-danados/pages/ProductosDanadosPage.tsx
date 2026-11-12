@@ -17,7 +17,7 @@ import { useProductosDanados } from '../hooks/useProductosDanados';
 import { useKpis } from '../hooks/useKpis';
 import { useTiendas } from '../hooks/useTiendas';
 import { ESTADO_LABEL } from '../../../types/productoDanado';
-import type { Estado, Filtros, ReporteProductoDanado } from '../../../types/productoDanado';
+import type { Estado, FiltroEstado, Filtros, ReporteProductoDanado } from '../../../types/productoDanado';
 
 const FILTROS_INICIALES: Filtros = { page: 1, pageSize: 20 };
 
@@ -29,7 +29,8 @@ export function ProductosDanadosPage() {
   // Quien solo trabaja una etapa (supervisor GOF, Gof, contabilidad) abre con
   // la lista filtrada en lo que le toca; puede quitar el filtro.
   const [filtros, setFiltros] = useState<Filtros>(() => {
-    if (estadoEnlace && Object.hasOwn(ESTADO_LABEL, estadoEnlace)) return { ...FILTROS_INICIALES, estado: estadoEnlace as Estado };
+    if (estadoEnlace && (Object.hasOwn(ESTADO_LABEL, estadoEnlace) || estadoEnlace === 'EnviadoProveedor'))
+      return { ...FILTROS_INICIALES, estado: estadoEnlace as FiltroEstado };
     if (puede(P.pdVer, P.pdAprobar)) return FILTROS_INICIALES;
     // Gof trabaja dos etapas (NF y Devolución aprobada): abre sin filtro, ya ve solo lo suyo.
     if (puede(P.pdNfDocumento) && puede(P.pdDocumentar)) return FILTROS_INICIALES;

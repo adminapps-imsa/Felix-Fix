@@ -119,8 +119,13 @@ export interface Tienda {
   Direccion?: string | null;
 }
 
+/** Filtro de la lista: un estado, o «EnviadoProveedor» (Pendientes ya enviados al proveedor). */
+export type FiltroEstado = Estado | 'EnviadoProveedor';
+export const ENVIADO_PROVEEDOR_LABEL = 'Enviado al proveedor';
+
 export interface Kpis {
   pendientes: number;
+  enviadosProveedor: number;
   devueltos: number;
   aprobados: number;
   rechazados: number;
@@ -141,7 +146,7 @@ export interface PaginationMeta {
 export interface Filtros {
   tienda?: string;
   motivo?: Motivo | '';
-  estado?: Estado | '';
+  estado?: FiltroEstado | '';
   fechaDesde?: string;
   fechaHasta?: string;
   q?: string;

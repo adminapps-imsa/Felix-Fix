@@ -3,7 +3,7 @@ import { Search } from 'lucide-react';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { Input, Select } from '../../../components/ui/Input';
 import { CampoFecha } from '../../../components/ui/CampoFecha';
-import { ESTADO_LABEL } from '../../../types/productoDanado';
+import { ENVIADO_PROVEEDOR_LABEL, ESTADO_LABEL } from '../../../types/productoDanado';
 import { useCatalogos } from '../hooks/useCatalogos';
 import type { Filtros, Tienda } from '../../../types/productoDanado';
 
@@ -69,11 +69,17 @@ export function FiltersBar({
 
       <Select value={filtros.estado || ''} onChange={(e) => set('estado', e.target.value as Filtros['estado'])}>
         <option value="">Todos los estados</option>
-        {Object.entries(ESTADO_LABEL).map(([value, label]) => (
+        {Object.entries(ESTADO_LABEL).map(([value, label]) => [
           <option key={value} value={value}>
             {label}
-          </option>
-        ))}
+          </option>,
+          // Justo debajo de Pendiente: es una parte de ellos.
+          value === 'Pendiente' && (
+            <option key="EnviadoProveedor" value="EnviadoProveedor">
+              {'\u00a0\u00a0'}↳ {ENVIADO_PROVEEDOR_LABEL}
+            </option>
+          ),
+        ])}
       </Select>
 
       {/* Dos columnas: cada fecha necesita su ancho para mostrar dd/mm/aaaa completo. */}

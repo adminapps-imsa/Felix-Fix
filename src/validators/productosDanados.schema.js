@@ -2,6 +2,8 @@ import { z } from 'zod';
 
 // Todos los estados de la ruta del dominio (TRANSICIONES); test/validators lo comprueba.
 export const ESTADOS = ['Pendiente', 'Devuelto', 'Aprobado', 'Rechazado', 'NFValidacion', 'EnContabilidad', 'Cerrado', 'EnProceso', 'Procesado'];
+// Filtro que no es un estado: Pendientes ya enviados al proveedor (esperando su respuesta).
+export const FILTRO_ENVIADO_PROVEEDOR = 'EnviadoProveedor';
 
 export const crearReporteSchema = z.object({
   tiendaId: z.coerce.number().int().positive(),
@@ -55,7 +57,7 @@ const tiendaId = z
 export const listarQuerySchema = z.object({
   tienda: tiendaId,
   motivo: z.string().trim().max(100).optional(),
-  estado: z.enum(ESTADOS).optional(),
+  estado: z.enum([...ESTADOS, FILTRO_ENVIADO_PROVEEDOR]).optional(),
   fechaDesde: fechaDia,
   fechaHasta: fechaDia,
   q: z.string().max(200).optional(),
