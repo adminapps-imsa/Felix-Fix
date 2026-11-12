@@ -178,6 +178,8 @@ export interface PreviewExcel {
   lineasSinMotivo: number;
   /** Plantilla CEDI por hojas: faltantes sin DOCUMENTO (no deja crear el reclamo). */
   faltantesSinDocumento?: string | null;
+  /** Hoja «Averia»: filas sin foto en el Excel (se piden en «4. Fotos y comentario»). */
+  averiasSinFoto?: { fila: number; codigoBarra: string }[];
   /** Sobrante no esperado: cuántos hay y cuántos irán a Data (no están en SAP o sin código). */
   sobranteNoEsperado?: { total: number; paraData: number; sapDisponible: boolean } | null;
   validacionCodigos: { disponible: boolean; encontrados: number | null; noEncontrados: string[] };

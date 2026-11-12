@@ -544,8 +544,79 @@ function hojasCedi(wb) {
   return encontradas;
 }
 
+// ------------------------------------------------------------------
+// Fotos por fila (hoja «Averia»): una foto cuenta si está anclada en la fila
+// (dibujo flotante) o puesta «en la celda» (Excel 365: la celda trae vm="…").
+// Se lee el XML del libro (SheetJS con bookFiles), sin otra dependencia.
+// ------------------------------------------------------------------
+
+function archivoLibro(wb, ruta) {
+  const f = wb.files?.[ruta] ?? wb.files?.[`/${ruta}`];
+  if (!f) return null;
+  const c = f.content ?? f.asNodeBuffer?.() ?? f._data ?? f;
+  if (typeof c === 'string') return c;
+  try {
+    return Buffer.from(c).toString('utf8');
+  } catch {
+    return null;
+  }
+}
+
+function resolverRuta(base, target) {
+  if (target.startsWith('/')) return target.slice(1);
+  const partes = base.split('/').slice(0, -1);
+  for (const p of target.split('/')) {
+    if (p === '..') partes.pop();
+    else if (p !== '.') partes.push(p);
+  }
+  return partes.join('/');
+}
+
+/** Relaciones de una parte del paquete: [{ id, type, ruta }]. */
+function relacionesDe(wb, parte) {
+  const i = parte.lastIndexOf('/');
+  const xml = archivoLibro(wb, `${parte.slice(0, i)}/_rels/${parte.slice(i + 1)}.rels`);
+  if (!xml) return [];
+  return [...xml.matchAll(/<Relationship\b[^>]*>/g)].map(([tag]) => ({
+    id: /\bId="([^"]*)"/.exec(tag)?.[1],
+    type: /\bType="([^"]*)"/.exec(tag)?.[1] || '',
+    ruta: resolverRuta(parte, /\bTarget="([^"]*)"/.exec(tag)?.[1] || ''),
+  }));
+}
+
+/** Números de fila (1 = primera fila de Excel) de la hoja que tienen una foto. */
+export function filasConFoto(wb, nombreHoja) {
+  const filas = new Set();
+  try {
+    const idx = wb.SheetNames.indexOf(nombreHoja);
+    const rid = wb.Workbook?.Sheets?.[idx]?.id;
+    const hoja = relacionesDe(wb, 'xl/workbook.xml').find((r) => r.id === rid)?.ruta;
+    const xml = hoja && archivoLibro(wb, hoja);
+    if (!xml) return filas;
+    // Fotos «en la celda».
+    for (const [tag] of xml.matchAll(/<c\b[^>]*>/g)) {
+      if (!/\bvm="/.test(tag)) continue;
+      const fila = /\br="[A-Z]+(\d+)"/.exec(tag)?.[1];
+      if (fila) filas.add(Number(fila));
+    }
+    // Fotos flotantes: la fila donde empieza cada imagen del dibujo.
+    for (const rel of relacionesDe(wb, hoja).filter((r) => r.type.endsWith('/drawing'))) {
+      const dibujo = archivoLibro(wb, rel.ruta) || '';
+      for (const [anclaje] of dibujo.matchAll(/<(\w+:)?(?:twoCellAnchor|oneCellAnchor)\b[\s\S]*?<\/\1?(?:twoCellAnchor|oneCellAnchor)>/g)) {
+        if (!/<(\w+:)?pic\b/.test(anclaje)) continue;
+        const fila = /<(?:\w+:)?from>[\s\S]*?<(?:\w+:)?row>(\d+)<\/(?:\w+:)?row>/.exec(anclaje)?.[1];
+        if (fila !== undefined) filas.add(Number(fila) + 1);
+      }
+    }
+  } catch {
+    // Libro raro: sin información de fotos (se pedirán en el formulario).
+  }
+  return filas;
+}
+
 /** Hoja «Averia»: unidades = suma de las columnas numéricas entre AVERIA y FOTO (p. ej. «Manchado»). */
-function lineasAveria({ filas, filaEncabezado }) {
+function lineasAveria({ filas, filaEncabezado, nombreHoja }, wb, averiasSinFoto) {
+  const conFoto = filasConFoto(wb, nombreHoja);
   const headers = (filas[filaEncabezado] || []).map(normalizar);
   const iBarcode = headers.indexOf('BARCODE');
   const iProducto = headers.indexOf('PRODUCTO');
@@ -554,9 +625,11 @@ function lineasAveria({ filas, filaEncabezado }) {
   const iFoto = buscarColumna(headers, (h) => h.startsWith('FOTO'));
   const fin = iFoto > iAveria ? iFoto : headers.length;
   const lineas = [];
-  for (const fila of filas.slice(filaEncabezado + 1)) {
+  filas.slice(filaEncabezado + 1).forEach((fila, i) => {
     const codigoBarra = aCodigoBarra(fila[iBarcode]);
-    if (!codigoBarra || !/\d/.test(codigoBarra)) continue;
+    if (!codigoBarra || !/\d/.test(codigoBarra)) return;
+    const filaExcel = filaEncabezado + i + 2;
+    if (!conFoto.has(filaExcel)) averiasSinFoto.push({ hoja: nombreHoja.trim(), fila: filaExcel, codigoBarra });
     let unidades = null;
     for (let c = iAveria + 1; c < fin; c += 1) {
       const n = aNumero(fila[c]);
@@ -579,7 +652,7 @@ function lineasAveria({ filas, filaEncabezado }) {
         documento: null,
       },
     });
-  }
+  });
   return lineas;
 }
 
@@ -657,11 +730,12 @@ function lineasSobranteNoEsperado({ filas, filaEncabezado }) {
   return lineas;
 }
 
-function parsearCediHojas(hojas) {
+function parsearCediHojas(hojas, wb) {
   const faltantesSinDocumento = [];
+  const averiasSinFoto = [];
   const lineas = [];
   for (const h of hojas) {
-    if (h.clave === 'averia') lineas.push(...lineasAveria(h));
+    if (h.clave === 'averia') lineas.push(...lineasAveria(h, wb, averiasSinFoto));
     else if (h.clave === 'diferencia') lineas.push(...lineasDiferencia(h, faltantesSinDocumento));
     else lineas.push(...lineasSobranteNoEsperado(h));
   }
@@ -690,6 +764,7 @@ function parsearCediHojas(hojas) {
     departamento: null,
     marca: null,
     faltantesSinDocumento,
+    averiasSinFoto,
     lineas,
   };
 }
@@ -727,7 +802,8 @@ function resumirTipos(lineas) {
 /** Lanza si el buffer no es un libro de Excel legible. */
 export function leerLibro(buffer) {
   // sheetRows: no carga filas más allá del tope (ver MAX_FILAS_LECTURA).
-  return XLSX.read(buffer, { type: 'buffer', cellDates: true, sheetRows: MAX_FILAS_LECTURA });
+  // bookFiles: deja leer el XML del libro (fotos por fila en la hoja «Averia»).
+  return XLSX.read(buffer, { type: 'buffer', cellDates: true, sheetRows: MAX_FILAS_LECTURA, bookFiles: true });
 }
 
 /**
@@ -741,7 +817,7 @@ export function parsearPlantilla(buffer) {
   // Plantilla CEDI por hojas (Averia / Diferencia / Sobrante NO esperado).
   const hojas = hojasCedi(wb);
   if (hojas.length) {
-    const { hojaNombre, ...resultado } = parsearCediHojas(hojas);
+    const { hojaNombre, ...resultado } = parsearCediHojas(hojas, wb);
     resultado.lineas = resultado.lineas.map((l, i) => ({ posicion: i + 1, ...l }));
     return { hoja: hojaNombre, ...resultado, ...resumirTipos(resultado.lineas) };
   }
