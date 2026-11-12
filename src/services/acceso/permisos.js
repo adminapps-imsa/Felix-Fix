@@ -32,6 +32,7 @@ export const PERMISOS = [
   { codigo: 'reclamos.devolver_supervisor', modulo: 'Reclamos', nombre: 'Devolver al creador (supervisor GOF)', descripcion: 'Devolver a quien lo creó un reclamo con algo mal (adjunto, datos o productos), con el motivo, en cualquier estado mientras no se haya enviado a contabilidad. Al reenviarlo vuelve al estado que tenía (supervisor GOF).' },
   { codigo: 'reclamos.retiro_proveedor', modulo: 'Reclamos', nombre: 'Registrar entrega al proveedor', descripcion: 'En los reclamos que el proveedor retira, marcar «Entregado al proveedor» con la foto y el día (Gof). Hasta entonces el reclamo no queda terminado.' },
   { codigo: 'reclamos.solo_tienda', modulo: 'Reclamos', nombre: 'Solo reclamos de Tienda', descripcion: 'Al crear un reclamo solo puede elegir Tienda, no CEDI (Gof).' },
+  { codigo: 'reclamos.solo_cedi', modulo: 'Reclamos', nombre: 'Solo reclamos de CEDI', descripcion: 'Al crear un reclamo solo puede elegir CEDI, no Tienda (Torre de Control).' },
   { codigo: 'reclamos.articulos_sap', modulo: 'Reclamos', nombre: 'Crear artículos en SAP (Data)', descripcion: 'Recibir por correo los sobrantes no esperados de CEDI que aprobó la compradora y no están creados en SAP y, ya creados, cargar su código de barras en el reclamo para que Torre de Control haga el 912 (Data).' },
   { codigo: 'reclamos.eliminar', modulo: 'Reclamos', nombre: 'Eliminar', descripcion: 'Eliminar reclamos y sus adjuntos.' },
 ];
@@ -44,6 +45,6 @@ export const tienePermiso = (user, permiso) => Boolean(user?.permisos?.has(permi
 /** Los que se pueden dar a un rol desde Configuración. */
 export const ASIGNABLES = new Set(PERMISOS.map((p) => p.codigo));
 /** Los que quitan opciones en vez de darlas: el super administrador no los lleva. */
-export const RESTRICCIONES = new Set(['reclamos.solo_tienda', 'productos_danados.solo_propios']);
+export const RESTRICCIONES = new Set(['reclamos.solo_tienda', 'reclamos.solo_cedi', 'productos_danados.solo_propios']);
 /** Todos (los del super administrador). */
 export const CODIGOS = new Set([...[...ASIGNABLES].filter((p) => !RESTRICCIONES.has(p)), PERMISO_CONFIGURACION]);
