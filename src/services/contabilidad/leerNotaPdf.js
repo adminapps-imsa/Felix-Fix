@@ -99,11 +99,16 @@ function columnas(lineas) {
   return { yCabecera: cab?.y ?? null, desde: desc - 15, hasta: cant - 5 };
 }
 
-/** Filas de productos de una página. */
+/**
+ * Filas de productos de una página. `continuacion`: texto de la columna
+ * Descripción antes de la primera fila (la descripción del último producto
+ * de la página anterior que siguió en esta: «…DARK» | «SAPPHIR, XL»).
+ */
 function filasDePagina(lineas, pagina) {
   const col = columnas(lineas);
   const filas = [];
   let actual = null;
+  const continuacion = [];
 
   const cerrar = () => {
     if (actual && actual.cantidad !== null && actual.valor !== null) {
@@ -125,6 +130,7 @@ function filasDePagina(lineas, pagina) {
       cerrar();
       actual = { material: l.items[0].str.trim(), descripcion: '', cantidad: null, valor: null, pagina };
     } else if (!actual) {
+      if (!filas.length && l.items.every((it) => it.x >= col.desde && it.x < col.hasta)) continuacion.push(l.texto);
       continue;
     }
     for (const [k, it] of l.items.entries()) {
@@ -160,7 +166,9 @@ function filasDePagina(lineas, pagina) {
     }
   }
   cerrar();
-  return filas.map(({ numeros, ...f }) => f);
+  const resultado = filas.map(({ numeros, ...f }) => f);
+  resultado.continuacion = limpiar(continuacion.join(' '));
+  return resultado;
 }
 
 /** Primer valor de la cabecera que coincide con `re` (grupo 1), en todo el texto. */
@@ -216,6 +224,11 @@ export async function leerNotaPdf(rutaPdf) {
       // misma hoja) no se suma dos veces. Filas iguales DENTRO de una página
       // son productos distintos y se conservan.
       const deLaPagina = filasDePagina(lineas, i);
+      // La descripción del último producto de la página anterior siguió en esta.
+      if (deLaPagina.continuacion && filas.length) {
+        const ultima = filas[filas.length - 1];
+        filas[filas.length - 1] = { ...ultima, descripcion: limpiar(`${ultima.descripcion} ${deLaPagina.continuacion}`) };
+      }
       const firma = JSON.stringify(deLaPagina.map(({ pagina: _p, ...f }) => f));
       if (deLaPagina.length && paginasVistas.has(firma)) continue;
       paginasVistas.add(firma);

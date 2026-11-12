@@ -19,7 +19,8 @@ import {
 } from './excelParser.js';
 import { extraerImagenesExcel, borrarArchivos } from './excelImages.js';
 import { TIPOS_SOLO_NOTIFICACION, COMENTARIO_AUTO_APROBADO, USUARIO_SISTEMA, esAutoAprobado, resolverTipoLinea } from './tipos.js';
-import { consultarProductos, proveedorPorCodigoBarra } from '../sapProductosService.js';
+import { consultarProductos, proveedorPorCodigoBarra, materialesDeCodigos } from '../sapProductosService.js';
+import { faltantesContra911 } from '../contabilidad/validarDocumento.js';
 import { leerNotaPdf } from '../contabilidad/leerNotaPdf.js';
 import { crearReclamoSchema } from '../../validators/reclamos.schema.js';
 import { badRequest } from '../../utils/httpError.js';
@@ -28,7 +29,7 @@ import { exigirDivision } from '../divisiones.js';
 import { avisarReclamo } from '../correo/avisosReclamos.js';
 import { env } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
-import { normalizarDocSap, motivoDocsRepetidos, motivoDocsEnOtrosReclamos, documentosUsados, motivoFechaLlegadaInvalida, esDevolucion, estadoAlCrear } from '../../domain/reclamo.js';
+import { normalizarDocSap, motivoDocsRepetidos, motivoDocsEnOtrosReclamos, documentosUsados, motivoFechaLlegadaInvalida, esDevolucion, estadoAlCrear, motivoFaltantesNoEn911 } from '../../domain/reclamo.js';
 import { diaPanama } from '../../domain/tablero.js';
 import { tipoReal, tipoRealDeArchivo, nombreUsuario, detalle, exigir, conDocumentos } from './comun.js';
 import { reclamoArchivoPath } from '../../config/almacenamiento.js';
@@ -198,16 +199,22 @@ export async function previsualizarPdfSap(multerFile) {
 
 /**
  * Cada documento SAP del reclamo debe venir con su PDF, y cada PDF debe traer
- * impreso el número de uno de esos documentos. Devuelve los adjuntos a guardar.
+ * impreso el número de uno de esos documentos. Devuelve los adjuntos a guardar
+ * y los productos de los PDF (`filas`; `legibles` false si alguno no se leyó).
  */
 async function validarPdfsSap(docs, pdfs, usuario) {
   const esperados = new Map(docs.map((d) => [normalizarDocSap(d), d]));
   const cubiertos = new Set();
   const adjuntos = [];
+  const filas = [];
+  let legibles = true;
   for (const f of pdfs) {
     const nombre = path.basename(f.originalname || f.filename).slice(0, 255);
     if ((await tipoRealDeArchivo(f)) !== 'pdf') throw badRequest(`«${nombre}» no es un PDF válido.`);
-    const numero = await numeroDocumentoPdf(f.path);
+    const nota = await leerNotaPdf(f.path);
+    const numero = nota.numeroDocumento ? String(nota.numeroDocumento).trim() : null;
+    if (nota.legible) filas.push(...nota.filas);
+    else legibles = false;
     if (!numero) throw badRequest(`No se encontró el número de documento SAP en «${nombre}». Sube el PDF del documento de SAP.`);
     const clave = normalizarDocSap(numero);
     if (!esperados.has(clave)) {
@@ -231,7 +238,27 @@ async function validarPdfsSap(docs, pdfs, usuario) {
       { code: 'FALTAN_PDF_SAP', faltan }
     );
   }
-  return adjuntos;
+  return { adjuntos, filas, legibles };
+}
+
+/**
+ * Los faltantes deben estar en los 911 subidos (mismo producto y cantidad).
+ * Si algún PDF no se pudo leer, no se valida (no se frena el reclamo por eso).
+ * El material SAP solo se busca para los que no aparecen por descripción.
+ */
+async function exigirFaltantesEn911(lineas, pdfsSap) {
+  const faltantes = lineas.filter((l) => l.tipo === 'faltante_real');
+  if (!faltantes.length || !pdfsSap.filas.length || !pdfsSap.legibles) return;
+  let res = faltantesContra911(faltantes, pdfsSap.filas);
+  if (res.noEstan.length || res.sinVerificar.length || res.cantidadDistinta.length) {
+    const sap = await materialesDeCodigos(faltantes.map((l) => l.codigoBarra));
+    res = faltantesContra911(faltantes, pdfsSap.filas, sap.materiales);
+  }
+  const motivo = motivoFaltantesNoEn911(res);
+  if (motivo) {
+    const { mensaje, ...extra } = motivo;
+    throw badRequest(mensaje, extra);
+  }
 }
 
 // ------------------------------------------------------------------
@@ -381,7 +408,10 @@ export async function crear(body, multerFile, usuario, pdfs = []) {
     if (data.division) data.division = await exigirDivision(data.division);
 
     // Un PDF por cada documento SAP, con el mismo número impreso.
-    const adjuntosSap = await validarPdfsSap(docsSap, pdfs, usuario);
+    const pdfsSap = await validarPdfsSap(docsSap, pdfs, usuario);
+    const adjuntosSap = pdfsSap.adjuntos;
+    // Los faltantes del Excel deben estar en el 911.
+    await exigirFaltantesEn911(lineas, pdfsSap);
 
     // Motivo: si es un valor nuevo queda guardado en su catálogo. Va al final,
     // después de validar el Excel y los PDF, para no registrar valores de un
