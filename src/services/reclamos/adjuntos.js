@@ -29,6 +29,12 @@ import {
 import { permisos } from './consultas.js';
 
 /**
+ * Agrega adjuntos aunque el reclamo ya esté cerrado: Torre de Control
+ * («Adjuntar en cualquier reclamo») y quien lo envía a contabilidad (sube el 912).
+ */
+const agregaCerrado = (usuario) => tienePermiso(usuario, 'reclamos.adjuntar') || tienePermiso(usuario, 'reclamos.enviar_contabilidad');
+
+/**
  * Quien decide o tiene "Adjuntar en cualquier reclamo" (Torre de Control), o
  * quien creó el reclamo (sube sus adjuntos justo después de crearlo). Y solo
  * mientras el reclamo siga abierto y sin enviar a contabilidad. Se usa
@@ -41,7 +47,7 @@ export async function verificarPuedeAdjuntar(token, usuario) {
   if (!permisos(usuario).puedeAdjuntar && !esCreador) {
     throw forbidden('Solo quien creó el reclamo, quien puede aprobarlo o quien tiene el permiso "Adjuntar en cualquier reclamo" puede adjuntar archivos.');
   }
-  asegurarModificable(r, 'adjuntos', { agregaTorreControl: tienePermiso(usuario, 'reclamos.adjuntar') });
+  asegurarModificable(r, 'adjuntos', { agregaTorreControl: agregaCerrado(usuario) });
   return r;
 }
 
@@ -118,7 +124,7 @@ export async function agregarAdjunto(token, multerFile, usuario) {
       if (!nota?.notaAprobada) {
         throw conflict(`Este archivo ya está en el reclamo («${repetido.nombre}»). No se sube dos veces.`, { code: 'ARCHIVO_REPETIDO' });
       }
-      const agregaTorreControl = tienePermiso(usuario, 'reclamos.adjuntar');
+      const agregaTorreControl = agregaCerrado(usuario);
       const res = await repo.modificarArchivos(token, (a, estado) => {
         asegurarModificable(estado, 'adjuntos', { agregaTorreControl });
         if (!a.adjuntos.some((x) => x.filename === repetido.adjunto.filename)) return null;
@@ -170,7 +176,7 @@ export async function agregarAdjunto(token, multerFile, usuario) {
     }
 
     // Se vuelve a comprobar bajo el bloqueo de la fila (envío/cierre en paralelo).
-    const agregaTorreControl = tienePermiso(usuario, 'reclamos.adjuntar');
+    const agregaTorreControl = agregaCerrado(usuario);
     const res = await repo.modificarArchivos(token, (a, estado) => {
       asegurarModificable(estado, 'adjuntos', { agregaTorreControl });
       return { imagenes: [...a.imagenes, ...imagenes], adjuntos: [...a.adjuntos, adj] };
