@@ -155,7 +155,6 @@ export function NuevoReclamoForm({
   // Último estado dibujado, para leerlo tras un await (procesarExcel) sin hacerlo dentro de un updater.
   const camposRef = useRef(campos);
   camposRef.current = campos;
-  const idDivision = useId();
   const [tipo, setTipo] = useState<TipoReclamo | ''>('');
   const [modoManual, setModoManual] = useState(false);
   // «¿El proveedor va a retirar el producto?»: obligatoria y sin respuesta marcada.
@@ -190,10 +189,9 @@ export function NuevoReclamoForm({
   };
 
   const [catalogos, setCatalogos] = useState<CatalogosReclamo | null>(null);
-  // Falló /catalogos: los demás campos quedan como texto libre, pero la división
-  // (solo se elige, no se escribe) necesita el catálogo: se ofrece reintentar.
-  const [errorCatalogos, setErrorCatalogos] = useState(false);
-  const [intentoCatalogos, setIntentoCatalogos] = useState(0);
+  // Falló /catalogos: los campos quedan como texto libre.
+  const [, setErrorCatalogos] = useState(false);
+  const [intentoCatalogos] = useState(0);
   useEffect(() => {
     let vivo = true;
     setErrorCatalogos(false);
@@ -414,7 +412,6 @@ export function NuevoReclamoForm({
     !campos.fechaRegistro && 'Fecha',
     !campos.fechaLlegadaMercancia && 'Fecha de llegada de la mercancía',
     campos.fechaLlegadaMercancia > hoyIso() && 'Fecha de llegada (no puede ser posterior a hoy)',
-    campos.origen === 'cedi' && !campos.division.trim() && 'División',
     !campos.proveedor.trim() && 'Proveedor',
     !campos.compradora.trim() && 'Compradora',
     !campos.mundo.trim() && 'Mundo',
@@ -474,7 +471,8 @@ export function NuevoReclamoForm({
       form.set('tipo', tipo);
       Object.entries(campos).forEach(([k, v]) => form.set(k, v));
       if (campos.origen !== 'tienda') form.set('sucursal', '');
-      if (campos.origen !== 'cedi') form.set('division', '');
+      // División: ya no se usa en el formulario (ni en CEDI).
+      form.set('division', '');
       const docs = sapDocs.map((d) => d.trim());
       form.set('sapDoc1', docs[0] || '');
       form.set('sapDoc2', docs[1] || '');
@@ -571,19 +569,6 @@ export function NuevoReclamoForm({
   const campoMarca = (
     <Field label="Marca" tag={tag('marca')} resaltar={autos.has('marca')}>
       <Combobox required value={campos.marca} onChange={(v) => set('marca', v)} opciones={cat.marcas} sugeridas={relacion?.marcas} maxLength={100} />
-    </Field>
-  );
-  const campoDivision = (
-    <Field label="División" grupo idEtiqueta={idDivision} tag={tag('division')} resaltar={autos.has('division')}>
-      <SelectorOpciones
-        required
-        value={campos.division}
-        onChange={(v) => set('division', v)}
-        opciones={cat.divisiones}
-        etiquetaId={idDivision}
-        error={errorCatalogos ? 'No se pudieron cargar las divisiones.' : null}
-        onReintentar={() => setIntentoCatalogos((n) => n + 1)}
-      />
     </Field>
   );
   const campoFactura = (label: string) => (
@@ -797,7 +782,6 @@ export function NuevoReclamoForm({
                 <>
                   {campoProveedor}
                   {campoMarca}
-                  {campoDivision}
                   {campoFactura('Factura / Embarque')}
                 </>
               ) : (

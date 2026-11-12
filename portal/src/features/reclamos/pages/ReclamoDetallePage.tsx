@@ -192,7 +192,7 @@ export function ReclamoDetallePage() {
             {reclamo.Motivo && <Dato label="Motivo" value={reclamo.Motivo} />}
             <Dato label="Origen" value={reclamo.Origen === 'cedi' ? 'CEDI' : 'Tienda'} />
             {reclamo.Origen === 'tienda' && <Dato label="Sucursal" value={reclamo.Sucursal} />}
-            {reclamo.Origen === 'cedi' && <Dato label="División" value={reclamo.Division} />}
+            {reclamo.Origen === 'cedi' && reclamo.Division && <Dato label="División" value={reclamo.Division} />}
             <Dato label="Fecha de registro" value={formatFechaCorta(reclamo.FechaRegistro)} />
             <Dato label="Llegada de la mercancía" value={formatFechaCorta(reclamo.FechaLlegadaMercancia)} />
           </SeccionDatos>

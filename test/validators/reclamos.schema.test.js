@@ -45,10 +45,10 @@ test('crear: campos obligatorios con su mensaje', () => {
   }
 });
 
-test('crear: tienda exige sucursal y CEDI exige división', () => {
+test('crear: tienda exige sucursal; CEDI ya no pide división', () => {
   assert.ok(mensajes(crearReclamoSchema.safeParse({ ...base, sucursal: '' })).includes('La sucursal es obligatoria para reclamos de tienda.'));
   const cedi = { ...base, origen: 'cedi', sucursal: '' };
-  assert.ok(mensajes(crearReclamoSchema.safeParse(cedi)).includes('La división es obligatoria para reclamos de CEDI.'));
+  assert.equal(crearReclamoSchema.safeParse(cedi).success, true);
   assert.equal(crearReclamoSchema.safeParse({ ...cedi, division: 'Perfumería' }).success, true);
 });
 

@@ -11,7 +11,6 @@ import * as dominio from '../../domain/reclamo.js';
 import { diaPanama } from '../../domain/tablero.js';
 import { corregirDatosSchema, corregirLineasSchema } from '../../validators/reclamos.schema.js';
 import { esAutoAprobado, COMENTARIO_AUTO_APROBADO, USUARIO_SISTEMA } from './tipos.js';
-import { exigirDivision } from '../divisiones.js';
 import { tienePermiso, PERMISO_CONFIGURACION } from '../acceso/permisos.js';
 import { leerNotaPdf } from '../contabilidad/leerNotaPdf.js';
 import { reclamoArchivoPath } from '../../config/almacenamiento.js';
@@ -113,7 +112,8 @@ export async function corregirDatos(token, body, usuario) {
   const d = result.data;
 
   if (r.Origen === 'tienda' && !d.sucursal) throw badRequest('La sucursal es obligatoria para reclamos de tienda.');
-  const division = r.Origen === 'cedi' ? await exigirDivision(d.division) : '';
+  // División: ya no se pide (2026-11-12); se conserva la que tenía el reclamo.
+  const division = r.Origen === 'cedi' ? r.Division || '' : '';
   const fechaLlegada = dominio.motivoFechaLlegadaInvalida(d.fechaLlegadaMercancia, diaPanama(new Date()));
   if (fechaLlegada) throw badRequest(fechaLlegada.mensaje, { code: fechaLlegada.code });
 

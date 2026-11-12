@@ -7,7 +7,6 @@ import { useAvisos } from '../../../components/ui/Avisos';
 import { Field, Input, Textarea } from '../../../components/ui/Input';
 import { Combobox } from '../../../components/ui/Combobox';
 import { CampoFecha } from '../../../components/ui/CampoFecha';
-import { SelectorOpciones } from '../../../components/ui/SelectorOpciones';
 import { ApiError } from '../../../api/client';
 import * as apiReclamos from '../../../api/reclamos';
 import { formatFecha } from '../../../lib/formatters';
@@ -292,7 +291,8 @@ function ReenviarModal({ reclamo, onClose, onReenviado }: { reclamo: Reclamo; on
 function EditarDatosModal({ reclamo, onClose, onGuardado }: { reclamo: Reclamo; onClose: () => void; onGuardado: (r: Reclamo) => void }) {
   const tiendas = useTiendas();
   const [cat, setCat] = useState<CatalogosReclamo | null>(null);
-  const [errorCat, setErrorCat] = useState(false);
+  // Si el catálogo no carga, los campos quedan como texto libre.
+  const [, setErrorCat] = useState(false);
   const [campos, setCampos] = useState({
     sucursal: reclamo.Sucursal || '',
     numeroEmbarqueFactura: reclamo.NumeroEmbarqueFactura || '',
@@ -344,19 +344,7 @@ function EditarDatosModal({ reclamo, onClose, onGuardado }: { reclamo: Reclamo; 
           «Corregir productos».
         </p>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {cedi ? (
-            <Field label="División" grupo idEtiqueta="corregir-division">
-              <SelectorOpciones
-                required
-                etiquetaId="corregir-division"
-                value={campos.division}
-                onChange={(v) => set('division', v)}
-                opciones={opciones('divisiones')}
-                error={errorCat ? "No se pudieron cargar las divisiones." : null}
-                onReintentar={cargarCatalogos}
-              />
-            </Field>
-          ) : (
+          {cedi ? null : (
             <Field label="Sucursal">
               <Input list="corregir-tiendas" required value={campos.sucursal} onChange={(e) => set('sucursal', e.target.value)} maxLength={150} />
               <datalist id="corregir-tiendas">
