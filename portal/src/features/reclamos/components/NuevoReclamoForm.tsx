@@ -455,6 +455,7 @@ export function NuevoReclamoForm({
     excel && !parsing && !tipo && 'Selecciona el tipo de reclamo.',
     desajuste && 'El tipo elegido no coincide con lo que indica el Excel.',
     preview?.faltantesSinDocumento,
+    preview?.hojasNoReconocidas,
     fotosQueFaltan > 0 &&
       `${averiasSinFoto.length === 1 ? 'La avería' : `Las ${averiasSinFoto.length} averías`} del Excel sin foto ${averiasSinFoto.length === 1 ? 'necesita su foto' : 'necesitan su foto'}: ${fotosQueFaltan === 1 ? 'falta 1 foto' : `faltan ${fotosQueFaltan} fotos`} en «4. Fotos y comentario».`,
     ...[...new Set(docsRepetidos)].map((d) => `El documento SAP ${d} está escrito más de una vez.`),
@@ -689,6 +690,9 @@ export function NuevoReclamoForm({
               )}
               {preview && preview.validacionCodigos.noEncontrados.length > 0 && (
                 <p className="rounded-lg bg-warning/10 px-2 py-1 font-mono text-xs">{preview.validacionCodigos.noEncontrados.join(', ')}</p>
+              )}
+              {preview?.hojasNoReconocidas && (
+                <p className="rounded-lg bg-danger/10 px-2.5 py-1.5 text-xs text-danger">{preview.hojasNoReconocidas}</p>
               )}
               {preview?.faltantesSinDocumento && (
                 <p className="rounded-lg bg-danger/10 px-2.5 py-1.5 text-xs text-danger">{preview.faltantesSinDocumento} Corrige el Excel y vuelve a subirlo.</p>

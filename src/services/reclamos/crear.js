@@ -15,6 +15,7 @@ import {
   detectarTipoPorMotivo,
   cantidadCedi,
   motivoFaltantesSinDocumento,
+  motivoHojasNoReconocidas,
 } from './excelParser.js';
 import { extraerImagenesExcel, borrarArchivos } from './excelImages.js';
 import { TIPOS_SOLO_NOTIFICACION, COMENTARIO_AUTO_APROBADO, USUARIO_SISTEMA, esAutoAprobado, resolverTipoLinea } from './tipos.js';
@@ -122,6 +123,8 @@ export async function previsualizarExcel(multerFile) {
     lineasSinMotivo: parsed.lineasSinMotivo,
     // Plantilla CEDI por hojas: faltantes sin DOCUMENTO (no deja crear el reclamo).
     faltantesSinDocumento: motivoFaltantesSinDocumento(parsed.faltantesSinDocumento)?.mensaje || null,
+    // Hojas de la plantilla CEDI con datos pero sin sus títulos: no deja crear (se perderían sus productos).
+    hojasNoReconocidas: motivoHojasNoReconocidas(parsed.hojasIgnoradas)?.mensaje || null,
     // Hoja «Averia»: filas sin foto en el Excel. El formulario pide subir sus fotos en el paso 4.
     averiasSinFoto: (parsed.averiasSinFoto || []).map(({ fila, codigoBarra }) => ({ fila, codigoBarra })),
     // Sobrante no esperado: los que no están en SAP (o sin código) se avisan a Data.
@@ -365,6 +368,8 @@ export async function crear(body, multerFile, usuario, pdfs = []) {
         // Plantilla CEDI por hojas: cada faltante debe traer su documento.
         const sinDocumento = motivoFaltantesSinDocumento(parsed.faltantesSinDocumento);
         if (sinDocumento) throw badRequest(sinDocumento.mensaje, { code: sinDocumento.code });
+        const hojaMal = motivoHojasNoReconocidas(parsed.hojasIgnoradas);
+        if (hojaMal) throw badRequest(hojaMal.mensaje, { code: hojaMal.code });
         lineas = construirLineas(parsed, data.tipo);
       }
     }

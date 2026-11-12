@@ -516,32 +516,65 @@ function parsearTienda(filas, filaEncabezado) {
 //   Sobrante NO esperado -> CODIGO (opcional), REFERENCIA, COLOR, TALLA, CANTIDAD.
 // ------------------------------------------------------------------
 
+/** Columna de referencia en «Sobrante NO esperado»: REFERENCIA, ESTILO, MODELO o REF. */
+const esColumnaReferencia = (h) => h.startsWith('REFERENCIA') || h.startsWith('ESTILO') || h.startsWith('MODELO') || h === 'REF' || h === 'REF.';
+
 const HOJAS_CEDI = [
-  { clave: 'averia', nombre: (n) => n.startsWith('AVERIA'), encabezado: (h) => h.includes('BARCODE') && h.some((x) => x.startsWith('AVERIA')) },
-  { clave: 'diferencia', nombre: (n) => n.startsWith('DIFERENCIA'), encabezado: (h) => h.includes('BARCODE') && h.some((x) => x.startsWith('DIFERENCIA')) },
+  {
+    clave: 'averia',
+    nombre: (n) => n.startsWith('AVERIA'),
+    encabezado: (h) => h.includes('BARCODE') && h.some((x) => x.startsWith('AVERIA')),
+    columnas: 'BARCODE y AVERIA',
+  },
+  {
+    clave: 'diferencia',
+    nombre: (n) => n.startsWith('DIFERENCIA'),
+    encabezado: (h) => h.includes('BARCODE') && h.some((x) => x.startsWith('DIFERENCIA')),
+    columnas: 'BARCODE y DIFERENCIA',
+  },
   {
     clave: 'sobrante',
     nombre: (n) => n.includes('SOBRANTE') && n.includes('NO ESPERADO'),
-    encabezado: (h) => h.some((x) => x.startsWith('REFERENCIA')) && h.some((x) => x.startsWith('CANTIDAD')),
+    encabezado: (h) => h.some((x) => esColumnaReferencia(x) || x.startsWith('CODIGO')) && h.some((x) => x.startsWith('CANTIDAD')),
+    // Para el aviso cuando la hoja está pero no se reconoce.
+    columnas: 'CANTIDAD y REFERENCIA (o ESTILO / CÓDIGO)',
   },
 ];
 
-/** Hojas de la plantilla CEDI por hojas que trae el libro: [{ clave, nombreHoja, filas, filaEncabezado }]. */
-function hojasCedi(wb) {
+/**
+ * Hojas de la plantilla CEDI por hojas que trae el libro: [{ clave, nombreHoja, filas, filaEncabezado }].
+ * Las que tienen el nombre de una hoja de la plantilla pero no sus títulos van
+ * a `ignoradas` ([{ hoja, columnas }]) para avisar, en vez de perderlas sin decir nada.
+ */
+function hojasCedi(wb, ignoradas = []) {
   const encontradas = [];
   for (const nombreHoja of wb.SheetNames) {
     const def = HOJAS_CEDI.find((d) => d.nombre(normalizar(nombreHoja)));
     if (!def || encontradas.some((e) => e.clave === def.clave)) continue;
     const filas = filasDeHoja(wb.Sheets[nombreHoja]);
     const limite = Math.min(filas.length, 15);
+    let reconocida = false;
     for (let r = 0; r < limite; r += 1) {
       if (def.encabezado((filas[r] || []).map(normalizar))) {
         encontradas.push({ clave: def.clave, nombreHoja, filas, filaEncabezado: r });
+        reconocida = true;
         break;
       }
     }
+    // Hoja con datos y el nombre de la plantilla, pero sin sus títulos.
+    if (!reconocida && filas.some((f) => !esVacia(f))) ignoradas.push({ hoja: nombreHoja.trim(), columnas: def.columnas });
   }
   return encontradas;
+}
+
+/** Aviso para las hojas de la plantilla CEDI que no se pudieron leer (null si no hay). */
+export function motivoHojasNoReconocidas(ignoradas) {
+  if (!ignoradas?.length) return null;
+  const lista = ignoradas.map((h) => `«${h.hoja}» (necesita las columnas ${h.columnas})`).join('; ');
+  return {
+    mensaje: `No se pudo leer ${ignoradas.length === 1 ? 'la hoja' : 'las hojas'} ${lista}. Revisa los títulos de la primera fila y vuelve a subir el Excel.`,
+    code: 'HOJA_NO_RECONOCIDA',
+  };
 }
 
 // ------------------------------------------------------------------
@@ -702,7 +735,7 @@ function lineasDiferencia({ filas, filaEncabezado, nombreHoja }, faltantesSinDoc
 function lineasSobranteNoEsperado({ filas, filaEncabezado }) {
   const headers = (filas[filaEncabezado] || []).map(normalizar);
   const iCodigo = buscarColumna(headers, (h) => h.startsWith('CODIGO') || h === 'BARCODE');
-  const iReferencia = buscarColumna(headers, (h) => h.startsWith('REFERENCIA'));
+  const iReferencia = buscarColumna(headers, esColumnaReferencia);
   const iColor = buscarColumna(headers, (h) => h.startsWith('COLOR'));
   const iTalla = buscarColumna(headers, (h) => h.startsWith('TALLA'));
   const iCantidad = buscarColumna(headers, (h) => h.startsWith('CANTIDAD'));
@@ -815,9 +848,11 @@ export function parsearPlantilla(buffer) {
   const wb = leerLibro(buffer);
 
   // Plantilla CEDI por hojas (Averia / Diferencia / Sobrante NO esperado).
-  const hojas = hojasCedi(wb);
-  if (hojas.length) {
+  const hojasIgnoradas = [];
+  const hojas = hojasCedi(wb, hojasIgnoradas);
+  if (hojas.length || hojasIgnoradas.length) {
     const { hojaNombre, ...resultado } = parsearCediHojas(hojas, wb);
+    resultado.hojasIgnoradas = hojasIgnoradas;
     resultado.lineas = resultado.lineas.map((l, i) => ({ posicion: i + 1, ...l }));
     return { hoja: hojaNombre, ...resultado, ...resumirTipos(resultado.lineas) };
   }

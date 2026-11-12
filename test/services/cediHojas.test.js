@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as XLSX from 'xlsx';
-import { parsearPlantilla, detectarTipoPorMotivo, motivoFaltantesSinDocumento, filasConFoto } from '../../src/services/reclamos/excelParser.js';
+import { parsearPlantilla, detectarTipoPorMotivo, motivoFaltantesSinDocumento, filasConFoto, motivoHojasNoReconocidas } from '../../src/services/reclamos/excelParser.js';
 import { TIPOS, esAutoAprobado, TIPOS_SOBRANTE } from '../../src/services/reclamos/tipos.js';
 import { motivoNoDecidir, motivoNoEnviarContabilidad } from '../../src/domain/reclamo.js';
 import { codigoDataSchema, corregirLineasSchema, decisionLineaSchema } from '../../src/validators/reclamos.schema.js';
@@ -194,4 +194,26 @@ test('fotos «en la celda» (vm) cuentan por su fila', () => {
     },
   };
   assert.deepEqual([...filasConFoto(wb, 'Averia')], [2]);
+});
+
+test('Sobrante NO esperado: la columna ESTILO sirve como referencia (formato SUGAR LIPS)', () => {
+  const r = parsearPlantilla(
+    libro(['Sobrante NO esperado', [['CODIGO DE BARRA', 'ESTILO', 'COLOR', 'TALLA', 'CANTIDAD'], [194763529455, 'STT19391A', 'CHOCO', 'XL', 1], ['', 'STP7685', 'RUST', 'XL', 1]]])
+  );
+  assert.deepEqual(
+    r.lineas.map((l) => [l.codigoBarra, l.referencia, l.descripcion, l.cantidad]),
+    [
+      ['194763529455', 'STT19391A', 'STT19391A, CHOCO, XL', 1],
+      [null, 'STP7685', 'STP7685, RUST, XL', 1],
+    ]
+  );
+  assert.deepEqual(r.hojasIgnoradas, []);
+});
+
+test('hoja de la plantilla CEDI con datos pero sin sus títulos: se avisa y no se pierde en silencio', () => {
+  const r = parsearPlantilla(libro(DIFERENCIA, ['Sobrante NO esperado', [['ARTICULO', 'UNIDADES'], ['STP7685', 1]]]));
+  assert.deepEqual(r.hojasIgnoradas, [{ hoja: 'Sobrante NO esperado', columnas: 'CANTIDAD y REFERENCIA (o ESTILO / CÓDIGO)' }]);
+  const m = motivoHojasNoReconocidas(r.hojasIgnoradas);
+  assert.equal(m.code, 'HOJA_NO_RECONOCIDA');
+  assert.match(m.mensaje, /No se pudo leer la hoja «Sobrante NO esperado»/);
 });
