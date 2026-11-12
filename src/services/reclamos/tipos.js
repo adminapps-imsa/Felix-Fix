@@ -6,7 +6,7 @@ export const TIPOS = [
   'danos_textil',
   'danos_perfumeria_cliente',
   'danos_perfumeria_gof',
-  // El producto vuelve al proveedor: la compradora decide sus productos y Gof marca cuándo lo retiró.
+  // El producto vuelve al proveedor: se aprueba solo y Gof marca cuándo lo retiró.
   'devolucion',
 ];
 
@@ -14,11 +14,14 @@ export const ORIGENES = ['tienda', 'cedi'];
 export const STATUS = ['pendiente', 'resuelto', 'rechazado', 'notificado', 'devuelto'];
 
 /**
- * Productos (líneas) de estos tipos son evidencia directa: se auto-aprueban
- * al crearse y NO se pueden aprobar/rechazar/deshacer manualmente (409).
+ * Productos (líneas) de estos tipos se auto-aprueban al crearse y NO se pueden
+ * aprobar/rechazar/deshacer manualmente (409). La compradora solo decide los
+ * sobrantes (pedido del 2026-11-12): todo lo demás se aprueba solo.
  */
 export const TIPOS_AUTO_APROBADOS = new Set([
   'faltante_real',
+  'diferencias',
+  'devolucion',
   'danos_textil',
   'danos_perfumeria_cliente',
   'danos_perfumeria_gof',

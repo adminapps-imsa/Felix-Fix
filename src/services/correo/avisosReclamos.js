@@ -98,8 +98,8 @@ const EVENTOS = {
       estado: 'Por enviar a contabilidad',
       frase: (de, r) =>
         r.DecisionBy === USUARIO_SISTEMA
-          ? 'Este reclamo se cerró automáticamente: todos sus productos se aprueban solos (p. ej. faltante real). Sube la nota de débito y envíalo a contabilidad.'
-          : `${de} ${cerradoTexto(r)} este reclamo. Si tiene productos aprobados, sube la nota de débito y envíalo a contabilidad.`,
+          ? 'Este reclamo se cerró automáticamente: todos sus productos se aprueban solos (faltante, devolución, diferencias o daños). Ya puedes enviarlo a contabilidad con el documento 911.'
+          : `${de} ${cerradoTexto(r)} este reclamo. Si aprobó sobrantes, sube la nota de débito (912) y envíalo a contabilidad.`,
       etiquetaComentario: 'Comentario de la compradora',
       boton: 'Abrir y enviar',
     },

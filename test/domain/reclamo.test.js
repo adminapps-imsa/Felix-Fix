@@ -22,12 +22,14 @@ const pdfValidado = { tipo: 'pdf', notaAprobada: true };
 const pdfSinValidar = { tipo: 'pdf' };
 const enviado = '2026-10-14T12:00:00Z';
 
-test('nota aprobada: se requiere solo si hay productos aprobados', () => {
-  assert.deepEqual(estadoNotaAprobada({ LineasAprobadas: 0 }, []), { RequiereNotaAprobada: false, TieneNotaAprobada: false });
-  assert.deepEqual(estadoNotaAprobada({ LineasAprobadas: 3 }, [pdfSinValidar]), { RequiereNotaAprobada: true, TieneNotaAprobada: false });
-  assert.deepEqual(estadoNotaAprobada({ LineasAprobadas: '3' }, [pdfSinValidar, pdfValidado]), { RequiereNotaAprobada: true, TieneNotaAprobada: true });
+test('nota aprobada (912): se requiere solo si hay sobrantes aprobados', () => {
+  assert.deepEqual(estadoNotaAprobada({ LineasSobranteAprobadas: 0 }, []), { RequiereNotaAprobada: false, TieneNotaAprobada: false });
+  assert.deepEqual(estadoNotaAprobada({ LineasSobranteAprobadas: 3 }, [pdfSinValidar]), { RequiereNotaAprobada: true, TieneNotaAprobada: false });
+  assert.deepEqual(estadoNotaAprobada({ LineasSobranteAprobadas: '3' }, [pdfSinValidar, pdfValidado]), { RequiereNotaAprobada: true, TieneNotaAprobada: true });
+  // Faltante, devolución o daños aprobados solos (sin sobrante aprobado): basta el 911.
+  assert.equal(estadoNotaAprobada({ LineasAprobadas: 5, LineasSobranteAprobadas: 0 }, [pdfSinValidar]).RequiereNotaAprobada, false);
   // Un Excel marcado no cuenta como nota de débito.
-  assert.equal(estadoNotaAprobada({ LineasAprobadas: 1 }, [{ tipo: 'xlsx', notaAprobada: true }]).TieneNotaAprobada, false);
+  assert.equal(estadoNotaAprobada({ LineasSobranteAprobadas: 1 }, [{ tipo: 'xlsx', notaAprobada: true }]).TieneNotaAprobada, false);
 });
 
 test('modificable: pendiente sí; cerrado o enviado no', () => {
@@ -66,13 +68,15 @@ test('decidir productos: no con el reclamo cerrado', () => {
   assert.notEqual(motivoNoCambiarLineas({ Status: 'rechazado' }), null);
 });
 
-test('enviar a contabilidad: solo cerrado y, si hay aprobados, con la nota validada', () => {
+test('enviar a contabilidad: solo cerrado y, si hay sobrantes aprobados, con la nota 912 validada', () => {
   assert.match(motivoNoEnviarContabilidad({ Status: 'pendiente' }, []).mensaje, /Primero la compradora debe cerrar/);
   assert.match(motivoNoEnviarContabilidad({ Status: 'notificado' }, []).mensaje, /Primero la compradora debe cerrar/);
-  assert.equal(motivoNoEnviarContabilidad({ Status: 'resuelto', LineasAprobadas: 2 }, [pdfSinValidar]).code, 'FALTA_NOTA_APROBADA');
-  assert.equal(motivoNoEnviarContabilidad({ Status: 'resuelto', LineasAprobadas: 2 }, [pdfValidado]), null);
-  // Todo rechazado: no hay nada aprobado que respaldar con la nota.
-  assert.equal(motivoNoEnviarContabilidad({ Status: 'rechazado', LineasAprobadas: 0 }, []), null);
+  assert.equal(motivoNoEnviarContabilidad({ Status: 'resuelto', LineasAprobadas: 2, LineasSobranteAprobadas: 1 }, [pdfSinValidar]).code, 'FALTA_NOTA_APROBADA');
+  assert.equal(motivoNoEnviarContabilidad({ Status: 'resuelto', LineasAprobadas: 2, LineasSobranteAprobadas: 1 }, [pdfValidado]), null);
+  // Solo faltante / devolución / daños (aprobados solos): sale con el 911, sin 912.
+  assert.equal(motivoNoEnviarContabilidad({ Status: 'resuelto', LineasAprobadas: 4, LineasSobranteAprobadas: 0 }, [pdfSinValidar]), null);
+  // Sobrante rechazado combinado con faltante: solo el 911.
+  assert.equal(motivoNoEnviarContabilidad({ Status: 'rechazado', LineasAprobadas: 2, LineasSobranteAprobadas: 0 }, []), null);
 });
 
 // ------------------------------------------------------------------

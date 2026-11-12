@@ -79,6 +79,10 @@ sí mismo en `dbo.SchemaMigrations` al terminar.
 30. `029_reclamos_cierre_automatico.sql` — Reclamos: cierra (`resuelto`,
    `DecisionBy = 'sistema'`) los pendientes cuyos productos aprobó todos el
    sistema (p. ej. solo faltante real). Los nuevos ya nacen así. No manda correos.
+31. `030_reclamos_solo_sobrante_decide.sql` — Reclamos: la compradora solo
+   decide sobrantes. Aprueba como `sistema` los productos pendientes de
+   Devolución y Diferencias y cierra (como la 029) los que quedan todos
+   aprobados por el sistema. No manda correos.
 
 ## Esquemas QA y Prod
 

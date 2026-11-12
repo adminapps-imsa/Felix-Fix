@@ -60,6 +60,8 @@ export const etiquetaStatus = (status: StatusReclamo, devueltoPor?: string | nul
 /** Deben coincidir con TIPOS_AUTO_APROBADOS del backend (src/services/reclamos/tipos.js). */
 export const TIPOS_AUTO_APROBADOS = new Set<TipoReclamo>([
   'faltante_real',
+  'diferencias',
+  'devolucion',
   'danos_textil',
   'danos_perfumeria_cliente',
   'danos_perfumeria_gof',
