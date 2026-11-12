@@ -20,3 +20,9 @@ export const asignarRolSchema = z.object({
 export const bienvenidaSchema = z.object({
   userIds: z.array(z.string().uuid('Usuario inválido.')).min(1, 'Elige al menos una persona.').max(50, 'Máximo 50 personas por envío.'),
 });
+
+/** Tienda de un usuario: null = todas las tiendas. */
+export const tiendaUsuarioSchema = z.object({
+  tiendaId: z.number().int().positive().nullable(),
+  soloPropios: z.boolean(),
+});

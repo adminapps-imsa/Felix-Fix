@@ -149,7 +149,9 @@ export function NuevoReclamoForm({
 
   // Gof no hace reclamos de CEDI: solo ve Tienda, ya elegida.
   const auth = useAuth();
-  const soloTienda = auth.puede(P.recSoloTienda);
+  // Usuario en una tienda (Configuración → Tiendas): solo Tienda y con su sucursal, fija.
+  const tiendaPropia = auth.user?.tienda?.tiendaId != null ? auth.user.tienda.nombre || null : null;
+  const soloTienda = auth.puede(P.recSoloTienda) || Boolean(tiendaPropia);
   // Torre de Control: solo CEDI («Solo reclamos de CEDI»).
   const soloCedi = !soloTienda && auth.puede(P.recSoloCedi);
   const origenes: OrigenReclamo[] = soloTienda ? ['tienda'] : soloCedi ? ['cedi'] : ['tienda', 'cedi'];
@@ -157,6 +159,7 @@ export function NuevoReclamoForm({
     ...CAMPOS_VACIOS,
     fechaRegistro: hoyIso(),
     ...(soloTienda ? { origen: 'tienda' as const } : soloCedi ? { origen: 'cedi' as const } : {}),
+    ...(tiendaPropia ? { sucursal: tiendaPropia } : {}),
   }));
   // Último estado dibujado, para leerlo tras un await (procesarExcel) sin hacerlo dentro de un updater.
   const camposRef = useRef(campos);
@@ -266,7 +269,7 @@ export function NuevoReclamoForm({
   const procesarExcel = async (file: File | null) => {
     // Todo lo que vino del archivo anterior se descarta ANTES de leer el nuevo.
     // Lo que eligió el usuario (no viene del Excel) se conserva.
-    setCampos((c) => ({ ...CAMPOS_VACIOS, fechaRegistro: hoyIso(), origen: c.origen, compradora: c.compradora, division: c.division, comentario: c.comentario, fechaLlegadaMercancia: c.fechaLlegadaMercancia }));
+    setCampos((c) => ({ ...CAMPOS_VACIOS, sucursal: tiendaPropia || '', fechaRegistro: hoyIso(), origen: c.origen, compradora: c.compradora, division: c.division, comentario: c.comentario, fechaLlegadaMercancia: c.fechaLlegadaMercancia }));
     setTipo('');
     setModoManual(false);
     setPreview(null);
@@ -283,7 +286,7 @@ export function NuevoReclamoForm({
       setPreview(p);
       const delExcel = {
         origen: soloTienda ? 'tienda' : soloCedi ? 'cedi' : p.origen,
-        sucursal: p.sucursal || '',
+        sucursal: tiendaPropia || p.sucursal || '',
         fechaLlegadaMercancia: p.fechaLlegadaMercancia || '',
         numeroEmbarqueFactura: p.numeroEmbarqueFactura || '',
         mundo: p.mundo || '',
@@ -803,7 +806,15 @@ export function NuevoReclamoForm({
               ) : (
                 <>
                   <Field label="Sucursal" tag={tag('sucursal')} resaltar={autos.has('sucursal')}>
-                    <Input list="reclamos-tiendas" required value={campos.sucursal} onChange={(e) => set('sucursal', e.target.value)} maxLength={150} />
+                    <Input
+                      list="reclamos-tiendas"
+                      required
+                      value={campos.sucursal}
+                      onChange={(e) => set('sucursal', e.target.value)}
+                      maxLength={150}
+                      readOnly={Boolean(tiendaPropia)}
+                      title={tiendaPropia ? 'Tu usuario está en esta tienda' : undefined}
+                    />
                     <datalist id="reclamos-tiendas">
                       {tiendas.map((t) => (
                         <option key={t.TiendaId} value={t.Nombre} />

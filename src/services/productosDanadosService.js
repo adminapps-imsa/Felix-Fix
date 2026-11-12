@@ -21,6 +21,8 @@ import { parsePagination, buildPaginationMeta } from '../utils/pagination.js';
 import { badRequest, conflict, notFound, badGateway, forbidden, serviceUnavailable } from '../utils/httpError.js';
 import { tienePermiso } from './acceso/permisos.js';
 import { compradoraDe } from './acceso/alcanceCompradora.js';
+import { tiendaDe } from './acceso/alcanceTienda.js';
+import { motivoTiendaReporte } from '../domain/tienda.js';
 import { exigirDivision } from './divisiones.js';
 import {
   esDocGof,
@@ -84,6 +86,7 @@ async function toFiltros(query, usuario) {
     resoluciones: usuario ? alcanceVista(usuario.permisos || new Set()) : null,
     compradora: await compradoraDe(usuario),
     creador: usuario ? creadorVisible(usuario) : null,
+    alcanceTienda: await tiendaDe(usuario),
     tiendaId: query.tienda ? Number(query.tienda) : undefined,
     motivo: query.motivo || undefined,
     estado: query.estado || undefined,
@@ -155,7 +158,14 @@ async function validarArchivoEvidencia(multerFile) {
   }
 }
 
+/** Quien está en una tienda (Configuración → Tiendas) solo registra reportes de ella. */
+async function exigirTiendaPropia(tiendaId, usuario) {
+  const motivo = motivoTiendaReporte(await tiendaDe(usuario), tiendaId);
+  if (motivo) throw badRequest(motivo);
+}
+
 export async function crearReporte(data, multerFile, usuario) {
+  await exigirTiendaPropia(data.tiendaId, usuario);
   // Antes de guardar la foto: una división que no es del catálogo no crea nada.
   data = { ...data, division: await exigirDivision(data.division) };
   let evidencia = { provider: 'local', key: null };
@@ -234,6 +244,7 @@ export async function corregirReporte(reporteId, data, multerFile, usuario) {
   exigirVisible(r, usuario);
   const motivo = motivoNoCorregir(r);
   if (motivo) throw conflict(motivo);
+  await exigirTiendaPropia(data.tiendaId, usuario);
   const { respuesta, ...formulario } = data;
   const datos = { ...formulario, division: await exigirDivision(formulario.division) };
 

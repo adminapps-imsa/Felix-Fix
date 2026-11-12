@@ -1,15 +1,18 @@
 import { getPool, sql, S } from '../config/db.js';
-import { condicionReporte, condicionReclamo } from '../services/acceso/alcanceCompradora.js';
+import { condicionReporte } from '../services/acceso/alcanceCompradora.js';
+import { condicionReporteTienda } from '../services/acceso/alcanceTienda.js';
+import { condicionAlcance as condicionReclamos } from './reclamosRepository.js';
 
 // Lecturas del Tablero. Solo consultas: los cálculos (series, antigüedad,
 // promedios) los hace src/domain/tablero.js con estas filas.
 
 /**
  * Quien ve solo una parte de Productos Dañados: Gof (por resolución), cada
- * compradora (por sus marcas) y Tienda (los que creó). El mismo filtro de la lista.
- * `alcance`: { resoluciones, compradora, creador }.
+ * compradora (por sus marcas), Tienda (los que creó) y quien está en una tienda
+ * (Configuración → Tiendas). El mismo filtro de la lista.
+ * `alcance`: { resoluciones, compradora, creador, tienda }.
  */
-function condicionAlcance(request, { resoluciones, compradora, creador }) {
+function condicionAlcance(request, { resoluciones, compradora, creador, tienda }) {
   const partes = [];
   if (resoluciones) {
     const params = resoluciones.map((res, i) => {
@@ -23,11 +26,13 @@ function condicionAlcance(request, { resoluciones, compradora, creador }) {
     request.input('creador', sql.VarChar(150), creador);
     partes.push('r.EmpleadoReportaUsuario = @creador');
   }
+  const enTienda = condicionReporteTienda(request, tienda);
+  if (enTienda) partes.push(enTienda);
   return partes.length ? partes.join(' AND ') : '1 = 1';
 }
 
-/** Reclamos de la compradora (alias r), o todos. */
-const alcanceReclamos = (request, compradora) => (compradora ? condicionReclamo(request, compradora) : '1 = 1');
+/** Reclamos que ve el usuario (alias r): `alcance` = { compradora, tienda }. */
+const alcanceReclamos = (request, alcance) => condicionReclamos(request, alcance);
 
 // ---------- Productos Dañados ----------
 
@@ -136,7 +141,7 @@ export async function pdMiTrabajo({ sub, username }, desde) {
  * Reclamos abiertos (por decidir), devueltos a quien los creó y cerrados sin
  * enviar a contabilidad, con cuándo llegaron a esa etapa.
  */
-export async function recAbiertos(compradora) {
+export async function recAbiertos(alcance) {
   const request = (await getPool()).request();
   const { recordset } = await request.query(`
     SELECT r.ReclamoId, r.Token, r.Status, r.Tipo, r.Origen, r.Proveedor, r.Sucursal, r.Compradora, r.CreatedBy,
@@ -151,26 +156,26 @@ export async function recAbiertos(compradora) {
     FROM ${S}.Reclamos r
     WHERE (r.Status IN ('pendiente', 'devuelto')
        OR (r.Status IN ('resuelto', 'rechazado') AND r.EnviadoContabilidadAt IS NULL))
-      AND ${alcanceReclamos(request, compradora)}
+      AND ${alcanceReclamos(request, alcance)}
   `);
   return recordset;
 }
 
 /** Hitos de los reclamos con movimiento desde `desde`. */
-export async function recHitos(desde, compradora) {
+export async function recHitos(desde, alcance) {
   const request = (await getPool()).request().input('desde', sql.DateTime2, desde);
   const { recordset } = await request.query(`
     SELECT r.ReclamoId, r.CreatedAt AS Creado, r.DecisionAt AS Decision, r.EnviadoContabilidadAt AS EnviadoContabilidad
     FROM ${S}.Reclamos r
-    WHERE (r.CreatedAt >= @desde OR r.DecisionAt >= @desde OR r.EnviadoContabilidadAt >= @desde) AND ${alcanceReclamos(request, compradora)}
+    WHERE (r.CreatedAt >= @desde OR r.DecisionAt >= @desde OR r.EnviadoContabilidadAt >= @desde) AND ${alcanceReclamos(request, alcance)}
   `);
   return recordset;
 }
 
 /** Reclamos creados desde `desde` por tipo, origen y proveedor; y productos decididos en el periodo. */
-export async function recDesglose(desde, compradora) {
+export async function recDesglose(desde, alcanceRec) {
   const request = (await getPool()).request().input('desde', sql.DateTime2, desde);
-  const alcance = alcanceReclamos(request, compradora);
+  const alcance = alcanceReclamos(request, alcanceRec);
   const { recordsets } = await request.query(`
     SELECT r.Tipo AS etiqueta, COUNT(*) AS n FROM ${S}.Reclamos r WHERE r.CreatedAt >= @desde AND ${alcance} GROUP BY r.Tipo;
     SELECT r.Origen AS etiqueta, COUNT(*) AS n FROM ${S}.Reclamos r WHERE r.CreatedAt >= @desde AND ${alcance} GROUP BY r.Origen;

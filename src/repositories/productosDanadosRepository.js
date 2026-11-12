@@ -2,6 +2,7 @@ import { getPool, sql, S } from '../config/db.js';
 import { registrarEvento } from './historialRepository.js';
 import { TRANSICIONES } from '../domain/productoDanado.js';
 import { condicionReporte } from '../services/acceso/alcanceCompradora.js';
+import { condicionReporteTienda } from '../services/acceso/alcanceTienda.js';
 
 const SELECT_BASE = `
   SELECT
@@ -37,6 +38,9 @@ function aplicarFiltros(request, filtros) {
   }
   // Compradora con alcance: solo los de sus marcas (alcanceCompradora.js).
   if (filtros.compradora) condiciones.push(condicionReporte(request, filtros.compradora));
+  // Usuario en una tienda (Configuración → Tiendas): solo los de su tienda (y, si aplica, los suyos).
+  const enTienda = condicionReporteTienda(request, filtros.alcanceTienda);
+  if (enTienda) condiciones.push(enTienda);
   // Tienda («Solo los reportes que creó»): solo los suyos.
   if (filtros.creador != null) {
     request.input('creador', sql.VarChar(150), filtros.creador);

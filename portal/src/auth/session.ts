@@ -16,6 +16,16 @@ export interface AuthUser {
   puedeVistaPor?: boolean;
   /** Límites de archivos del servidor (GET /api/auth/me). */
   limites?: Limites;
+  /** Tienda del usuario (Configuración → Tiendas): ve y crea solo lo de ella. null = todas. */
+  tienda?: TiendaUsuario | null;
+}
+
+/** Tienda asignada al usuario; `tiendaId` null = todas las tiendas (solo «Solo lo que crea»). */
+export interface TiendaUsuario {
+  tiendaId: number | null;
+  codigo: string | null;
+  nombre: string | null;
+  soloPropios: boolean;
 }
 
 /** Límites de archivos en MB, tal como los tiene configurados el servidor. */

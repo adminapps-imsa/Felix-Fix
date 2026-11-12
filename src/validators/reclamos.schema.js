@@ -215,6 +215,8 @@ export const listarQuerySchema = z.object({
   status: z.enum(STATUS).optional().or(z.literal('')),
   porEnviar: z.enum(['1']).optional(),
   q: z.string().max(200).optional(),
+  // Filtro por lugar: 'cedi' o el TiendaId de una tienda.
+  tienda: z.string().regex(/^(cedi|\d{1,9})$/, 'Tienda inválida.').optional().or(z.literal('')),
   page: z.string().optional(),
   pageSize: z.string().optional(),
 });

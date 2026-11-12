@@ -9,6 +9,8 @@ import { enviarCorreo, correoConfigurado, resumenDestinatarios } from '../correo
 import { deUsuario } from '../correo/destinatarios.js';
 import { conLogoEnLinea } from '../correo/diseno.js';
 import { logger } from '../../utils/logger.js';
+import * as tiendasRepo from '../../repositories/tiendasRepository.js';
+import { invalidarTiendas } from './alcanceTienda.js';
 
 const quien = (usuario) => usuario.username || usuario.sub;
 
@@ -102,6 +104,49 @@ export async function quitarRol(userId, rol, usuario) {
 }
 
 export const auditoria = () => repo.listarAuditoria(100);
+
+// ------------------------------------------------------------------
+// Tiendas: en qué tienda está cada usuario y si ve solo lo que crea.
+// ------------------------------------------------------------------
+
+/**
+ * Las tiendas con cuántas personas tiene cada una, y los usuarios del portal
+ * (los que tienen algún rol) con su tienda y «Solo lo que crea».
+ */
+export async function tiendas() {
+  const [lista, asignaciones, { usuarios: conRol }] = await Promise.all([
+    tiendasRepo.listarTiendasActivas(),
+    tiendasRepo.listarUsuarioTiendas(),
+    kc.usuariosConAlgunRol({ first: 0, max: 5000 }),
+  ]);
+  const porUsuario = new Map(asignaciones.map((a) => [a.Username.trim().toLowerCase(), a]));
+  const usuarios = conRol.map((u) => {
+    const a = porUsuario.get(String(u.username).toLowerCase());
+    return { ...u, tiendaId: a?.TiendaId ?? null, soloPropios: Boolean(a?.SoloPropios) };
+  });
+  const conteo = new Map();
+  for (const u of usuarios) if (u.tiendaId != null) conteo.set(u.tiendaId, (conteo.get(u.tiendaId) || 0) + 1);
+  return {
+    tiendas: lista.map((t) => ({ ...t, usuarios: conteo.get(t.TiendaId) || 0 })),
+    usuarios,
+  };
+}
+
+export async function guardarTiendaUsuario(userId, { tiendaId, soloPropios }, usuario) {
+  const u = await kc.obtenerUsuario(userId).catch(() => {
+    throw notFound('Ese usuario no existe en Keycloak.');
+  });
+  let tienda = null;
+  if (tiendaId != null) {
+    tienda = await tiendasRepo.obtenerTiendaPorId(tiendaId);
+    if (!tienda) throw notFound('Esa tienda no existe.');
+  }
+  await tiendasRepo.guardarUsuarioTienda(String(u.username).toLowerCase(), tiendaId ?? null, Boolean(soloPropios), quien(usuario));
+  invalidarTiendas();
+  const texto = `${u.username} (${u.nombre}) → ${tienda ? tienda.Nombre : 'Todas las tiendas'}${soloPropios ? ' · solo lo que crea' : ''}`;
+  await auditar('tienda_usuario', texto, usuario);
+  return { id: u.id, username: u.username, tiendaId: tiendaId ?? null, soloPropios: Boolean(soloPropios) };
+}
 
 // ------------------------------------------------------------------
 // Correos: ver cómo se ven, enviarse una prueba y enviar la bienvenida.

@@ -6,6 +6,8 @@ import { CONTENT_TYPE_IMAGEN } from './excelImages.js';
 import { reclamoArchivoPath } from '../../config/almacenamiento.js';
 import { tienePermiso } from '../acceso/permisos.js';
 import { compradoraDe } from '../acceso/alcanceCompradora.js';
+import { tiendaDe } from '../acceso/alcanceTienda.js';
+import { obtenerTiendaPorId } from '../../repositories/tiendasRepository.js';
 import { parsePagination, buildPaginationMeta } from '../../utils/pagination.js';
 import { notFound } from '../../utils/httpError.js';
 import { validarIndice, indiceAdjunto, obtenerOFallar, numeroReclamo, aDto, conNombres, nombreUsuario } from './comun.js';
@@ -41,9 +43,24 @@ export function permisos(usuario) {
 
 export async function listar(query, usuario) {
   const pagination = parsePagination(query);
-  const compradora = await compradoraDe(usuario);
-  const filtros = { status: query.status || undefined, porEnviar: query.porEnviar === '1', q: query.q?.trim() || undefined, compradora };
-  const [{ items, total }, kpis] = await Promise.all([repo.listar(filtros, pagination), repo.obtenerKpis(usuario ? nombreUsuario(usuario) : null, compradora)]);
+  const [compradora, alcanceTienda, tienda] = await Promise.all([
+    compradoraDe(usuario),
+    tiendaDe(usuario),
+    // Filtro «Tienda» de la lista (las compradoras): por la sucursal escrita en el reclamo.
+    query.tienda && query.tienda !== 'cedi' ? obtenerTiendaPorId(Number(query.tienda)) : null,
+  ]);
+  if (query.tienda && query.tienda !== 'cedi' && !tienda) throw notFound('Esa tienda no existe.');
+  const filtros = {
+    status: query.status || undefined,
+    porEnviar: query.porEnviar === '1',
+    q: query.q?.trim() || undefined,
+    compradora,
+    alcanceTienda,
+    origen: query.tienda === 'cedi' ? 'cedi' : undefined,
+    tienda: tienda ? { nombre: tienda.Nombre, codigo: tienda.Codigo } : undefined,
+  };
+  const alcance = { compradora, tienda: alcanceTienda };
+  const [{ items, total }, kpis] = await Promise.all([repo.listar(filtros, pagination), repo.obtenerKpis(usuario ? nombreUsuario(usuario) : null, alcance)]);
   return { data: await conNombres(items.map(aDto)), pagination: buildPaginationMeta({ ...pagination, total }), kpis };
 }
 

@@ -42,3 +42,11 @@ export const enviarPruebaCorreo = asyncHandler(async (req, res) => {
 export const enviarBienvenida = asyncHandler(async (req, res) => {
   res.json(await service.enviarBienvenida(req.body.userIds, req.user));
 });
+
+export const tiendas = asyncHandler(async (req, res) => {
+  res.json(await service.tiendas());
+});
+
+export const guardarTiendaUsuario = asyncHandler(async (req, res) => {
+  res.json(await service.guardarTiendaUsuario(req.params.id, req.body, req.user));
+});

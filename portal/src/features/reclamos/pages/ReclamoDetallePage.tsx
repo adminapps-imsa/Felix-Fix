@@ -1,3 +1,4 @@
+import { TiendaDestacada } from '../../../components/ui/TiendaDestacada';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { AlertTriangle, ArrowLeft, Building2, CheckCircle2, ClipboardList, FileText, Landmark, Send, ShieldAlert, Trash2, Undo2, XCircle } from 'lucide-react';
@@ -162,7 +163,8 @@ export function ReclamoDetallePage() {
         )}
         <span className="etiqueta">Reclamo</span>
         <h1 className="numero-caso text-5xl">{reclamo.Numero}</h1>
-        <div className="mt-1 flex flex-wrap justify-center gap-2">
+        <TiendaDestacada className="mt-3" cedi={reclamo.Origen === 'cedi'} nombre={reclamo.Sucursal} />
+        <div className="mt-3 flex flex-wrap justify-center gap-2">
           <StatusReclamoBadge status={reclamo.Status} devueltoPor={reclamo.DevueltoPor} decisionBy={reclamo.DecisionBy} />
           <RetiroBadge reclamo={reclamo} />
         </div>

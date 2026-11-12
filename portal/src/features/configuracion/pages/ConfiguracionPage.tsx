@@ -1,66 +1,148 @@
-import { useState } from 'react';
-import { History, KeyRound, Mail, Settings, Users } from 'lucide-react';
+import { History, KeyRound, Mail, Settings, Store, Users } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { BandaPagina, TituloPagina } from '../../../components/ui/TituloPagina';
 import { cn } from '../../../lib/cn';
-import { useIndicador } from '../../../lib/useIndicador';
 import { UsuariosTab } from '../components/UsuariosTab';
+import { TiendasTab } from '../components/TiendasTab';
 import { RolesTab } from '../components/RolesTab';
 import { HistorialTab } from '../components/HistorialTab';
 import { CorreosTab } from '../components/CorreosTab';
 
-type Pestana = 'usuarios' | 'roles' | 'correos' | 'historial';
+type Seccion = 'usuarios' | 'tiendas' | 'roles' | 'correos' | 'historial';
 
-const PESTANAS: { id: Pestana; label: string; icon: typeof Users }[] = [
-  { id: 'usuarios', label: 'Usuarios', icon: Users },
-  { id: 'roles', label: 'Roles y permisos', icon: KeyRound },
-  { id: 'correos', label: 'Correos', icon: Mail },
-  { id: 'historial', label: 'Historial', icon: History },
+/**
+ * Secciones en el orden en que se configura a alguien: quién entra (roles),
+ * dónde trabaja (tienda), qué puede hacer cada rol; luego correos e historial.
+ */
+const SECCIONES: { id: Seccion; titulo: string; resumen: string; descripcion: string; icono: typeof Users }[] = [
+  {
+    id: 'usuarios',
+    titulo: 'Usuarios',
+    resumen: 'Quién entra y con qué rol',
+    descripcion: 'Marca o quita los roles de cada persona. Se guarda en Keycloak al momento.',
+    icono: Users,
+  },
+  {
+    id: 'tiendas',
+    titulo: 'Tiendas',
+    resumen: 'Qué tienda ve cada persona',
+    descripcion: 'Pon a cada persona en su tienda para que vea solo lo de ella, o limítala a lo que crea.',
+    icono: Store,
+  },
+  {
+    id: 'roles',
+    titulo: 'Roles y permisos',
+    resumen: 'Qué puede hacer cada rol',
+    descripcion: 'Elige un rol y marca lo que puede ver y hacer en cada módulo.',
+    icono: KeyRound,
+  },
+  {
+    id: 'correos',
+    titulo: 'Correos',
+    resumen: 'Avisos que manda el portal',
+    descripcion: 'Cuándo sale cada correo, quién lo recibe y cómo se ve. Desde aquí se envía la bienvenida.',
+    icono: Mail,
+  },
+  {
+    id: 'historial',
+    titulo: 'Historial',
+    resumen: 'Quién cambió qué',
+    descripcion: 'Los últimos 100 cambios de accesos: roles, permisos, tiendas y bienvenidas.',
+    icono: History,
+  },
 ];
 
 export function ConfiguracionPage() {
-  const [pestana, setPestana] = useState<Pestana>('usuarios');
-  // El subrayado de la pestaña activa se desliza hasta la elegida.
-  const { ref, pos, listo } = useIndicador<HTMLDivElement>('[aria-selected="true"]', pestana);
+  // La sección queda en la dirección (?seccion=tiendas): se puede compartir y sobrevive a recargar.
+  const [params, setParams] = useSearchParams();
+  const pedida = params.get('seccion');
+  const actual = SECCIONES.find((s) => s.id === pedida) ?? SECCIONES[0];
+  const elegir = (id: Seccion) =>
+    setParams(
+      (p) => {
+        const n = new URLSearchParams(p);
+        if (id === 'usuarios') n.delete('seccion');
+        else n.set('seccion', id);
+        return n;
+      },
+      { replace: true }
+    );
+  const Icono = actual.icono;
 
   return (
     <div className="flex flex-col gap-6">
       <BandaPagina>
-      <TituloPagina icono={Settings} titulo="Configuración">
-        <p className="bajada-pagina">
-          Quién entra al portal y qué puede hacer. Los usuarios y roles vienen de Keycloak; los permisos de cada rol se definen aquí.
-        </p>
-      </TituloPagina>
+        <TituloPagina icono={Settings} titulo="Configuración">
+          <p className="bajada-pagina">
+            Quién entra al portal, dónde trabaja y qué puede hacer. Los usuarios y roles vienen de Keycloak; las tiendas y los permisos se definen
+            aquí.
+          </p>
+        </TituloPagina>
       </BandaPagina>
 
-      <div ref={ref} role="tablist" className="relative flex flex-wrap gap-1 border-b border-black/10 dark:border-white/10">
-        {pos && (
-          <span
-            aria-hidden
-            className={cn('absolute h-0.5 rounded-full bg-brand-500', listo && 'transition-[left,width,top] duration-300 ease-[var(--ease-out)]')}
-            style={{ left: pos.left, top: pos.top + pos.height - 2, width: pos.width }}
-          />
-        )}
-        {PESTANAS.map(({ id, label, icon: Icon }) => (
-          <button
-            key={id}
-            role="tab"
-            aria-selected={pestana === id}
-            onClick={() => setPestana(id)}
-            className={cn(
-              // El subrayado lo dibuja el indicador de arriba; aquí solo el color.
-              '-mb-px flex items-center gap-1.5 border-b-2 border-transparent px-4 py-2 text-sm font-semibold transition',
-              pestana === id ? 'text-brand-600 dark:text-brand-400' : 'opacity-60 hover:opacity-100'
-            )}
-          >
-            <Icon size={15} /> {label}
-          </button>
-        ))}
-      </div>
+      <div className="grid gap-6 lg:grid-cols-[250px_minmax(0,1fr)]">
+        {/* Secciones: columna en escritorio, fila deslizable en celular. */}
+        <nav aria-label="Secciones de configuración" className="min-w-0 lg:sticky lg:top-24 lg:self-start">
+          <ul role="tablist" aria-orientation="vertical" className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 lg:mx-0 lg:flex-col lg:gap-1 lg:overflow-visible lg:px-0 lg:pb-0">
+            {SECCIONES.map((s) => {
+              const activo = s.id === actual.id;
+              const I = s.icono;
+              return (
+                <li key={s.id} className="shrink-0">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activo}
+                    aria-controls="config-panel"
+                    onClick={() => elegir(s.id)}
+                    className={cn(
+                      'flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition-colors',
+                      activo ? 'glass-card ring-2 ring-brand-500/50' : 'hover:bg-black/[0.04] dark:hover:bg-white/[0.05]'
+                    )}
+                  >
+                    <span
+                      aria-hidden
+                      className={cn(
+                        'grid size-9 shrink-0 place-items-center rounded-xl transition-colors',
+                        activo ? 'bg-brand-500 text-white dark:bg-brand-400' : 'bg-black/5 opacity-70 dark:bg-white/10'
+                      )}
+                    >
+                      <I size={17} />
+                    </span>
+                    <span className="min-w-0">
+                      <span className={cn('block whitespace-nowrap text-sm font-semibold', activo && 'text-brand-700 dark:text-brand-300')}>{s.titulo}</span>
+                      <span className="hidden truncate text-xs opacity-60 lg:block">{s.resumen}</span>
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
 
-      {pestana === 'usuarios' && <UsuariosTab />}
-      {pestana === 'roles' && <RolesTab />}
-      {pestana === 'correos' && <CorreosTab />}
-      {pestana === 'historial' && <HistorialTab />}
+        <section id="config-panel" role="tabpanel" aria-labelledby="config-titulo" className="flex min-w-0 flex-col gap-4">
+          <header className="flex items-start gap-3">
+            <span aria-hidden className="mt-0.5 grid size-10 shrink-0 place-items-center rounded-2xl bg-brand-500/10 text-brand-600 dark:text-brand-400">
+              <Icono size={20} />
+            </span>
+            <div className="min-w-0">
+              <h2 id="config-titulo" className="text-xl font-bold">
+                {actual.titulo}
+              </h2>
+              <p className="text-sm opacity-70">{actual.descripcion}</p>
+            </div>
+          </header>
+
+          {/* key: al cambiar de sección entra con su animación y su estado empieza de cero. */}
+          <div key={actual.id} className="anim-aparecer min-w-0">
+            {actual.id === 'usuarios' && <UsuariosTab />}
+            {actual.id === 'tiendas' && <TiendasTab />}
+            {actual.id === 'roles' && <RolesTab />}
+            {actual.id === 'correos' && <CorreosTab />}
+            {actual.id === 'historial' && <HistorialTab />}
+          </div>
+        </section>
+      </div>
     </div>
   );
 }
