@@ -87,6 +87,10 @@ sí mismo en `dbo.SchemaMigrations` al terminar.
    esperado» (plantilla CEDI por hojas). `CodigoBarra` admite NULL; columnas
    `Referencia`, `Color`, `Talla`, `EsperaData` (no está en SAP: espera a
    Data) y quién/cuándo cargó Data el código. No cambia datos.
+33. `032_reclamos_datos_articulo_data.sql` — Reclamos: datos del artículo
+   (`ArtCosto`, `ArtPrecioVenta`, `ArtCategoria`, `ArtTipoProducto`,
+   `ArtCicloVida`, `ArtDescripcion`, `ArtMarca`) que la compradora llena al
+   aprobar un sobrante no esperado sin SAP; van a Data en el correo.
 
 ## Esquemas QA y Prod
 

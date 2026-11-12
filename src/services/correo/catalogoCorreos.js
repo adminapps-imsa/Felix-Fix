@@ -153,14 +153,13 @@ const CORREOS_RECLAMOS = [
     id: 'rec-data-articulos',
     nombre: 'Artículos por crear en SAP',
     cuando: 'La compradora cierra un reclamo de CEDI aprobando sobrantes no esperados que no están en SAP (o vienen sin código).',
-    quien: 'Data (permiso «Crear artículos en SAP (Data)»), con la hoja «Sobrante NO esperado»',
+    quien: 'Data (permiso «Crear artículos en SAP (Data)»), con la hoja «Sobrante NO esperado» y los datos que llenó la compradora',
     generar: () =>
       plantillaDataArticulos(
         reclamo({ Tipo: 'sobrante_no_esperado', Origen: 'cedi', Sucursal: null }),
         [
-          { posicion: 9, codigoBarra: null, referencia: 'TY1374', color: 'OFF WHITE MIX', talla: 'S', cantidad: 2 },
-          { posicion: 10, codigoBarra: null, referencia: 'TY1374', color: 'OFF WHITE MIX', talla: 'M', cantidad: 2 },
-          { posicion: 11, codigoBarra: '7701234500042', referencia: 'TY1374', color: 'OFF WHITE MIX', talla: 'L', cantidad: 2 },
+          { posicion: 9, codigoBarra: null, referencia: 'TY1374', color: 'OFF WHITE MIX', talla: 'S', cantidad: 2, articulo: { descripcion: 'Blusa floral manga corta', marca: 'Marca de ejemplo', categoria: 'Blusas', tipoProducto: 'Textil', cicloVida: 'Temporada', costo: 12.5, precioVenta: 29.95 } },
+          { posicion: 11, codigoBarra: '7701234500042', referencia: 'TY1374', color: 'OFF WHITE MIX', talla: 'L', cantidad: 2, articulo: { descripcion: 'Blusa floral manga corta', marca: 'Marca de ejemplo', categoria: 'Blusas', tipoProducto: 'Textil', cicloVida: 'Temporada', costo: 12.5, precioVenta: 29.95 } },
         ],
         { de: 'Compradora de ejemplo' }
       ),

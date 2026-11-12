@@ -171,9 +171,24 @@ export const codigoDataSchema = z.object({
     .regex(/^\d+$/, 'El código de barras solo lleva números.'),
 });
 
+/** Datos del artículo para Data: los llena la compradora al aprobar un sobrante no esperado sin SAP. */
+const dinero = (campo) =>
+  z.number({ required_error: `Indica el ${campo}.`, invalid_type_error: `El ${campo} debe ser un número.` }).finite().min(0, `El ${campo} no puede ser negativo.`).max(1e12);
+const textoArticulo = (mensaje, max) => z.string({ required_error: mensaje }).trim().min(1, mensaje).max(max);
+export const articuloDataSchema = z.object({
+  costo: dinero('costo'),
+  precioVenta: dinero('precio de venta'),
+  categoria: textoArticulo('Indica la categoría.', 100),
+  tipoProducto: textoArticulo('Indica el tipo de producto.', 100),
+  cicloVida: textoArticulo('Indica el ciclo de vida.', 100),
+  descripcion: textoArticulo('Escribe la descripción.', 300),
+  marca: textoArticulo('Indica la marca.', 100),
+});
+
 export const decisionLineaSchema = z.object({
   decision: z.enum(['aprobado', 'rechazado']),
   comentario: texto(500).optional().default(''),
+  articulo: articuloDataSchema.optional(),
 });
 
 export const decisionLineasSchema = z.object({

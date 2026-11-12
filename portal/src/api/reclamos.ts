@@ -1,6 +1,7 @@
 import { api, fetchBlob } from './client';
 import type { PaginationMeta } from '../types/productoDanado';
 import type {
+  ArticuloData,
   CatalogosReclamo,
   DecStatus,
   DocumentoSapUsado,
@@ -83,8 +84,8 @@ export interface ResultadoEnvioContabilidad extends Reclamo {
 }
 export const enviarAContabilidad = (token: string) => api.post<ResultadoEnvioContabilidad>(`${ruta(token)}/enviar-contabilidad`, {});
 
-export const decidirLinea = (token: string, pos: number, decision: Exclude<DecStatus, 'pendiente'>, comentario: string) =>
-  api.post<ReclamoLinea>(`${ruta(token)}/lineas/${pos}/decision`, { decision, comentario });
+export const decidirLinea = (token: string, pos: number, decision: Exclude<DecStatus, 'pendiente'>, comentario: string, articulo?: ArticuloData) =>
+  api.post<ReclamoLinea>(`${ruta(token)}/lineas/${pos}/decision`, { decision, comentario, ...(articulo && { articulo }) });
 
 export const deshacerLinea = (token: string, pos: number) =>
   api.del<ReclamoLinea>(`${ruta(token)}/lineas/${pos}/decision`);

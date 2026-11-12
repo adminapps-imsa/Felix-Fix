@@ -9,6 +9,7 @@ import { cn } from '../../../lib/cn';
 import { formatCantidad } from '../../../lib/formatters';
 import type { DecStatus, ReclamoLinea, TipoReclamo } from '../../../types/reclamo';
 import { TIPO_LABEL, ordenTipo, formatPrecio } from '../lib/tipos';
+import { ArticuloDataModal } from './ArticuloDataModal';
 
 interface Grupo {
   tipo: TipoReclamo;
@@ -38,9 +39,12 @@ export function ProductosSection({
   esAdmin,
   cerrado,
   puedeCargarCodigo = false,
+  marcaReclamo,
   onLineaActualizada,
   onLineasActualizadas,
 }: {
+  /** Marca del reclamo: se propone al llenar los datos del artículo para Data. */
+  marcaReclamo?: string | null;
   token: string;
   lineas: ReclamoLinea[];
   esAdmin: boolean;
@@ -218,6 +222,7 @@ export function ProductosSection({
                     esAdmin={esAdmin}
                     cerrado={cerrado}
                     puedeCargarCodigo={puedeCargarCodigo}
+                    marcaReclamo={marcaReclamo}
                     mostrarTipo={variosTipos}
                     seleccionado={seleccion.has(l.Posicion)}
                     onSeleccionar={editable ? () => alternar(l.Posicion) : undefined}
@@ -284,8 +289,11 @@ function DecisionMasiva({
     try {
       const r = await apiReclamos.decidirLineas(token, posiciones, decision, comentario);
       onHecho(r.lineas);
-      const n = posiciones.length;
-      avisos.ok(`${n} ${n === 1 ? 'producto' : 'productos'} ${decision === 'aprobado' ? (n === 1 ? 'aprobado' : 'aprobados') : n === 1 ? 'rechazado' : 'rechazados'}.`);
+      const n = r.actualizadas;
+      avisos.ok(
+        `${n} ${n === 1 ? 'producto' : 'productos'} ${decision === 'aprobado' ? (n === 1 ? 'aprobado' : 'aprobados') : n === 1 ? 'rechazado' : 'rechazados'}.` +
+          (r.omitidas && decision === 'aprobado' ? ` ${r.omitidas} sin aprobar: los sobrantes no esperados sin SAP se aprueban uno por uno, con los datos para Data.` : '')
+      );
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo guardar la decisión.');
     } finally {
@@ -465,6 +473,7 @@ function ProductoFila({
   esAdmin,
   cerrado,
   puedeCargarCodigo,
+  marcaReclamo,
   mostrarTipo,
   seleccionado,
   onSeleccionar,
@@ -477,6 +486,7 @@ function ProductoFila({
   esAdmin: boolean;
   cerrado: boolean;
   puedeCargarCodigo: boolean;
+  marcaReclamo?: string | null;
   mostrarTipo: boolean;
   seleccionado: boolean;
   /** Presente solo si se puede decidir; la casilla solo se habilita en pendientes. */
@@ -509,6 +519,8 @@ function ProductoFila({
   // Aprobado por la compradora y todavía sin crear en SAP: le toca a Data.
   const esperaData = Boolean(l.EsperaData) && l.DecStatus === 'aprobado';
   const sinSap = Boolean(l.EsperaData) && l.DecStatus === 'pendiente';
+  // Aprobar un sobrante no esperado sin SAP abre el formulario de datos para Data.
+  const [articuloAbierto, setArticuloAbierto] = useState(false);
   // En celular, con casilla, todo lo que no es la casilla va en la 2ª columna.
   const col2 = onSeleccionar ? 'col-start-2 md:col-start-auto' : '';
   return (
@@ -610,13 +622,34 @@ function ProductoFila({
               type="button"
               className={cn(MINI_BOTON, 'flex-1 justify-center md:flex-none bg-brand-500 text-white hover:bg-brand-600 dark:bg-brand-400 dark:text-slate-950 dark:hover:bg-brand-500')}
               disabled={Boolean(busy)}
-              onClick={() => run('aprobado', () => apiReclamos.decidirLinea(token, l.Posicion, 'aprobado', comentario))}
+              onClick={() => (sinSap ? setArticuloAbierto(true) : run('aprobado', () => apiReclamos.decidirLinea(token, l.Posicion, 'aprobado', comentario)))}
             >
               {busy === 'aprobado' ? <Ruedita /> : <Check size={13} />} Aprobar
             </button>
           </div>
         ) : (
           <span className="text-xs text-warning">Pendiente de revisión</span>
+        )}
+        {l.EsperaData && l.DecStatus === 'aprobado' && l.ArtDescripcion && (
+          <p className="mt-1 truncate text-xs opacity-70" title={[l.ArtDescripcion, l.ArtMarca, l.ArtCategoria, l.ArtTipoProducto, l.ArtCicloVida].filter(Boolean).join(' · ')}>
+            Para Data: {[l.ArtCategoria, l.ArtTipoProducto, l.ArtCicloVida].filter(Boolean).join(' · ')} · costo {formatPrecio(l.ArtCosto ?? null)} · venta{' '}
+            {formatPrecio(l.ArtPrecioVenta ?? null)}
+          </p>
+        )}
+        {articuloAbierto && (
+          <ArticuloDataModal
+            token={token}
+            linea={l}
+            marcaReclamo={marcaReclamo}
+            comentario={comentario}
+            onClose={() => setArticuloAbierto(false)}
+            onAprobado={(nueva) => {
+              setArticuloAbierto(false);
+              setComentario('');
+              onActualizada(nueva);
+              avisos.ok(`Producto ${l.Posicion} aprobado con los datos para Data.`);
+            }}
+          />
         )}
         {esperaData && (
           <div className="mt-1.5">
