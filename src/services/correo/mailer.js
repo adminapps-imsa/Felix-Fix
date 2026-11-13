@@ -116,7 +116,8 @@ export function resumenDestinatarios(direcciones) {
  */
 export const CORREOS_PRUEBA = ['maltamiranda@maduro.com.pa', 'elais@maduro.com.pa'];
 export function redirigirFueraDeProd({ para, cc = [], asunto, html, texto }, esquema) {
-  if (esquema === 'Prod') return null;
+  // Sin distinguir mayúsculas: un «prod» en el .env nunca debe desviar los correos reales.
+  if (String(esquema ?? '').toLowerCase() === 'prod') return null;
   const originales = [...para, ...cc];
   const nota = `Correo de prueba de ${esquema}: solo les llega a ${CORREOS_PRUEBA.join(' y ')}. En Prod iría a: ${originales.join(', ') || '—'}.`;
   const aviso = `<div style="background:#fff4d6;border:1px solid #e0b84c;border-radius:8px;padding:8px 12px;margin:0 0 12px;font:13px Arial,sans-serif;color:#5c4400">${escaparHtml(nota)}</div>`;
