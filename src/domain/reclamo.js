@@ -15,6 +15,15 @@ export const numeroReclamo = (id) => `REC-${String(id).padStart(6, '0')}`;
  * (cierre automático) y pasa directo a la cola de envío a contabilidad.
  * Si no, 'pendiente' hasta que la compradora lo cierre.
  */
+/**
+ * Solo notificación: el tipo del reclamo es de notificación (daños textil…) y
+ * TODOS sus productos también. Si mezcla otros (p. ej. faltantes con su 911,
+ * como el 23294 - NOIR / REC-000044), sigue el flujo normal y va a
+ * contabilidad. `tipos`: los tipos de solo notificación.
+ */
+export const esSoloNotificacion = ({ tipo, lineas }, tipos) =>
+  tipos.has(tipo) && (lineas ?? []).every((l) => tipos.has(l.tipo ?? l.Tipo));
+
 export function estadoAlCrear({ soloNotificacion, lineas }) {
   if (soloNotificacion) return 'notificado';
   if (lineas.length && lineas.every((l) => l.decStatus === 'aprobado')) return 'resuelto';
