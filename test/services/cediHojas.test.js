@@ -81,7 +81,7 @@ test('CEDI por hojas: el faltante sin DOCUMENTO no deja crear el reclamo', () =>
   const [nombre, filas] = DIFERENCIA;
   const sinDoc = filas.map((f, i) => (i === 1 ? f.map((c, j) => (j === 9 ? '' : c)) : f));
   const r = parsearPlantilla(libro([nombre, sinDoc]));
-  assert.deepEqual(r.faltantesSinDocumento, [{ hoja: 'Diferencia', fila: 2, codigoBarra: '2050039062027' }]);
+  assert.deepEqual(r.faltantesSinDocumento, [{ hoja: 'Diferencia', fila: 2, codigoBarra: '2050039062027', sinColumna: false }]);
   const m = motivoFaltantesSinDocumento(r.faltantesSinDocumento);
   assert.equal(m.code, 'FALTANTE_SIN_DOCUMENTO');
   assert.match(m.mensaje, /fila 2 \(2050039062027\)/);
@@ -212,10 +212,10 @@ test('Sobrante NO esperado: la columna ESTILO sirve como referencia (formato SUG
 
 test('hoja de la plantilla CEDI con datos pero sin sus títulos: se avisa y no se pierde en silencio', () => {
   const r = parsearPlantilla(libro(DIFERENCIA, ['Sobrante NO esperado', [['ARTICULO', 'UNIDADES'], ['STP7685', 1]]]));
-  assert.deepEqual(r.hojasIgnoradas, [{ hoja: 'Sobrante NO esperado', columnas: 'CANTIDAD y REFERENCIA (o ESTILO / CÓDIGO)' }]);
+  assert.deepEqual(r.hojasIgnoradas, [{ hoja: 'Sobrante NO esperado', faltan: ['REFERENCIA (o ESTILO / CODIGO)', 'CANTIDAD'] }]);
   const m = motivoHojasNoReconocidas(r.hojasIgnoradas);
   assert.equal(m.code, 'HOJA_NO_RECONOCIDA');
-  assert.match(m.mensaje, /No se pudo leer la hoja «Sobrante NO esperado»/);
+  assert.match(m.mensaje, /en la hoja «Sobrante NO esperado» faltan las columnas REFERENCIA \(o ESTILO \/ CODIGO\) y CANTIDAD/);
 });
 
 test('Averia con DOCUMENTO y COMENTARIO (23294 - NOIR): el documento se suma a los del reclamo y no cuenta como unidades', () => {

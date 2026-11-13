@@ -348,7 +348,9 @@ export function NuevoReclamoForm({
     } catch (err) {
       if (seq !== parseSeq.current) return;
       // El archivo sigue adjunto: el usuario puede completar todo a mano.
-      setParseError(err instanceof ApiError ? err.message : 'No se pudo leer el Excel.');
+      // Plantilla incompleta: el mensaje ya dice qué falta y que hay que corregir el Excel.
+      const incompleta = err instanceof ApiError && (err.payload as { code?: string } | undefined)?.code === 'PLANTILLA_INCOMPLETA';
+      setParseError(err instanceof ApiError ? (incompleta ? err.message : `${err.message} Puedes completar los campos a mano.`) : 'No se pudo leer el Excel. Puedes completar los campos a mano.');
       setModoManual(true);
       setCampos((c) => ({ ...c, fechaRegistro: c.fechaRegistro || hoyIso() }));
     } finally {
@@ -628,7 +630,7 @@ export function NuevoReclamoForm({
   return (
     <Modal title="Nuevo reclamo" onClose={onClose} wide dismissible={false}>
       <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-        {error && <div className="anim-aparecer rounded-xl border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
+        {error && <div className="anim-aparecer rounded-xl border border-danger/30 bg-danger/10 px-3 py-2 text-sm whitespace-pre-line text-danger">{error}</div>}
 
         <SeccionForm paso={1} completa={paso1Completo} titulo="Origen y Excel" ayuda="El portal lee el Excel y llena lo que pueda por ti.">
           <div className={cn('grid gap-2', origenes.length > 1 && 'grid-cols-2')} role="radiogroup" aria-label="Origen del reclamo">
@@ -684,7 +686,7 @@ export function NuevoReclamoForm({
           {parseError && (
             <div className="anim-aparecer flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-sm">
               <AlertTriangle size={16} className="mt-0.5 shrink-0 text-warning" />
-              <span>{parseError} Puedes completar los campos a mano.</span>
+              <span className="whitespace-pre-line">{parseError}</span>
             </div>
           )}
 

@@ -16,6 +16,34 @@ export class FormatoNoReconocidoError extends Error {
   }
 }
 
+/**
+ * Al Excel le falta algo de la plantilla (una columna, o un dato en una
+ * fila): el mensaje dice qué y dónde, para corregirlo y volver a subirlo.
+ * `faltas`: textos cortos («En la hoja «Averia» falta la columna BARCODE»).
+ */
+export class PlantillaIncompletaError extends Error {
+  constructor(faltas, titulo = 'Al Excel le falta información de la plantilla:') {
+    const max = 12;
+    const lista = faltas.slice(0, max).map((f) => `• ${f}`).join('\n');
+    const mas = faltas.length > max ? `\n• y ${faltas.length - max} más` : '';
+    super(`${titulo}\n${lista}${mas}\nCorrígelo y vuelve a subirlo.`);
+    this.name = 'PlantillaIncompletaError';
+    this.code = 'PLANTILLA_INCOMPLETA';
+    this.faltas = faltas;
+  }
+}
+
+/** «la columna X» / «las columnas X y Y». */
+const columnas = (nombres) =>
+  nombres.length === 1 ? `la columna ${nombres[0]}` : `las columnas ${nombres.slice(0, -1).join(', ')} y ${nombres.at(-1)}`;
+
+/** Lista de filas para un mensaje: «filas 5 (2050…), 7 (2050…)». */
+const filasTexto = (filas) => {
+  const max = 8;
+  const t = filas.slice(0, max).map((f) => (f.codigo ? `${f.fila} (${f.codigo})` : `${f.fila}`)).join(', ');
+  return `${filas.length === 1 ? 'la fila' : 'las filas'} ${t}${filas.length > max ? ` y ${filas.length - max} más` : ''}`;
+};
+
 /** Fecha en texto que no existe o no es dd/mm/aaaa (p. ej. 31/02/2024 o 13/25/2024). */
 export class FechaInvalidaError extends Error {
   constructor(texto) {
@@ -337,16 +365,13 @@ function leerMetadatos(filas) {
  * tiene en la fila 1; la nueva trae antes un encabezado como el de Tienda
  * (PROVEEDOR, MARCA, DIVISIÓN, FACTURA / EMBARQUE).
  */
-function buscarFilaEncabezadoCedi(filas) {
-  const limite = Math.min(filas.length, 15);
-  for (let r = 0; r < limite; r += 1) {
-    const headers = (filas[r] || []).map(normalizar);
-    if (headers.includes('BARCODE') && headers.includes('MOTIVO')) return r;
-  }
-  return -1;
-}
+const REQ_CEDI = [
+  { nombre: 'BARCODE', ok: (h) => h === 'BARCODE' },
+  { nombre: 'MOTIVO', ok: (h) => h === 'MOTIVO' },
+];
+const buscarFilaEncabezadoCedi = (filas) => filaDeTitulos(filas, REQ_CEDI, 15).fila;
 
-function parsearCedi(filas, filaEncabezado) {
+function parsearCedi(filas, filaEncabezado, faltas = [], nombreHoja = '') {
   const headers = (filas[filaEncabezado] || []).map(normalizar);
   const iBarcode = headers.indexOf('BARCODE');
   const iMotivo = headers.indexOf('MOTIVO');
@@ -363,9 +388,10 @@ function parsearCedi(filas, filaEncabezado) {
   const meta = leerMetadatos(filas.slice(0, filaEncabezado));
 
   const lineas = [];
+  const sinCantidad = [];
   let fechaRegistro = null;
 
-  for (const fila of datos) {
+  for (const [i, fila] of datos.entries()) {
     const codigoBarra = aCodigoBarra(fila[iBarcode]);
     if (!codigoBarra || !/\d/.test(codigoBarra)) continue;
 
@@ -378,6 +404,7 @@ function parsearCedi(filas, filaEncabezado) {
     const recibida = iRecibida >= 0 ? aNumero(fila[iRecibida]) : null;
 
     const cantidad = cantidadCedi({ tipo, esperada, recibida, diferencia, averiadas });
+    if (cantidad === null) sinCantidad.push({ fila: filaEncabezado + i + 2, codigo: codigoBarra });
 
     if (!fechaRegistro && iFecha >= 0) fechaRegistro = aFechaIso(fila[iFecha]);
 
@@ -400,6 +427,11 @@ function parsearCedi(filas, filaEncabezado) {
     });
   }
 
+  if (sinCantidad.length) {
+    faltas.push(
+      `En la hoja «${nombreHoja.trim()}» no se sabe la cantidad de ${filasTexto(sinCantidad)}: llena DIFERENCIA (o ESPERADA y RECIBIDA, o AVERIADAS).`
+    );
+  }
   // Sin encabezado (plantilla vieja) no hay proveedor: se infiere después vía
   // SAP (código -> última OC). DOCUMENTO es el documento SAP de cada línea,
   // no la factura/embarque.
@@ -419,19 +451,14 @@ function parsearCedi(filas, filaEncabezado) {
   };
 }
 
-function buscarFilaEncabezadoTienda(filas) {
-  const limite = Math.min(filas.length, 60);
-  for (let r = 0; r < limite; r += 1) {
-    const headers = (filas[r] || []).map(normalizar);
-    const tieneMotivo = headers.some((h) => h === 'MOTIVO' || h.startsWith('MOTIVO'));
-    const tieneDocumento = headers.some((h) => h.includes('DOCUMENTO'));
-    const tieneCodigo = headers.some((h) => h.includes('CODIGO') && h.includes('BARRA'));
-    if (tieneMotivo && tieneDocumento && tieneCodigo) return r;
-  }
-  return -1;
-}
+const REQ_TIENDA = [
+  { nombre: 'CODIGO DE BARRA', ok: (h) => h.includes('CODIGO') && h.includes('BARRA') },
+  { nombre: 'MOTIVO', ok: (h) => h === 'MOTIVO' || h.startsWith('MOTIVO') },
+  { nombre: 'DOCUMENTO', ok: (h) => h.includes('DOCUMENTO') },
+];
+const buscarFilaEncabezadoTienda = (filas) => filaDeTitulos(filas, REQ_TIENDA, 60).fila;
 
-function parsearTienda(filas, filaEncabezado) {
+function parsearTienda(filas, filaEncabezado, faltas = [], nombreHoja = '') {
   const headers = (filas[filaEncabezado] || []).map(normalizar);
   const iCodigo = buscarColumna(headers, (h) => h.includes('CODIGO') && h.includes('BARRA'));
   const iMotivo = buscarColumna(headers, (h) => h === 'MOTIVO' || h.startsWith('MOTIVO'));
@@ -447,17 +474,21 @@ function parsearTienda(filas, filaEncabezado) {
 
   const filasDatos = filas.slice(filaEncabezado + 1);
   const iCantidad = elegirColumnaCantidad(headers, filasDatos, iCodigo);
+  const hoja = nombreHoja.trim();
+  if (iCantidad < 0) faltas.push(`En la hoja «${hoja}» falta la columna CANTIDAD.`);
+  const sinCantidad = [];
 
   const meta = leerMetadatos(filas.slice(0, Math.min(filaEncabezado, 15)));
 
   const lineas = [];
-  for (const fila of filasDatos) {
+  for (const [i, fila] of filasDatos.entries()) {
     // En el formato nuevo no hay bandera "RECLAMO" por fila: toda fila con
     // código de barra cuenta como línea.
     const codigoBarra = aCodigoBarra(fila[iCodigo]);
     if (!codigoBarra || !/\d/.test(codigoBarra)) continue;
     const motivoTexto = textoCelda(fila[iMotivo]);
     const cantidad = iCantidad >= 0 ? aNumero(fila[iCantidad]) : null;
+    if (iCantidad >= 0 && cantidad === null) sinCantidad.push({ fila: filaEncabezado + i + 2, codigo: codigoBarra });
     // «Sobrante no esperado» es solo de CEDI: en Tienda cuenta como sobrante.
     const detectado = detectarTipoPorMotivo(motivoTexto);
     const tipo = detectado === 'sobrante_no_esperado' ? 'sobrante_real' : detectado;
@@ -481,6 +512,8 @@ function parsearTienda(filas, filaEncabezado) {
       },
     });
   }
+
+  if (sinCantidad.length) faltas.push(`En la hoja «${hoja}» falta la CANTIDAD en ${filasTexto(sinCantidad)}.`);
 
   // "4168 - 001 / 23069": factura y embarque (si son distintos) en el mismo campo.
   const facturaEmbarque = [
@@ -519,27 +552,52 @@ function parsearTienda(filas, filaEncabezado) {
 /** Columna de referencia en «Sobrante NO esperado»: REFERENCIA, ESTILO, MODELO o REF. */
 const esColumnaReferencia = (h) => h.startsWith('REFERENCIA') || h.startsWith('ESTILO') || h.startsWith('MODELO') || h === 'REF' || h === 'REF.';
 
+// `requeridas`: columnas sin las que la hoja no se puede leer; si falta alguna,
+// el error dice cuál (antes solo se decía que la hoja no se reconocía).
 const HOJAS_CEDI = [
   {
     clave: 'averia',
     nombre: (n) => n.startsWith('AVERIA'),
-    encabezado: (h) => h.includes('BARCODE') && h.some((x) => x.startsWith('AVERIA')),
-    columnas: 'BARCODE y AVERIA',
+    requeridas: [
+      { nombre: 'BARCODE', ok: (x) => x === 'BARCODE' },
+      { nombre: 'AVERIA', ok: (x) => x.startsWith('AVERIA') },
+    ],
   },
   {
     clave: 'diferencia',
     nombre: (n) => n.startsWith('DIFERENCIA'),
-    encabezado: (h) => h.includes('BARCODE') && h.some((x) => x.startsWith('DIFERENCIA')),
-    columnas: 'BARCODE y DIFERENCIA',
+    requeridas: [
+      { nombre: 'BARCODE', ok: (x) => x === 'BARCODE' },
+      { nombre: 'DIFERENCIA', ok: (x) => x.startsWith('DIFERENCIA') },
+    ],
   },
   {
     clave: 'sobrante',
     nombre: (n) => n.includes('SOBRANTE') && n.includes('NO ESPERADO'),
-    encabezado: (h) => h.some((x) => esColumnaReferencia(x) || x.startsWith('CODIGO')) && h.some((x) => x.startsWith('CANTIDAD')),
-    // Para el aviso cuando la hoja está pero no se reconoce.
-    columnas: 'CANTIDAD y REFERENCIA (o ESTILO / CÓDIGO)',
+    requeridas: [
+      { nombre: 'REFERENCIA (o ESTILO / CODIGO)', ok: (x) => esColumnaReferencia(x) || x.startsWith('CODIGO') },
+      { nombre: 'CANTIDAD', ok: (x) => x.startsWith('CANTIDAD') },
+    ],
   },
 ];
+
+/** Columnas requeridas que no están en esos títulos (normalizados). */
+const faltantesEn = (requeridas, headers) => requeridas.filter((r) => !headers.some((h) => h && r.ok(h))).map((r) => r.nombre);
+
+/**
+ * Fila de títulos de una tabla: la primera (entre las primeras `limite`) que
+ * trae todas las requeridas. Si ninguna, { fila: -1, faltan } con lo que le
+ * falta a la que más se acerca (para decir qué columna falta).
+ */
+function filaDeTitulos(filas, requeridas, limite = 15) {
+  let mejor = { fila: -1, faltan: requeridas.map((r) => r.nombre) };
+  for (let r = 0; r < Math.min(filas.length, limite); r += 1) {
+    const faltan = faltantesEn(requeridas, (filas[r] || []).map(normalizar));
+    if (!faltan.length) return { fila: r, faltan };
+    if (faltan.length < mejor.faltan.length) mejor = { fila: -1, faltan };
+  }
+  return mejor;
+}
 
 /**
  * Hojas de la plantilla CEDI por hojas que trae el libro: [{ clave, nombreHoja, filas, filaEncabezado }].
@@ -552,17 +610,10 @@ function hojasCedi(wb, ignoradas = []) {
     const def = HOJAS_CEDI.find((d) => d.nombre(normalizar(nombreHoja)));
     if (!def || encontradas.some((e) => e.clave === def.clave)) continue;
     const filas = filasDeHoja(wb.Sheets[nombreHoja]);
-    const limite = Math.min(filas.length, 15);
-    let reconocida = false;
-    for (let r = 0; r < limite; r += 1) {
-      if (def.encabezado((filas[r] || []).map(normalizar))) {
-        encontradas.push({ clave: def.clave, nombreHoja, filas, filaEncabezado: r });
-        reconocida = true;
-        break;
-      }
-    }
-    // Hoja con datos y el nombre de la plantilla, pero sin sus títulos.
-    if (!reconocida && filas.some((f) => !esVacia(f))) ignoradas.push({ hoja: nombreHoja.trim(), columnas: def.columnas });
+    const { fila, faltan } = filaDeTitulos(filas, def.requeridas);
+    if (fila >= 0) encontradas.push({ clave: def.clave, nombreHoja, filas, filaEncabezado: fila });
+    // Hoja con datos y el nombre de la plantilla, pero sin alguno de sus títulos.
+    else if (filas.some((f) => !esVacia(f))) ignoradas.push({ hoja: nombreHoja.trim(), faltan });
   }
   return encontradas;
 }
@@ -570,9 +621,9 @@ function hojasCedi(wb, ignoradas = []) {
 /** Aviso para las hojas de la plantilla CEDI que no se pudieron leer (null si no hay). */
 export function motivoHojasNoReconocidas(ignoradas) {
   if (!ignoradas?.length) return null;
-  const lista = ignoradas.map((h) => `«${h.hoja}» (necesita las columnas ${h.columnas})`).join('; ');
+  const lista = ignoradas.map((h) => `en la hoja «${h.hoja}» ${h.faltan.length > 1 ? 'faltan' : 'falta'} ${columnas(h.faltan)}`).join('; ');
   return {
-    mensaje: `No se pudo leer ${ignoradas.length === 1 ? 'la hoja' : 'las hojas'} ${lista}. Revisa los títulos de la primera fila y vuelve a subir el Excel.`,
+    mensaje: `No se pudo leer el Excel: ${lista}. Agrega ${ignoradas.length === 1 && ignoradas[0].faltan.length === 1 ? 'ese título' : 'esos títulos'} en la fila de títulos y vuelve a subirlo.`,
     code: 'HOJA_NO_RECONOCIDA',
   };
 }
@@ -653,7 +704,7 @@ export function filasConFoto(wb, nombreHoja) {
  * el documento SAP de la avería (23294 - NOIR, 2026-11-13: antes no se leía y
  * el PDF de ese documento no se aceptaba al crear).
  */
-function lineasAveria({ filas, filaEncabezado, nombreHoja }, wb, averiasSinFoto) {
+function lineasAveria({ filas, filaEncabezado, nombreHoja }, wb, averiasSinFoto, faltas) {
   const conFoto = filasConFoto(wb, nombreHoja);
   const headers = (filas[filaEncabezado] || []).map(normalizar);
   const iBarcode = headers.indexOf('BARCODE');
@@ -665,6 +716,11 @@ function lineasAveria({ filas, filaEncabezado, nombreHoja }, wb, averiasSinFoto)
   const iComentario = buscarColumna(headers, (h) => h.startsWith('COMENTARIO'));
   // Las unidades no pueden incluir el número de documento ni otra columna de texto.
   const fin = Math.min(...[iFoto, iDocumento, iComentario].filter((c) => c > iAveria), headers.length);
+  const hoja = nombreHoja.trim();
+  if (fin - iAveria <= 1) {
+    faltas.push(`En la hoja «${hoja}» falta la columna de unidades averiadas (por ejemplo «Manchado»), a la derecha de AVERIA.`);
+  }
+  const sinUnidades = [];
   const lineas = [];
   filas.slice(filaEncabezado + 1).forEach((fila, i) => {
     const codigoBarra = aCodigoBarra(fila[iBarcode]);
@@ -676,6 +732,7 @@ function lineasAveria({ filas, filaEncabezado, nombreHoja }, wb, averiasSinFoto)
       const n = aNumero(fila[c]);
       if (n !== null) unidades = (unidades ?? 0) + Math.abs(n);
     }
+    if (unidades === null && fin - iAveria > 1) sinUnidades.push({ fila: filaExcel, codigo: codigoBarra });
     const averia = textoCelda(fila[iAveria]);
     lineas.push({
       codigoBarra,
@@ -694,6 +751,7 @@ function lineasAveria({ filas, filaEncabezado, nombreHoja }, wb, averiasSinFoto)
       },
     });
   });
+  if (sinUnidades.length) faltas.push(`En la hoja «${hoja}» faltan las unidades averiadas en ${filasTexto(sinUnidades)}.`);
   return lineas;
 }
 
@@ -718,7 +776,7 @@ function lineasDiferencia({ filas, filaEncabezado, nombreHoja }, faltantesSinDoc
     if (!diferencia) return; // sin diferencia no hay nada que reclamar
     const faltante = diferencia < 0;
     const documento = iDocumento >= 0 ? textoCelda(fila[iDocumento]) || null : null;
-    if (faltante && !documento) faltantesSinDocumento.push({ hoja: nombreHoja.trim(), fila: filaEncabezado + i + 2, codigoBarra });
+    if (faltante && !documento) faltantesSinDocumento.push({ hoja: nombreHoja.trim(), fila: filaEncabezado + i + 2, codigoBarra, sinColumna: iDocumento < 0 });
     lineas.push({
       codigoBarra,
       cantidad: Math.abs(diferencia),
@@ -740,21 +798,28 @@ function lineasDiferencia({ filas, filaEncabezado, nombreHoja }, faltantesSinDoc
 }
 
 /** Hoja «Sobrante NO esperado»: el código es opcional; la descripción es «REFERENCIA, COLOR, TALLA». */
-function lineasSobranteNoEsperado({ filas, filaEncabezado }) {
+function lineasSobranteNoEsperado({ filas, filaEncabezado, nombreHoja }, faltas) {
   const headers = (filas[filaEncabezado] || []).map(normalizar);
   const iCodigo = buscarColumna(headers, (h) => h.startsWith('CODIGO') || h === 'BARCODE');
   const iReferencia = buscarColumna(headers, esColumnaReferencia);
   const iColor = buscarColumna(headers, (h) => h.startsWith('COLOR'));
   const iTalla = buscarColumna(headers, (h) => h.startsWith('TALLA'));
   const iCantidad = buscarColumna(headers, (h) => h.startsWith('CANTIDAD'));
+  const iDocumento = buscarColumna(headers, (h) => h.startsWith('DOCUMENTO'));
+  const hoja = nombreHoja.trim();
+  const sinCantidad = [];
+  const sinProducto = [];
   const lineas = [];
-  for (const fila of filas.slice(filaEncabezado + 1)) {
+  for (const [i, fila] of filas.slice(filaEncabezado + 1).entries()) {
+    const filaExcel = filaEncabezado + i + 2;
     const codigo = iCodigo >= 0 ? aCodigoBarra(fila[iCodigo]) : '';
     const referencia = iReferencia >= 0 ? textoCelda(fila[iReferencia]).slice(0, 100) || null : null;
     const color = iColor >= 0 ? textoCelda(fila[iColor]).slice(0, 100) || null : null;
     const talla = iTalla >= 0 ? textoCelda(fila[iTalla]).slice(0, 50) || null : null;
     const n = iCantidad >= 0 ? aNumero(fila[iCantidad]) : null;
     if (!codigo && !referencia && !color && !talla && n === null) continue;
+    if (n === null) sinCantidad.push({ fila: filaExcel, codigo: codigo || referencia });
+    if (!codigo && !referencia) sinProducto.push({ fila: filaExcel });
     const cantidad = n === null ? null : Math.abs(n);
     lineas.push({
       codigoBarra: codigo && /\d/.test(codigo) ? codigo : null,
@@ -765,30 +830,44 @@ function lineasSobranteNoEsperado({ filas, filaEncabezado }) {
       referencia,
       color,
       talla,
-      cedi: { fecha: null, producto: null, esperada: null, recibida: null, diferencia: cantidad, averiadas: null, documento: null },
+      cedi: {
+        fecha: null,
+        producto: null,
+        esperada: null,
+        recibida: null,
+        diferencia: cantidad,
+        averiadas: null,
+        documento: iDocumento >= 0 ? textoCelda(fila[iDocumento]) || null : null,
+      },
     });
   }
+  if (sinCantidad.length) faltas.push(`En la hoja «${hoja}» falta la CANTIDAD en ${filasTexto(sinCantidad)}.`);
+  if (sinProducto.length) faltas.push(`En la hoja «${hoja}» falta el CODIGO o la REFERENCIA en ${filasTexto(sinProducto)}.`);
   return lineas;
 }
 
 function parsearCediHojas(hojas, wb) {
   const faltantesSinDocumento = [];
   const averiasSinFoto = [];
+  const faltas = [];
   const lineas = [];
   for (const h of hojas) {
-    if (h.clave === 'averia') lineas.push(...lineasAveria(h, wb, averiasSinFoto));
+    if (h.clave === 'averia') lineas.push(...lineasAveria(h, wb, averiasSinFoto, faltas));
     else if (h.clave === 'diferencia') lineas.push(...lineasDiferencia(h, faltantesSinDocumento));
-    else lineas.push(...lineasSobranteNoEsperado(h));
+    else lineas.push(...lineasSobranteNoEsperado(h, faltas));
   }
-  // Documentos SAP y comentario: de «Diferencia» y de «Averia» (cada una puede traer el suyo).
+  if (faltas.length) throw new PlantillaIncompletaError(faltas);
+  // Documentos SAP y comentario: de TODAS las hojas que los traigan (el NOIR
+  // traía uno en «Diferencia» y otro en «Averia», y solo se leía el primero).
   const documentos = [];
   const comentarios = [];
-  for (const clave of ['diferencia', 'averia']) {
+  for (const clave of ['diferencia', 'averia', 'sobrante']) {
     const h = hojas.find((x) => x.clave === clave);
     if (!h) continue;
     const headers = (h.filas[h.filaEncabezado] || []).map(normalizar);
     const datos = h.filas.slice(h.filaEncabezado + 1);
-    const iBarcode = headers.indexOf('BARCODE');
+    // Fila con producto: BARCODE en Averia/Diferencia; CODIGO o REFERENCIA en Sobrante NO esperado.
+    const iBarcode = clave === 'sobrante' ? buscarColumna(headers, (x) => esColumnaReferencia(x) || x.startsWith('CODIGO')) : headers.indexOf('BARCODE');
     for (const d of documentosSap(datos, buscarColumna(headers, (x) => x.startsWith('DOCUMENTO')), iBarcode)) {
       if (!documentos.some((y) => y.toUpperCase() === d.toUpperCase())) documentos.push(d);
     }
@@ -819,10 +898,17 @@ function parsearCediHojas(hojas, wb) {
 /** Mensaje para los faltantes de la hoja Diferencia que no traen DOCUMENTO (null si no hay). */
 export function motivoFaltantesSinDocumento(faltantes) {
   if (!faltantes?.length) return null;
+  const hoja = faltantes[0].hoja;
+  if (faltantes[0].sinColumna) {
+    return {
+      mensaje: `Los faltantes deben tener su documento: a la hoja «${hoja}» le falta la columna DOCUMENTO. Agrégala con el documento SAP de cada faltante y vuelve a subir el Excel.`,
+      code: 'FALTANTE_SIN_DOCUMENTO',
+    };
+  }
   const lista = faltantes.slice(0, 10).map((f) => `fila ${f.fila} (${f.codigoBarra})`).join(', ');
   const mas = faltantes.length > 10 ? ` y ${faltantes.length - 10} más` : '';
   return {
-    mensaje: `Los faltantes deben tener su documento: en la hoja «${faltantes[0].hoja}» falta la columna DOCUMENTO en ${lista}${mas}.`,
+    mensaje: `Los faltantes deben tener su documento: en la hoja «${hoja}» falta el DOCUMENTO en ${lista}${mas}.`,
     code: 'FALTANTE_SIN_DOCUMENTO',
   };
 }
@@ -871,23 +957,55 @@ export function parsearPlantilla(buffer) {
     return { hoja: hojaNombre, ...resultado, ...resumirTipos(resultado.lineas) };
   }
 
+  // Plantilla Tienda o CEDI clásica: una sola hoja con la tabla. Si otra hoja
+  // también trae productos con la plantilla, no se elige una en silencio.
+  let elegido = null;
+  const otras = [];
+  let cercana = null; // la hoja que más se parece a una plantilla, para decir qué columna falta
   for (const nombreHoja of wb.SheetNames) {
     const filas = filasDeHoja(wb.Sheets[nombreHoja]);
     if (!filas.length || filas.every(esVacia)) continue;
 
+    const faltas = [];
     let resultado = null;
     const filaCedi = buscarFilaEncabezadoCedi(filas);
     if (filaCedi >= 0) {
-      resultado = parsearCedi(filas, filaCedi);
+      resultado = parsearCedi(filas, filaCedi, faltas, nombreHoja);
     } else {
       const filaEncabezado = buscarFilaEncabezadoTienda(filas);
-      if (filaEncabezado >= 0) resultado = parsearTienda(filas, filaEncabezado);
+      if (filaEncabezado >= 0) resultado = parsearTienda(filas, filaEncabezado, faltas, nombreHoja);
     }
-    if (!resultado) continue;
-
-    resultado.lineas = resultado.lineas.map((l, i) => ({ posicion: i + 1, ...l }));
-    return { hoja: nombreHoja, ...resultado, ...resumirTipos(resultado.lineas) };
+    if (!resultado) {
+      for (const [plantilla, req, limite] of [['Tienda', REQ_TIENDA, 60], ['CEDI', REQ_CEDI, 15]]) {
+        const { faltan } = filaDeTitulos(filas, req, limite);
+        // Solo si tiene al menos una de las columnas: una hoja de listas («Hoja1») no cuenta.
+        if (faltan.length < req.length && (!cercana || faltan.length < cercana.faltan.length)) cercana = { hoja: nombreHoja.trim(), plantilla, faltan };
+      }
+      continue;
+    }
+    if (elegido) {
+      if (resultado.lineas.length) otras.push(nombreHoja.trim());
+      continue;
+    }
+    elegido = { nombreHoja, resultado, faltas };
   }
 
-  throw new FormatoNoReconocidoError();
+  if (!elegido) {
+    if (cercana) {
+      throw new PlantillaIncompletaError([
+        `En la hoja «${cercana.hoja}» ${cercana.faltan.length > 1 ? 'faltan' : 'falta'} ${columnas(cercana.faltan)} de la plantilla de ${cercana.plantilla}.`,
+      ]);
+    }
+    throw new FormatoNoReconocidoError();
+  }
+  const { nombreHoja, resultado, faltas } = elegido;
+  if (otras.length && elegido.resultado.lineas.length) {
+    throw new PlantillaIncompletaError(
+      [`Hay productos en ${otras.length === 1 ? 'la hoja' : 'las hojas'} «${[nombreHoja.trim(), ...otras].join('», «')}». Deja todos los productos en una sola hoja.`],
+      'El Excel trae la tabla de productos en más de una hoja:'
+    );
+  }
+  if (faltas.length) throw new PlantillaIncompletaError(faltas);
+  resultado.lineas = resultado.lineas.map((l, i) => ({ posicion: i + 1, ...l }));
+  return { hoja: nombreHoja, ...resultado, ...resumirTipos(resultado.lineas) };
 }
