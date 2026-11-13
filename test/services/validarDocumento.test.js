@@ -168,3 +168,33 @@ test('911: líneas repetidas del mismo producto se suman; sin descripción se bu
   assert.deepEqual(r.noEstan, []);
   assert.deepEqual(r.sinVerificar.map((l) => l.posicion), [4]);
 });
+
+test('23294 - NOIR: referencias con guion («A67-28888», «A67-X29121») cruzan con el 911', async () => {
+  const { claveProducto, faltantesContra911 } = await import('../../src/services/contabilidad/validarDocumento.js');
+  assert.equal(claveProducto('A67-28888 "LADIES 2PCS SET PIJ, BLACK, M'), 'A67-28888|BLACK|M');
+  assert.equal(claveProducto('A67-X29121 "LADIES 2PCS SE, OFF WHITE, S'), 'A67-X29121|OFF WHITE|S');
+  // Las de antes no cambian.
+  assert.equal(claveProducto('030766-1 "VERSALLES, PEACH, M'), '030766-1|PEACH|M');
+  assert.equal(claveProducto('OPWB1205 "CAMISA OXFORD, AMPARO BLUE, S'), 'OPWB1205|AMPARO BLUE|S');
+  assert.equal(claveProducto('T-SHIRT P/H, BLUE, S'), null);
+  const faltantes = [
+    { posicion: 3, codigoBarra: '2050039057528', descripcion: 'A67-28888 "LADIES 2PCS SET PIJ, BLACK, M', cantidad: 1 },
+    { posicion: 4, codigoBarra: '2050039057634', descripcion: 'A67-X29121 "LADIES 2PCS SE, OFF WHITE, S', cantidad: 1 },
+  ];
+  const filas = [
+    { material: '345-200032507002', descripcion: 'A67-28888 "LADIES 2PCS SET PIJ, BLACK, M', cantidad: 1 },
+    { material: '345-200032508005', descripcion: 'A67-X29121 "LADIES 2PCS SE, OFF WHITE, S', cantidad: 1 },
+  ];
+  const r = faltantesContra911(faltantes, filas);
+  assert.deepEqual([r.noEstan.length, r.cantidadDistinta.length, r.sinVerificar.length], [0, 0, 0]);
+});
+
+test('cruce por material: el prefijo del PDF («345-») y los ceros de SAP no impiden que coincida', async () => {
+  const { faltantesContra911 } = await import('../../src/services/contabilidad/validarDocumento.js');
+  const r = faltantesContra911(
+    [{ posicion: 1, codigoBarra: '9246752773', descripcion: 'descripción distinta', cantidad: 1 }],
+    [{ material: '345-300124308021', descripcion: 'OCKSB010 "T-SHIRT P/H M/, ULTRAMARINE, S', cantidad: 1 }],
+    new Map([['9246752773', '000000300124308021']])
+  );
+  assert.deepEqual([r.noEstan.length, r.cantidadDistinta.length], [0, 0]);
+});

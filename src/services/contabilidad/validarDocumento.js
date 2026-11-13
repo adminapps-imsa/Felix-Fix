@@ -13,6 +13,8 @@
 // lleva también el color (el segmento antes de la talla). El código corto
 // también puede ser alfanumérico (con al menos un dígito):
 //   OPWB1205 "CAMISA OXFORD, AMPARO BLUE, S      TE2032 "BLUSA, ROSA, M
+// o con partes separadas por guion (23294 - NOIR, 2026-11-13):
+//   A67-28888 "LADIES 2PCS SET PIJ, BLACK, M     A67-X29121 "LADIES 2PCS SE, OFF WHITE, S
 
 const DECISIONES = new Set(['aprobado', 'rechazado']);
 
@@ -27,8 +29,9 @@ export function claveProducto(descripcion) {
   if (!talla) return null;
   const modelo = texto.match(/(?:^|\D)(\d{8,})(?!\d)/);
   if (modelo) return `${modelo[1]}|${talla}`;
-  const codigo = texto.match(/^((?=[A-Z0-9]*\d)[A-Z0-9]{4,12}(?:-\d+)?)(?=\s|")/i);
-  if (!codigo) return null;
+  // Partes alfanuméricas unidas por guion, con al menos un dígito y 4 a 24 caracteres.
+  const codigo = texto.match(/^((?=[A-Z0-9-]*\d)[A-Z0-9]+(?:-[A-Z0-9]+)*)(?=\s|")/i);
+  if (!codigo || codigo[1].length < 4 || codigo[1].length > 24) return null;
   const color = segmentos.length >= 3 ? limpiarSegmento(segmentos[segmentos.length - 2]) : '';
   return `${codigo[1].toUpperCase()}|${color}|${talla}`;
 }
@@ -103,7 +106,13 @@ export function cruzar(filas, lineasReclamo) {
   };
 }
 
-const normMaterial = (m) => String(m ?? '').trim().toUpperCase().replace(/^0+/, '');
+/**
+ * Material comparable: el PDF lo trae con un prefijo («345-200032507002») y
+ * SAP con ceros a la izquierda («000000200032507002»): se queda lo que va
+ * después del último guion, sin ceros a la izquierda. Antes el prefijo hacía
+ * que el cruce por material nunca coincidiera.
+ */
+const normMaterial = (m) => String(m ?? '').trim().toUpperCase().replace(/^.*-/, '').replace(/^0+/, '');
 
 /**
  * Los faltantes deben venir en los 911 (devolución) que se suben al crear el
