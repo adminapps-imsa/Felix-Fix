@@ -16,6 +16,7 @@ test('fuera de Prod todo correo va solo a los de prueba, con la nota de a quién
 
 test('en Prod no cambia nada', () => {
   assert.equal(redirigirFueraDeProd({ para: ['x@maduro.com.pa'], asunto: 'a' }, 'Prod'), null);
+  assert.equal(redirigirFueraDeProd({ para: ['x@maduro.com.pa'], asunto: 'a' }, 'prod'), null);
 });
 
 test('la nota no deja meter html', () => {
