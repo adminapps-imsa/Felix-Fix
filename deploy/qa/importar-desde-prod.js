@@ -68,8 +68,10 @@ try {
     .request()
     .input('esquema', sql.NVarChar(128), 'QA')
     .query(`SELECT c.TABLE_NAME AS tabla, c.COLUMN_NAME AS columna, c.DATA_TYPE AS tipo,
-                   COLUMNPROPERTY(OBJECT_ID(QUOTENAME(c.TABLE_SCHEMA) + '.' + QUOTENAME(c.TABLE_NAME)), c.COLUMN_NAME, 'IsIdentity') AS identidad
-            FROM INFORMATION_SCHEMA.COLUMNS c WHERE c.TABLE_SCHEMA = @esquema`);
+                   COLUMNPROPERTY(OBJECT_ID(QUOTENAME(c.TABLE_SCHEMA) + '.' + QUOTENAME(c.TABLE_NAME)), c.COLUMN_NAME, 'IsIdentity') AS identidad,
+                   COLUMNPROPERTY(OBJECT_ID(QUOTENAME(c.TABLE_SCHEMA) + '.' + QUOTENAME(c.TABLE_NAME)), c.COLUMN_NAME, 'IsComputed') AS calculada
+            FROM INFORMATION_SCHEMA.COLUMNS c WHERE c.TABLE_SCHEMA = @esquema
+            ORDER BY c.TABLE_NAME, c.ORDINAL_POSITION`);
   const columnas = new Map();
   for (const c of cols) {
     if (!columnas.has(c.tabla)) columnas.set(c.tabla, []);
@@ -107,7 +109,10 @@ try {
 
     for (const t of TABLAS.filter((x) => x !== 'Tiendas')) {
       const filas = datos.tablas[t] ?? [];
-      const defs = (columnas.get(t) ?? []).filter((c) => filas.length && c.columna in filas[0]);
+      // Las que llena SQL Server solo (rowversion/timestamp, calculadas) no se escriben.
+      const defs = (columnas.get(t) ?? []).filter(
+        (c) => filas.length && c.columna in filas[0] && c.tipo !== 'timestamp' && c.tipo !== 'rowversion' && c.calculada !== 1
+      );
       if (!defs.length) continue;
       const identidad = defs.some((c) => c.identidad === 1);
       const lista = defs.map((c) => `[${c.columna}]`).join(', ');
@@ -118,6 +123,8 @@ try {
           if (v !== null && v !== undefined) {
             if (c.columna === 'TiendaId') v = tiendaQa.get(v) ?? null;
             else if (['datetime2', 'datetime', 'date', 'smalldatetime', 'datetimeoffset'].includes(c.tipo)) v = new Date(v);
+            // Texto: cualquier otro valor (número, sí/no) se pasa como texto.
+            else if (['varchar', 'nvarchar', 'char', 'nchar', 'text', 'ntext'].includes(c.tipo) && typeof v !== 'string') v = typeof v === 'object' ? JSON.stringify(v) : String(v);
           }
           const tipo =
             c.tipo === 'uniqueidentifier'
