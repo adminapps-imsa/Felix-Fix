@@ -60,3 +60,23 @@ test('quien creó el caso siempre lo ve, aunque la sucursal no sea su tienda (Di
   assert.equal(veReporte(dixa, { TiendaId: 1, EmpleadoReportaUsuario: 'dixa' }), true);
   assert.equal(veReporte(dixa, { TiendaId: 1, EmpleadoReportaUsuario: 'otra' }), false);
 });
+
+test('la sucursal se reconoce escrita de cualquier forma y queda con el nombre del catálogo (13-nov)', async () => {
+  const { tiendaDeSucursal } = await import('../../src/domain/tienda.js');
+  const tiendas = [
+    { Codigo: 'TD28', Nombre: 'Costa del Este' },
+    { Codigo: 'TD26', Nombre: 'Alta Plaza' },
+    { Codigo: 'TD04', Nombre: 'Vía España' },
+  ];
+  for (const [escrita, nombre] of [
+    ['COSTA DEL ESTE', 'Costa del Este'],
+    ['Town Center', 'Costa del Este'],
+    ['td28', 'Costa del Este'],
+    ['ALTAPLAZA', 'Alta Plaza'],
+    ['Via España', 'Vía España'],
+    [' via  espana ', 'Vía España'],
+  ]) assert.equal(tiendaDeSucursal(escrita, tiendas)?.Nombre, nombre, escrita);
+  assert.equal(tiendaDeSucursal('Metromall', tiendas), null);
+  assert.equal(tiendaDeSucursal('', tiendas), null);
+  assert.equal(esSucursalDe('Town Center', { nombre: 'Costa del Este', codigo: 'TD28' }), true);
+});

@@ -8,7 +8,7 @@
 import { getPool, sql, S } from '../../config/db.js';
 import { tienePermiso, PERMISO_CONFIGURACION } from './permisos.js';
 import { notFound } from '../../utils/httpError.js';
-import { veReclamo, veReporte } from '../../domain/tienda.js';
+import { veReclamo, veReporte, formasDe } from '../../domain/tienda.js';
 import { logger } from '../../utils/logger.js';
 
 const CI = 'COLLATE Latin1_General_CI_AI';
@@ -86,15 +86,19 @@ export function condicionReporteTienda(request, alcance, a = 'r') {
 
 /**
  * Condición SQL sobre un reclamo (alias `a`) para una tienda: los de origen
- * Tienda con esa sucursal (por nombre o código). `prefijo` separa los
- * parámetros cuando hay dos condiciones en la misma consulta (alcance y filtro).
+ * Tienda con esa sucursal (por nombre, código o alias; sin acentos ni
+ * espacios, igual que esSucursalDe). `prefijo` separa los parámetros cuando
+ * hay dos condiciones en la misma consulta (alcance y filtro).
  */
 export function condicionSucursal(request, tienda, a = 'r', prefijo = 'tda') {
-  if (!request.parameters?.[`${prefijo}Nombre`]) {
-    request.input(`${prefijo}Nombre`, sql.NVarChar(150), tienda.nombre || '');
-    request.input(`${prefijo}Codigo`, sql.NVarChar(150), tienda.codigo || '');
-  }
-  return `(${a}.Origen = 'tienda' AND (${limpio(`${a}.Sucursal`)} = @${prefijo}Nombre OR ${limpio(`${a}.Sucursal`)} = @${prefijo}Codigo))`;
+  const formas = formasDe(tienda);
+  if (!formas.length) return '1 = 0';
+  const params = formas.map((f, i) => {
+    const n = `${prefijo}F${i}`;
+    if (!request.parameters?.[n]) request.input(n, sql.NVarChar(150), f);
+    return `@${n}`;
+  });
+  return `(${a}.Origen = 'tienda' AND REPLACE(LTRIM(RTRIM(${a}.Sucursal)), ' ', '') ${CI} IN (${params.join(', ')}))`;
 }
 
 /** Condición SQL sobre un reclamo (alias `a`) para el alcance del usuario, o null si ve todo. */

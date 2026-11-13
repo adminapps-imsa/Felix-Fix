@@ -7,7 +7,21 @@ import { parseJsonArray } from '../../repositories/reclamosRepository.js';
 import * as dominio from '../../domain/reclamo.js';
 import { USUARIO_SISTEMA } from './tipos.js';
 import { nombresDeUsuarios } from '../acceso/keycloakAdmin.js';
-import { conflict, notFound } from '../../utils/httpError.js';
+import { badRequest, conflict, notFound } from '../../utils/httpError.js';
+import { listarTiendasActivas } from '../../repositories/tiendasRepository.js';
+import { tiendaDeSucursal } from '../../domain/tienda.js';
+
+/**
+ * Sucursal de un reclamo de Tienda con el nombre del catálogo («costa del
+ * este», «TD28» o «Town Center» → «Costa del Este»). Si no es una tienda del
+ * catálogo responde 400: así cada reclamo queda en su tienda (filtros y
+ * Configuración → Tiendas dependen de eso).
+ */
+export async function sucursalOficial(valor) {
+  const t = tiendaDeSucursal(valor, await listarTiendasActivas());
+  if (!t) throw badRequest(`«${String(valor ?? '').trim()}» no es una tienda del catálogo. Elige la sucursal de la lista.`, { code: 'SUCURSAL_DESCONOCIDA' });
+  return t.Nombre;
+}
 
 const RE_UUID =/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

@@ -21,7 +21,7 @@ import { badRequest, notFound } from '../../utils/httpError.js';
 import { logger } from '../../utils/logger.js';
 import { tiendaDe } from '../acceso/alcanceTienda.js';
 import { motivoTiendaReclamo } from '../../domain/tienda.js';
-import { obtenerOFallar, validarToken, exigir, nombreUsuario, detalle, conDocumentos } from './comun.js';
+import { obtenerOFallar, validarToken, exigir, nombreUsuario, detalle, conDocumentos, sucursalOficial } from './comun.js';
 
 const SAP_DOC_OPCIONAL = env.reclamos.sapDocOpcional && env.nodeEnv !== 'production';
 
@@ -114,6 +114,8 @@ export async function corregirDatos(token, body, usuario) {
   const d = result.data;
 
   if (r.Origen === 'tienda' && !d.sucursal) throw badRequest('La sucursal es obligatoria para reclamos de tienda.');
+  // Sucursal con el nombre del catálogo (o 400 si no es una tienda).
+  if (r.Origen === 'tienda') d.sucursal = await sucursalOficial(d.sucursal);
   // Usuario en una tienda: no lo puede pasar a otra sucursal.
   const ajena = motivoTiendaReclamo(await tiendaDe(usuario), { origen: r.Origen, sucursal: d.sucursal });
   if (ajena) throw badRequest(ajena, { code: 'TIENDA_AJENA' });
