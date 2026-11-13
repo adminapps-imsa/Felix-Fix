@@ -27,7 +27,7 @@ const ordenar = (set) => {
   return [...unicos.values()].sort((a, b) => a.localeCompare(b, 'es'));
 };
 
-function construir(filas) {
+export function construir(filas) {
   const porProveedor = new Map();
   const todos = { mundos: new Set(), departamentos: new Set(), marcas: new Set(), compradoras: new Set() };
   for (const f of filas) {
@@ -45,13 +45,19 @@ function construir(filas) {
     const key = proveedor.toUpperCase();
     let e = porProveedor.get(key);
     if (!e) {
-      e = { proveedor, mundos: new Set(), departamentos: new Set(), marcas: new Set(), compradoras: new Set() };
+      e = { proveedor, mundos: new Set(), departamentos: new Set(), marcas: new Set(), compradoras: new Set(), combinaciones: new Map() };
       porProveedor.set(key, e);
     }
     if (mundo) e.mundos.add(mundo);
     if (departamento) e.departamentos.add(departamento);
     if (marca) e.marcas.add(marca);
     if (compradora) e.compradoras.add(compradora);
+    // Cada fila del catálogo tal cual: el formulario llena en cadena (elegida la
+    // marca, el mundo/departamento/compradora que le corresponden si son únicos).
+    if (mundo || departamento || marca || compradora) {
+      const k = [mundo, departamento, marca, compradora].map((v) => (v ?? '').toUpperCase()).join('|');
+      if (!e.combinaciones.has(k)) e.combinaciones.set(k, { mundo, departamento, marca, compradora });
+    }
   }
   return {
     at: Date.now(),
@@ -88,12 +94,13 @@ async function catalogoProveedores() {
   return cargando;
 }
 
-const aEntradaPublica = (e) => ({
+export const aEntradaPublica = (e) => ({
   proveedor: e.proveedor,
   mundos: ordenar(e.mundos),
   departamentos: ordenar(e.departamentos),
   marcas: ordenar(e.marcas),
   compradoras: ordenar(e.compradoras),
+  combinaciones: [...e.combinaciones.values()],
 });
 
 /**

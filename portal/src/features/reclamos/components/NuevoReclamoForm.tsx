@@ -20,6 +20,7 @@ import { TipoBadge } from './Badges';
 import { ExcelPreviewModal, PdfPreviewModal } from './VisoresLazy';
 import { ImagenPreviewModal } from './ImagenPreviewModal';
 import { SelectSucursal } from './SelectSucursal';
+import { CAMPOS_CADENA, completarEnCadena, type CampoCadena } from '../lib/cadena';
 
 interface Campos {
   origen: OrigenReclamo | '';
@@ -191,9 +192,17 @@ export function NuevoReclamoForm({
     });
   const tag = (k: CampoAuto) => (autos.has(k) ? <TagAuto /> : undefined);
 
+  // Campos que llenó la cadena (marca → mundo/departamento/compradora). Si el
+  // usuario cambia uno de esos cuatro, los que llenó la cadena se vacían y se
+  // vuelven a calcular con lo nuevo (no quedan datos de la marca anterior).
+  const enCadena = useRef(new Set<CampoCadena>());
   const set = <K extends keyof Campos>(k: K, v: Campos[K]) => {
-    setCampos((c) => ({ ...c, [k]: v }));
+    const esCadena = (CAMPOS_CADENA as readonly string[]).includes(k);
+    const vaciar = esCadena ? [...enCadena.current].filter((f) => f !== k) : [];
+    if (esCadena) enCadena.current = new Set();
+    setCampos((c) => ({ ...c, ...Object.fromEntries(vaciar.map((f) => [f, ''])), [k]: v }));
     quitarAuto(k);
+    vaciar.forEach(quitarAuto);
   };
 
   const [catalogos, setCatalogos] = useState<CatalogosReclamo | null>(null);
@@ -258,6 +267,21 @@ export function NuevoReclamoForm({
     };
   }, [proveedorEnCatalogo]);
 
+  // Llenado en cadena con las combinaciones del catálogo del proveedor.
+  useEffect(() => {
+    const combinaciones = relacion?.combinaciones;
+    if (!combinaciones?.length) return;
+    const nuevos = completarEnCadena(
+      { marca: campos.marca, mundo: campos.mundo, departamento: campos.departamento, compradora: campos.compradora },
+      combinaciones
+    );
+    const llenados = Object.keys(nuevos) as CampoCadena[];
+    if (!llenados.length) return;
+    llenados.forEach((k) => enCadena.current.add(k));
+    setCampos((c) => ({ ...c, ...Object.fromEntries(llenados.filter((k) => !c[k]).map((k) => [k, nuevos[k]])) }));
+    setAutos((a) => new Set([...a, ...llenados]));
+  }, [relacion, campos.marca, campos.mundo, campos.departamento, campos.compradora]);
+
   const esCedi = campos.origen === 'cedi';
 
   const elegirOrigen = (o: OrigenReclamo) => {
@@ -276,6 +300,7 @@ export function NuevoReclamoForm({
     setPreview(null);
     setParseError(null);
     setAutos(new Set());
+    enCadena.current = new Set();
     setExcel(file);
     if (!file) return;
 
