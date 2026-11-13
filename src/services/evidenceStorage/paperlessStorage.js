@@ -128,12 +128,16 @@ export async function deleteEvidence(key) {
  * Borra los documentos subidos con ese nombre de archivo (el nombre opaco con
  * que se guardó en disco, único). Se revisa cada resultado: si Paperless
  * ignorara el filtro devolvería todos los documentos, y no se debe borrar
- * ninguno que no sea ese archivo.
+ * ninguno que no sea ese archivo. Y solo los de ESTE ambiente (etiqueta QA o
+ * Prod): desde 2026-11-13 QA tiene copias de los datos de Prod, con los mismos
+ * nombres de archivo, y borrar en QA no debe tocar los documentos de Prod.
  */
 export async function deleteByFilename(filename) {
-  const res = await pedir(`/documents/?original_filename__iexact=${encodeURIComponent(filename)}&fields=id,original_filename&page_size=10`);
+  const etiquetaAmbiente = await idPorNombre('tags', env.db.schema);
+  if (!etiquetaAmbiente) return 0;
+  const res = await pedir(`/documents/?original_filename__iexact=${encodeURIComponent(filename)}&fields=id,original_filename,tags&page_size=10`);
   const docs = res.ok ? (await res.json()).results || [] : [];
-  const suyos = docs.filter((d) => d.original_filename === filename);
+  const suyos = docs.filter((d) => d.original_filename === filename && (d.tags || []).includes(etiquetaAmbiente));
   for (const d of suyos) await pedir(`/documents/${d.id}/`, { method: 'DELETE' });
   return suyos.length;
 }
