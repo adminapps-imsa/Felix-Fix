@@ -198,3 +198,18 @@ test('cruce por material: el prefijo del PDF («345-») y los ceros de SAP no im
   );
   assert.deepEqual([r.noEstan.length, r.cantidadDistinta.length], [0, 0]);
 });
+
+test('REC-000011: código de modelo solo letras (WANDA) cruza con color y talla', () => {
+  assert.equal(claveProducto('WANDA "DRESS OPEN, BLACK PU, 9.5'), 'WANDA|BLACK PU|9.5');
+  assert.notEqual(claveProducto('WANDA "DRESS OPEN, BLACK PU, 9'), claveProducto('WANDA "DRESS OPEN, BLACK PU, 9.5'));
+  // Sin la comilla, la primera palabra no es código.
+  assert.equal(claveProducto('TROUSERS BOY, RED, 7'), null);
+  assert.equal(claveProducto('T-SHIRT P/H, BLUE, S'), null);
+  const tallas = ['9.5', '6', '8.5', '9'];
+  const lineas = tallas.map((t, i) => ({ LineaId: i + 1, Posicion: i + 1, Cantidad: 1, Tipo: 'devolucion', DescripcionExcel: `WANDA "DRESS OPEN, BLACK PU, ${t}`, DecStatus: 'aprobado' }));
+  const filas = tallas.map((t) => ({ material: '275-250188725009', descripcion: `WANDA "DRESS OPEN, BLACK PU, ${t}`, cantidad: 1, valor: 41.09 }));
+  const { lineas: r, validacion } = cruzar(filas, lineas);
+  assert.equal(validacion.estado, 'ok');
+  assert.equal(validacion.coinciden, 4);
+  assert.deepEqual(r.map((l) => l.posicion), [1, 2, 3, 4]);
+});

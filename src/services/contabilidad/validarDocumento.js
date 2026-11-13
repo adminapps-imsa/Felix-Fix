@@ -15,6 +15,10 @@
 //   OPWB1205 "CAMISA OXFORD, AMPARO BLUE, S      TE2032 "BLUSA, ROSA, M
 // o con partes separadas por guion (23294 - NOIR, 2026-11-13):
 //   A67-28888 "LADIES 2PCS SET PIJ, BLACK, M     A67-X29121 "LADIES 2PCS SE, OFF WHITE, S
+// o solo letras, el nombre del modelo (Steven Madden, REC-000011, 2026-11-13):
+//   WANDA "DRESS OPEN, BLACK PU, 9.5
+// Solo letras exige la comilla justo después, para no tomar como código la
+// primera palabra de una descripción suelta ("TROUSERS BOY, RED, 7").
 
 const DECISIONES = new Set(['aprobado', 'rechazado']);
 
@@ -30,8 +34,10 @@ export function claveProducto(descripcion) {
   const modelo = texto.match(/(?:^|\D)(\d{8,})(?!\d)/);
   if (modelo) return `${modelo[1]}|${talla}`;
   // Partes alfanuméricas unidas por guion, con al menos un dígito y 4 a 24 caracteres.
-  const codigo = texto.match(/^((?=[A-Z0-9-]*\d)[A-Z0-9]+(?:-[A-Z0-9]+)*)(?=\s|")/i);
-  if (!codigo || codigo[1].length < 4 || codigo[1].length > 24) return null;
+  const conDigito = texto.match(/^((?=[A-Z0-9-]*\d)[A-Z0-9]+(?:-[A-Z0-9]+)*)(?=\s|")/i);
+  const soloLetras = texto.match(/^([A-Z]{3,24})(?=\s*")/i);
+  const codigo = conDigito && conDigito[1].length >= 4 && conDigito[1].length <= 24 ? conDigito : soloLetras;
+  if (!codigo) return null;
   const color = segmentos.length >= 3 ? limpiarSegmento(segmentos[segmentos.length - 2]) : '';
   return `${codigo[1].toUpperCase()}|${color}|${talla}`;
 }

@@ -5,6 +5,7 @@ import { vaciarBitacora } from './services/bitacora/registro.js';
 import { logger } from './utils/logger.js';
 import { prepararEvidencia } from './services/evidenceStorage/index.js';
 import { mapaRoles } from './services/acceso/keycloakAdmin.js';
+import { revalidarPendientes } from './services/contabilidad/sincronizar.js';
 
 const app = createApp();
 
@@ -13,6 +14,8 @@ const server = app.listen(env.port, () => {
   prepararEvidencia();
   // Los roles de Keycloak listos antes de la primera pantalla (si falla, se arma al primer pedido).
   mapaRoles().catch((err) => logger.warn({ err: err.message }, 'No se pudieron cargar los roles de Keycloak al arrancar'));
+  // Si se mejoró el cruce PDF↔reclamo, lo pendiente «con diferencias» se recalcula.
+  revalidarPendientes().catch((err) => logger.warn({ err: err.message }, 'No se pudieron revalidar los documentos de contabilidad'));
 });
 
 // Una promesa sin catch no debe pasar en silencio: queda en el log para corregirla.

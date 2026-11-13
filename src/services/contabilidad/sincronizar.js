@@ -71,3 +71,23 @@ export async function sincronizarDocumentos(token, usuario, { documentos } = {})
   logger.info({ reclamoId: reclamo.ReclamoId, documentos: resultado }, 'Documentos del reclamo sincronizados con la bandeja de contabilidad');
   return { guardados: resultado.filter((r) => r.accion !== 'sin_cambios').length, resultado };
 }
+
+/**
+ * Vuelve a cruzar los documentos pendientes que quedaron «con diferencias»,
+ * con las filas del PDF ya guardadas (no relee el archivo). Sirve cuando se
+ * mejora el cruce (p. ej. códigos solo letras como WANDA, REC-000011): se
+ * corre al arrancar y solo guarda si la validación cambió.
+ */
+export async function revalidarPendientes() {
+  const docs = await repo.pendientesConDiferencias();
+  const cambiados = [];
+  for (const d of docs) {
+    const guardadas = parseJsonArray(d.Lineas);
+    const filas = guardadas.map((l) => ({ material: l.material, descripcion: l.descripcion, cantidad: l.cantidadPdf, valor: l.valor }));
+    const { lineas, validacion } = cruzar(filas, await reclamosRepo.listarLineas(d.ReclamoToken));
+    if (JSON.stringify(validacion) === d.Validacion) continue;
+    if (await repo.actualizarValidacion(d.DocumentoId, { lineas, validacion })) cambiados.push({ documentoId: d.DocumentoId, reclamoId: d.ReclamoId, estado: validacion.estado });
+  }
+  if (cambiados.length) logger.info({ cambiados }, 'Documentos de contabilidad revalidados con el cruce actual');
+  return cambiados;
+}
