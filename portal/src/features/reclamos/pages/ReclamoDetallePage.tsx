@@ -242,6 +242,7 @@ export function ReclamoDetallePage() {
       <AdjuntosSection
         reclamo={reclamo}
         esAdmin={(puedeEliminar || puedeCorregir) && !reclamo.EnviadoContabilidadAt}
+        puedeCambiarExcel={Boolean(permisos?.puedeCorregirCualquiera) && !reclamo.EnviadoContabilidadAt}
         puedeAdjuntar={puedeAdjuntar && (!bloqueado || Boolean(permisos?.puedeAdjuntarCerrado))}
         onActualizado={setReclamo}
       />

@@ -105,6 +105,14 @@ export const adjunto = asyncHandler(async (req, res, next) => {
   await enviarArchivo(res, next, await service.adjunto(req.params.token, req.params.idx, req.query.f));
 });
 
+export const reemplazarExcel = asyncHandler(async (req, res) => {
+  res.json(await service.reemplazarExcel(req.params.token, req.file, req.user));
+});
+
+export const quitarExcel = asyncHandler(async (req, res) => {
+  res.json(await service.quitarExcel(req.params.token, req.user));
+});
+
 export const eliminarAdjunto = asyncHandler(async (req, res) => {
   res.json(await service.eliminarAdjunto(req.params.token, req.params.idx, req.user, req.query.f));
 });

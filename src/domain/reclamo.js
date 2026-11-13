@@ -507,3 +507,47 @@ export function planCorreccionLineas(actuales, nuevas, esAuto) {
   const quitar = actuales.filter((l) => !vistos.has(Number(l.LineaId))).map((l) => Number(l.LineaId));
   return { quitar, cambiar, agregar };
 }
+
+// ------------------------------------------------------------------
+// Reemplazar el Excel del reclamo (administrador, 2026-11-13).
+// ------------------------------------------------------------------
+
+const codigoComparable = (c) => String(c ?? '').trim().replace(/^0+(?=\d)/, '');
+const cantidadComparable = (c) => (c === null || c === undefined || c === '' ? '' : String(Number(c)));
+const textoComparable = (s) => String(s ?? '').replace(/\s+/g, ' ').trim().toUpperCase();
+
+/**
+ * Cómo se reconoce un producto para comparar el reclamo con un Excel: código,
+ * cantidad y motivo. Un sobrante no esperado no trae código en el Excel (Data
+ * lo carga después): va por referencia, color y talla.
+ */
+function claveProductoReclamo(l) {
+  const id =
+    l.tipo === 'sobrante_no_esperado'
+      ? `${textoComparable(l.referencia)} ${textoComparable(l.color)} ${textoComparable(l.talla)}`.trim()
+      : codigoComparable(l.codigo);
+  return `${id} × ${cantidadComparable(l.cantidad)} (${l.tipo})`;
+}
+
+/**
+ * Productos del reclamo contra los del Excel, sin importar el orden: lista de
+ * diferencias legibles (vacía si cuadran). Cada producto: { codigo, cantidad,
+ * tipo, referencia?, color?, talla? }.
+ */
+export function diferenciasProductosExcel(delReclamo, delExcel) {
+  const cuenta = new Map();
+  for (const l of delReclamo) cuenta.set(claveProductoReclamo(l), (cuenta.get(claveProductoReclamo(l)) || 0) + 1);
+  for (const l of delExcel) cuenta.set(claveProductoReclamo(l), (cuenta.get(claveProductoReclamo(l)) || 0) - 1);
+  const dif = [];
+  for (const [k, n] of cuenta) {
+    if (n > 0) dif.push(`está en el reclamo y no en el Excel: ${k}${n > 1 ? ` (${n} veces)` : ''}`);
+    if (n < 0) dif.push(`está en el Excel y no en el reclamo: ${k}${n < -1 ? ` (${-n} veces)` : ''}`);
+  }
+  return dif;
+}
+
+/** Cambiar o quitar el Excel del reclamo (lo hace el administrador): no después de enviarlo a contabilidad. */
+export function motivoNoCambiarExcel({ EnviadoContabilidadAt }) {
+  if (EnviadoContabilidadAt) return bloqueado('Este reclamo ya se envió a contabilidad; su Excel ya no se puede cambiar.');
+  return null;
+}

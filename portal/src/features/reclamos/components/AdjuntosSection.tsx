@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type React from 'react';
-import { AlertTriangle, Download, Eye, FileSpreadsheet, FileText, Image as ImageIcon, Loader2, Paperclip, Trash2 } from 'lucide-react';
+import { AlertTriangle, Download, Eye, FileSpreadsheet, FileText, Image as ImageIcon, Loader2, Paperclip, RefreshCw, Trash2, Upload, X } from 'lucide-react';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { Button } from '../../../components/ui/Button';
 import { EstadoVacio } from '../../../components/ui/EstadoVacio';
@@ -34,11 +34,14 @@ export function AdjuntosSection({
   reclamo,
   esAdmin,
   puedeAdjuntar,
+  puedeCambiarExcel = false,
   onActualizado,
 }: {
   reclamo: Reclamo;
   esAdmin: boolean;
   puedeAdjuntar: boolean;
+  /** Administrador, antes de contabilidad: reemplazar (validado) o quitar el Excel del reclamo. */
+  puedeCambiarExcel?: boolean;
   onActualizado: (r: Reclamo) => void;
 }) {
   const [vista, setVista] = useState<Vista | null>(null);
@@ -93,6 +96,37 @@ export function AdjuntosSection({
 
   const fotosPrincipal = fotosDe(ORIGEN_PRINCIPAL).length;
 
+  // Excel del reclamo (administrador): reemplazar o quitar.
+  const [cambiandoExcel, setCambiandoExcel] = useState(false);
+  const [errorExcel, setErrorExcel] = useState<string | null>(null);
+  const [quitandoExcel, setQuitandoExcel] = useState(false);
+  const reemplazarExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f) return;
+    setErrorExcel(null);
+    setCambiandoExcel(true);
+    try {
+      onActualizado(await apiReclamos.reemplazarExcel(token, f));
+      avisos.ok(`Excel cambiado por «${f.name}»: trae los mismos productos del reclamo.`);
+    } catch (err) {
+      setErrorExcel(err instanceof ApiError ? err.message : 'No se pudo cambiar el Excel.');
+    } finally {
+      setCambiandoExcel(false);
+    }
+  };
+  const botonCambiarExcel = (texto: string, Icono: typeof Upload) => (
+    <label
+      aria-busy={cambiandoExcel || undefined}
+      title="Se valida que sea la misma plantilla y traiga los mismos productos del reclamo"
+      className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium transition-colors hover:bg-brand-500/10"
+    >
+      {cambiandoExcel ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Icono size={14} aria-hidden />}
+      {cambiandoExcel ? 'Validando…' : texto}
+      <input type="file" accept=".xlsx,.xls" className="hidden" disabled={cambiandoExcel} onChange={reemplazarExcel} />
+    </label>
+  );
+
   return (
     <GlassCard className="flex flex-col gap-4">
       <h2 className="text-base font-bold">Adjuntos</h2>
@@ -100,7 +134,10 @@ export function AdjuntosSection({
       <div className="flex flex-col gap-1.5">
         <span className="etiqueta">Excel del reclamo</span>
         {!reclamo.TieneExcel ? (
-          <p className="text-sm opacity-60">Sin Excel: los productos se llenaron a mano en el formulario.</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm opacity-60">Sin Excel: los productos se llenaron a mano en el formulario.</p>
+            {puedeCambiarExcel && botonCambiarExcel('Subir Excel', Upload)}
+          </div>
         ) : (
         <div className="flex items-center gap-2 rounded-xl border border-black/10 px-3 py-2 text-sm dark:border-white/10">
           <FileSpreadsheet size={16} className="shrink-0 text-success" />
@@ -112,7 +149,27 @@ export function AdjuntosSection({
           <Button variant="ghost" className="px-2 py-1 text-xs" onClick={descargarPrincipalConAviso}>
             <Download size={14} /> Descargar
           </Button>
+          {puedeCambiarExcel && (
+            <>
+              {botonCambiarExcel('Reemplazar', RefreshCw)}
+              <Button variant="ghost" className="px-2 py-1 text-xs text-danger" disabled={cambiandoExcel} onClick={() => setQuitandoExcel(true)}>
+                <Trash2 size={14} /> Quitar
+              </Button>
+            </>
+          )}
         </div>
+        )}
+        {errorExcel && (
+          <div role="alert" className="anim-aparecer flex items-start gap-2 rounded-xl border border-danger/40 bg-danger/10 px-3 py-2 text-sm">
+            <AlertTriangle size={16} className="mt-0.5 shrink-0 text-danger" />
+            <span className="min-w-0 flex-1 whitespace-pre-line break-words">
+              <span className="block font-semibold text-danger">No se cambió el Excel.</span>
+              {errorExcel}
+            </span>
+            <button type="button" aria-label="Quitar aviso" className="rounded-full p-1.5 hover:bg-black/5 dark:hover:bg-white/10" onClick={() => setErrorExcel(null)}>
+              <X size={14} />
+            </button>
+          </div>
         )}
       </div>
 
@@ -240,6 +297,21 @@ export function AdjuntosSection({
             onClose={() => setVista(null)}
           />
         ))}
+
+      {quitandoExcel && (
+        <ConfirmModal
+          titulo="Quitar el Excel del reclamo"
+          textoConfirmar="Quitar"
+          onClose={() => setQuitandoExcel(false)}
+          onConfirm={async () => {
+            onActualizado(await apiReclamos.quitarExcel(token));
+            avisos.ok(`«${nombreExcel}» quitado del reclamo.`);
+            setQuitandoExcel(false);
+          }}
+        >
+          ¿Quitar <strong>{nombreExcel}</strong>? También se borran sus fotos{fotosPrincipal ? ` (${fotosPrincipal})` : ''}. Los productos, las decisiones y los PDF no cambian. No se puede deshacer.
+        </ConfirmModal>
+      )}
 
       {aEliminar && (
         <ConfirmModal

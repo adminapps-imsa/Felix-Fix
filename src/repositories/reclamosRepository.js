@@ -494,6 +494,51 @@ export async function modificarArchivos(token, modificar) {
 }
 
 /**
+ * Cambia (o quita, con `archivo` null) el Excel principal del reclamo, con la
+ * fila bloqueada. Las fotos del Excel anterior (origen 'principal') se cambian
+ * por `imagenes` (las del nuevo). `motivoBloqueo(fila)` (regla del dominio)
+ * devuelve por qué no se puede, o null. Devuelve null (no existe),
+ * { bloqueado } o { anterior: { archivo, nombre, imagenes } } para limpiar disco.
+ */
+export async function cambiarExcelPrincipal(token, { archivo, nombre, imagenes }, motivoBloqueo) {
+  const pool = await getPool();
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+  try {
+    const { recordset } = await new sql.Request(transaction)
+      .input('token', sql.UniqueIdentifier, token)
+      .query(
+        `SELECT ArchivoExcel, ArchivoExcelNombre, ImagenesExcel, Status, EnviadoContabilidadAt
+         FROM ${S}.Reclamos WITH (UPDLOCK, HOLDLOCK) WHERE Token = @token`
+      );
+    const fila = recordset[0];
+    if (!fila) {
+      await transaction.rollback();
+      return null;
+    }
+    const motivo = motivoBloqueo(fila);
+    if (motivo) {
+      await transaction.rollback();
+      return { bloqueado: motivo };
+    }
+    const todas = parseJsonArray(fila.ImagenesExcel);
+    const anteriores = todas.filter((i) => i.origen === 'principal');
+    const nuevas = [...todas.filter((i) => i.origen !== 'principal'), ...imagenes];
+    await new sql.Request(transaction)
+      .input('token', sql.UniqueIdentifier, token)
+      .input('archivo', sql.NVarChar(255), archivo)
+      .input('nombre', sql.NVarChar(255), nombre)
+      .input('imagenes', sql.NVarChar(sql.MAX), JSON.stringify(nuevas))
+      .query(`UPDATE ${S}.Reclamos SET ArchivoExcel = @archivo, ArchivoExcelNombre = @nombre, ImagenesExcel = @imagenes WHERE Token = @token`);
+    await transaction.commit();
+    return { anterior: { archivo: fila.ArchivoExcel, nombre: fila.ArchivoExcelNombre, imagenes: anteriores } };
+  } catch (err) {
+    await transaction.rollback().catch(() => {});
+    throw err;
+  }
+}
+
+/**
  * Borra líneas + encabezado en una transacción, con la fila bloqueada.
  * `motivoBloqueo({ Status, EnviadoContabilidadAt })` (regla del dominio)
  * devuelve por qué no se puede, o null. Devuelve { fila } (la fila borrada,

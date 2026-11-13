@@ -116,6 +116,9 @@ export const uploadFotoRetiro = multer({
 /** Adjunto de soporte adicional (foto, Excel o PDF), uno por petición. */
 export const uploadAdjuntoReclamo = multer({ storage: diskStorage, fileFilter: imagenExcelOPdf, limits }).single('archivo');
 
+/** Excel nuevo del reclamo (el administrador lo reemplaza). */
+export const uploadExcelPrincipal = multer({ storage: diskStorage, fileFilter: soloExcel, limits }).single('excel');
+
 // ------------------------------------------------------------------
 // Adjuntos de Productos Dañados (PDF/Excel para el correo al proveedor).
 // Mismo filtro y límite que los adjuntos de reclamos, en la carpeta del
