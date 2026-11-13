@@ -89,19 +89,28 @@ export function condicionReporte(request, nombre, a = 'r') {
 
 const ES_GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export async function puedeVerReclamo(token, nombre) {
+// `username`: quien creó el caso siempre lo ve (aunque no sea de sus marcas).
+const propio = (request, columna, username) => {
+  if (!username) return '';
+  request.input('yo', sql.VarChar(150), String(username).trim());
+  return ` OR ${limpio(columna)} = @yo`;
+};
+
+export async function puedeVerReclamo(token, nombre, username = null) {
   if (!ES_GUID.test(String(token))) return true; // el servicio responde 404
   const request = (await getPool()).request().input('token', sql.UniqueIdentifier, token);
-  const { recordset } = await request.query(`SELECT COUNT(*) AS n FROM ${S}.Reclamos r WHERE r.Token = @token AND ${condicionReclamo(request, nombre)}`);
+  const { recordset } = await request.query(
+    `SELECT COUNT(*) AS n FROM ${S}.Reclamos r WHERE r.Token = @token AND (${condicionReclamo(request, nombre)}${propio(request, 'r.CreatedBy', username)})`
+  );
   return recordset[0].n > 0;
 }
 
-export async function puedeVerReporte(reporteId, nombre) {
+export async function puedeVerReporte(reporteId, nombre, username = null) {
   const id = Number(reporteId);
   if (!Number.isSafeInteger(id) || id <= 0) return true; // el controlador responde 404
   const request = (await getPool()).request().input('reporteId', sql.BigInt, id);
   const { recordset } = await request.query(
-    `SELECT COUNT(*) AS n FROM ${S}.ReportesProductoDanado r WHERE r.ReporteId = @reporteId AND ${condicionReporte(request, nombre)}`
+    `SELECT COUNT(*) AS n FROM ${S}.ReportesProductoDanado r WHERE r.ReporteId = @reporteId AND (${condicionReporte(request, nombre)}${propio(request, 'r.EmpleadoReportaUsuario', username)})`
   );
   return recordset[0].n > 0;
 }
@@ -115,7 +124,8 @@ export const exigirAlcance = (tipo) => async (req, res, next, valor) => {
   try {
     const nombre = await compradoraDe(req.user);
     if (!nombre) return next();
-    const ve = tipo === 'reclamo' ? await puedeVerReclamo(valor, nombre) : await puedeVerReporte(valor, nombre);
+    const yo = req.user?.username;
+    const ve = tipo === 'reclamo' ? await puedeVerReclamo(valor, nombre, yo) : await puedeVerReporte(valor, nombre, yo);
     return ve ? next() : next(notFound(tipo === 'reclamo' ? 'Reclamo no encontrado.' : 'Reporte no encontrado.'));
   } catch (err) {
     return next(err);

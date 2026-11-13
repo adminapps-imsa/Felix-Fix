@@ -56,10 +56,12 @@ export async function listar(query, usuario) {
     q: query.q?.trim() || undefined,
     compradora,
     alcanceTienda,
+    // Quien creó el reclamo siempre lo ve (aunque no sea de sus marcas o su tienda).
+    username: usuario ? nombreUsuario(usuario) : null,
     origen: query.tienda === 'cedi' ? 'cedi' : undefined,
     tienda: tienda ? { nombre: tienda.Nombre, codigo: tienda.Codigo } : undefined,
   };
-  const alcance = { compradora, tienda: alcanceTienda };
+  const alcance = { compradora, tienda: alcanceTienda, username: filtros.username };
   const [{ items, total }, kpis] = await Promise.all([repo.listar(filtros, pagination), repo.obtenerKpis(usuario ? nombreUsuario(usuario) : null, alcance)]);
   return { data: await conNombres(items.map(aDto)), pagination: buildPaginationMeta({ ...pagination, total }), kpis };
 }

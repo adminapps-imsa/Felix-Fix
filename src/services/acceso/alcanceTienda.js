@@ -58,6 +58,17 @@ export async function tiendaDe(usuario) {
   return t ? { ...t, username: usuario.username } : null;
 }
 
+/**
+ * `condicion` o, además, los casos que creó `username` (columna `columna`):
+ * quien crea un caso siempre lo ve, aunque no entre en su tienda ni en sus
+ * marcas de compradora. Sin condición (ve todo) o sin usuario, la deja igual.
+ */
+export function oPropio(request, condicion, columna, username) {
+  if (!condicion || !username) return condicion;
+  if (!request.parameters?.yoCreador) request.input('yoCreador', sql.VarChar(150), String(username).trim());
+  return `(${condicion} OR ${limpio(columna)} = @yoCreador)`;
+}
+
 /** Condición SQL sobre un reporte de Productos Dañados (alias `a`), o null si ve todo. */
 export function condicionReporteTienda(request, alcance, a = 'r') {
   if (!alcance) return null;
@@ -70,7 +81,7 @@ export function condicionReporteTienda(request, alcance, a = 'r') {
     if (!request.parameters?.tdaCreador) request.input('tdaCreador', sql.VarChar(150), alcance.username);
     partes.push(`${limpio(`${a}.EmpleadoReportaUsuario`)} = @tdaCreador`);
   }
-  return partes.length ? `(${partes.join(' AND ')})` : null;
+  return partes.length ? oPropio(request, `(${partes.join(' AND ')})`, `${a}.EmpleadoReportaUsuario`, alcance.username) : null;
 }
 
 /**
@@ -95,7 +106,7 @@ export function condicionReclamoTienda(request, alcance, a = 'r') {
     if (!request.parameters?.tdaCreador) request.input('tdaCreador', sql.VarChar(150), alcance.username);
     partes.push(`${limpio(`${a}.CreatedBy`)} = @tdaCreador`);
   }
-  return partes.length ? `(${partes.join(' AND ')})` : null;
+  return partes.length ? oPropio(request, `(${partes.join(' AND ')})`, `${a}.CreatedBy`, alcance.username) : null;
 }
 
 const ES_GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -132,15 +143,16 @@ export const exigirTienda = (tipo) => async (req, res, next, valor) => {
 };
 
 /**
- * Alcance de un usuario en Reclamos: { compradora, tienda } (cualquiera puede
- * ser null). Condición SQL sobre un reclamo (alias `a`) con las dos reglas, o
- * '1 = 1' si ve todo. Acepta también solo el nombre de la compradora (texto).
+ * Alcance de un usuario en Reclamos: { compradora, tienda, username }
+ * (cualquiera puede ser null). Condición SQL sobre un reclamo (alias `a`) con
+ * las dos reglas, más los que creó `username`, o '1 = 1' si ve todo. Acepta
+ * también solo el nombre de la compradora (texto).
  */
 export function condicionAlcanceReclamo(request, alcance, a, condicionCompradora) {
-  const { compradora = null, tienda = null } = typeof alcance === 'string' || alcance == null ? { compradora: alcance } : alcance;
+  const { compradora = null, tienda = null, username = null } = typeof alcance === 'string' || alcance == null ? { compradora: alcance } : alcance;
   const partes = [];
   if (compradora) partes.push(condicionCompradora(request, compradora, a));
   const enTienda = condicionReclamoTienda(request, tienda, a);
   if (enTienda) partes.push(enTienda);
-  return partes.length ? partes.join(' AND ') : '1 = 1';
+  return partes.length ? oPropio(request, `(${partes.join(' AND ')})`, `${a}.CreatedBy`, username) : '1 = 1';
 }

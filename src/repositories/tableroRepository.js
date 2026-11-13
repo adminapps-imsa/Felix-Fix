@@ -1,6 +1,6 @@
 import { getPool, sql, S } from '../config/db.js';
 import { condicionReporte } from '../services/acceso/alcanceCompradora.js';
-import { condicionReporteTienda } from '../services/acceso/alcanceTienda.js';
+import { condicionReporteTienda, oPropio } from '../services/acceso/alcanceTienda.js';
 import { condicionAlcance as condicionReclamos } from './reclamosRepository.js';
 
 // Lecturas del Tablero. Solo consultas: los cálculos (series, antigüedad,
@@ -12,7 +12,7 @@ import { condicionAlcance as condicionReclamos } from './reclamosRepository.js';
  * (Configuración → Tiendas). El mismo filtro de la lista.
  * `alcance`: { resoluciones, compradora, creador, tienda }.
  */
-function condicionAlcance(request, { resoluciones, compradora, creador, tienda }) {
+function condicionAlcance(request, { resoluciones, compradora, creador, tienda, username }) {
   const partes = [];
   if (resoluciones) {
     const params = resoluciones.map((res, i) => {
@@ -21,13 +21,13 @@ function condicionAlcance(request, { resoluciones, compradora, creador, tienda }
     });
     partes.push(`r.Resolucion IN (${params.join(', ')})`);
   }
-  if (compradora) partes.push(condicionReporte(request, compradora));
+  // Marcas de la compradora y tienda del usuario, más los que creó él mismo (igual que la lista).
+  const alcance = [compradora && condicionReporte(request, compradora), condicionReporteTienda(request, tienda)].filter(Boolean);
+  if (alcance.length) partes.push(oPropio(request, `(${alcance.join(' AND ')})`, 'r.EmpleadoReportaUsuario', username));
   if (creador != null) {
     request.input('creador', sql.VarChar(150), creador);
     partes.push('r.EmpleadoReportaUsuario = @creador');
   }
-  const enTienda = condicionReporteTienda(request, tienda);
-  if (enTienda) partes.push(enTienda);
   return partes.length ? partes.join(' AND ') : '1 = 1';
 }
 

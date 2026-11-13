@@ -87,6 +87,8 @@ async function toFiltros(query, usuario) {
     compradora: await compradoraDe(usuario),
     creador: usuario ? creadorVisible(usuario) : null,
     alcanceTienda: await tiendaDe(usuario),
+    // Quien creó el reporte siempre lo ve (aunque no sea de sus marcas o su tienda).
+    username: usuario?.username || null,
     tiendaId: query.tienda ? Number(query.tienda) : undefined,
     motivo: query.motivo || undefined,
     estado: query.estado || undefined,

@@ -30,7 +30,7 @@ function aplicarFiltros(request, filtros) {
   const condiciones = [];
   // Compradora con alcance: solo los de sus mundos y marcas (alcanceCompradora.js).
   // Usuario en una tienda: solo los de su sucursal (alcanceTienda.js).
-  const alcance = condicionAlcance(request, { compradora: filtros.compradora, tienda: filtros.alcanceTienda });
+  const alcance = condicionAlcance(request, { compradora: filtros.compradora, tienda: filtros.alcanceTienda, username: filtros.username });
   if (alcance !== '1 = 1') condiciones.push(alcance);
   // Filtro de la lista: «CEDI» o una tienda ({ nombre, codigo }).
   if (filtros.origen === 'cedi') condiciones.push("r.Origen = 'cedi'");
