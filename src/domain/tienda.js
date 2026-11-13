@@ -5,6 +5,8 @@
 //   - tiendaId (o null): solo los casos de esa tienda. En Reclamos, los de
 //     origen Tienda con esa sucursal (por nombre o código); los de CEDI no.
 //   - soloPropios: además, solo los que creó el mismo usuario.
+// Quien creó el caso siempre lo ve, aunque la sucursal escrita no coincida con
+// su tienda (pedido del 2026-11-13: Dixa no veía los que creó).
 // Reglas puras: el SQL equivalente está en services/acceso/alcanceTienda.js.
 
 /** Texto comparable: sin acentos, mayúsculas y sin espacios de sobra («Vía España » = «VIA ESPANA»). */
@@ -19,7 +21,7 @@ export const esSucursalDe = (sucursal, tienda) =>
 
 /** true si el usuario con ese alcance ve el reporte de Productos Dañados `r`. */
 export function veReporte(alcance, r) {
-  if (!alcance) return true;
+  if (!alcance || mismoUsuario(r?.EmpleadoReportaUsuario, alcance.username)) return true;
   if (alcance.tiendaId != null && Number(r?.TiendaId) !== Number(alcance.tiendaId)) return false;
   if (alcance.soloPropios && !mismoUsuario(r?.EmpleadoReportaUsuario, alcance.username)) return false;
   return true;
@@ -27,7 +29,7 @@ export function veReporte(alcance, r) {
 
 /** true si el usuario con ese alcance ve el reclamo `r`. */
 export function veReclamo(alcance, r) {
-  if (!alcance) return true;
+  if (!alcance || mismoUsuario(r?.CreatedBy, alcance.username)) return true;
   if (alcance.tiendaId != null && !(r?.Origen === 'tienda' && esSucursalDe(r?.Sucursal, alcance))) return false;
   if (alcance.soloPropios && !mismoUsuario(r?.CreatedBy, alcance.username)) return false;
   return true;

@@ -46,7 +46,14 @@ export async function obtenerTablero(query, usuario) {
 
 async function tableroProductos(usuario, { desde, ahora, gran, compradora, tienda }) {
   // `alcanceTienda` lo lee la lista (kpisProductos); `tienda`, las consultas del Tablero.
-  const alcance = { resoluciones: alcanceVista(usuario.permisos || new Set()), compradora, creador: creadorVisible(usuario), alcanceTienda: tienda, tienda };
+  const alcance = {
+    resoluciones: alcanceVista(usuario.permisos || new Set()),
+    compradora,
+    creador: creadorVisible(usuario),
+    alcanceTienda: tienda,
+    tienda,
+    username: usuario.username || null,
+  };
   const [kpis, abiertos, hitos, desglose, miTrabajo] = await Promise.all([
     kpisProductos(alcance),
     repo.pdAbiertos(alcance),
@@ -105,7 +112,7 @@ async function tableroProductos(usuario, { desde, ahora, gran, compradora, tiend
 }
 
 async function tableroReclamos(usuario, { desde, ahora, gran, compradora, tienda }) {
-  const alcance = { compradora, tienda };
+  const alcance = { compradora, tienda, username: usuario.username || null };
   const [kpis, abiertos, hitos, desglose, miTrabajo] = await Promise.all([
     kpisReclamos(usuario.username, alcance),
     repo.recAbiertos(alcance),

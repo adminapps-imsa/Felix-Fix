@@ -51,3 +51,12 @@ test('al crear: solo su tienda', () => {
   // «Solo lo que crea» sin tienda no limita la tienda al crear.
   assert.equal(motivoTiendaReporte({ tiendaId: null, soloPropios: true }, 5), null);
 });
+
+test('quien creó el caso siempre lo ve, aunque la sucursal no sea su tienda (Dixa, 13-nov)', () => {
+  const dixa = { ...MP, username: 'dixa' };
+  assert.equal(veReclamo(dixa, { Origen: 'tienda', Sucursal: 'MULTIPLAZA PACIFIC', CreatedBy: 'Dixa' }), true);
+  assert.equal(veReclamo(dixa, { Origen: 'cedi', Sucursal: null, CreatedBy: 'dixa' }), true);
+  assert.equal(veReclamo(dixa, { Origen: 'tienda', Sucursal: 'Vía España', CreatedBy: 'otra' }), false);
+  assert.equal(veReporte(dixa, { TiendaId: 1, EmpleadoReportaUsuario: 'dixa' }), true);
+  assert.equal(veReporte(dixa, { TiendaId: 1, EmpleadoReportaUsuario: 'otra' }), false);
+});

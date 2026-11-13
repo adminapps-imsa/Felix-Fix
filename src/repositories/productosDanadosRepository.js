@@ -2,7 +2,7 @@ import { getPool, sql, S } from '../config/db.js';
 import { registrarEvento } from './historialRepository.js';
 import { TRANSICIONES, ESTADO_ENVIO_PROVEEDOR } from '../domain/productoDanado.js';
 import { condicionReporte } from '../services/acceso/alcanceCompradora.js';
-import { condicionReporteTienda } from '../services/acceso/alcanceTienda.js';
+import { condicionReporteTienda, oPropio } from '../services/acceso/alcanceTienda.js';
 
 const SELECT_BASE = `
   SELECT
@@ -37,10 +37,13 @@ function aplicarFiltros(request, filtros) {
     condiciones.push(`r.Resolucion IN (${params.join(', ')})`);
   }
   // Compradora con alcance: solo los de sus marcas (alcanceCompradora.js).
-  if (filtros.compradora) condiciones.push(condicionReporte(request, filtros.compradora));
   // Usuario en una tienda (Configuración → Tiendas): solo los de su tienda (y, si aplica, los suyos).
-  const enTienda = condicionReporteTienda(request, filtros.alcanceTienda);
-  if (enTienda) condiciones.push(enTienda);
+  // En los dos casos, además los que creó él mismo.
+  const alcance = [
+    filtros.compradora && condicionReporte(request, filtros.compradora),
+    condicionReporteTienda(request, filtros.alcanceTienda),
+  ].filter(Boolean);
+  if (alcance.length) condiciones.push(oPropio(request, `(${alcance.join(' AND ')})`, 'r.EmpleadoReportaUsuario', filtros.username));
   // Tienda («Solo los reportes que creó»): solo los suyos.
   if (filtros.creador != null) {
     request.input('creador', sql.VarChar(150), filtros.creador);
