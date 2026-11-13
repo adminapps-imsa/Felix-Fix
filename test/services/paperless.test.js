@@ -154,10 +154,19 @@ test('PDF: se copia a Paperless con su tipo de documento y el original se queda 
 test('PDF: al quitarlo del portal se borra en Paperless solo el documento de ese archivo', async () => {
   const { borrarCopiasPdf } = await import('../../src/services/evidenceStorage/copiasPdf.js');
   const { llamadas } = await conPaperless((ruta) =>
-    ruta.startsWith('/documents/?original_filename__iexact=abc.pdf')
-      ? // Aunque Paperless devolviera otros documentos, solo se borra el que es de ese archivo.
-        json({ results: [{ id: 70, original_filename: 'abc.pdf' }, { id: 71, original_filename: 'otro.pdf' }] })
-      : new Response(null, { status: 204 })
+    ruta === '/tags/?name__iexact=QA'
+      ? json({ results: [{ id: 2 }] })
+      : ruta.startsWith('/documents/?original_filename__iexact=abc.pdf')
+        ? // Aunque Paperless devolviera otros documentos, solo se borra el que es de ese archivo
+          // y de este ambiente (72: mismo archivo pero de Prod, copiado a QA el 2026-11-13).
+          json({
+            results: [
+              { id: 70, original_filename: 'abc.pdf', tags: [1, 2] },
+              { id: 71, original_filename: 'otro.pdf', tags: [2] },
+              { id: 72, original_filename: 'abc.pdf', tags: [1, 5] },
+            ],
+          })
+        : new Response(null, { status: 204 })
   , () => borrarCopiasPdf(['abc.pdf']));
   const borrados = llamadas.filter((l) => l.opts.method === 'DELETE').map((l) => l.ruta);
   assert.deepEqual(borrados, ['/documents/70/']);
