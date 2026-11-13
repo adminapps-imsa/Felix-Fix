@@ -8,6 +8,7 @@ import pinoHttp from 'pino-http';
 import { env } from './config/env.js';
 import { logger } from './utils/logger.js';
 import { notFoundHandler, errorHandler } from './middleware/errorHandler.js';
+import { bitacora } from './middleware/bitacora.js';
 import productosDanadosRoutes from './routes/productosDanados.routes.js';
 import tiendasRoutes from './routes/tiendas.routes.js';
 import healthRoutes from './routes/health.routes.js';
@@ -66,6 +67,8 @@ export function createApp() {
   app.use(cors({ origin: env.corsOrigin || false }));
   app.use(express.json());
 
+  // Bitácora (Configuración → Bitácora): lo que se hace y lo que sale mal.
+  app.use('/api', bitacora);
   app.use('/api/health', healthRoutes);
   app.use('/api/auth', authRoutes);
   app.use('/api/productos-danados', productosDanadosRoutes);

@@ -1,5 +1,6 @@
 import * as service from '../services/acceso/configuracionService.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { consultar as consultarBitacora } from '../services/bitacora/consulta.js';
 
 export const roles = asyncHandler(async (req, res) => {
   res.json(await service.roles());
@@ -21,6 +22,10 @@ export const asignarRol = asyncHandler(async (req, res) => {
 export const quitarRol = asyncHandler(async (req, res) => {
   await service.quitarRol(req.params.id, req.params.rol, req.user);
   res.status(204).end();
+});
+
+export const bitacora = asyncHandler(async (req, res) => {
+  res.json(await consultarBitacora(req.query));
 });
 
 export const auditoria = asyncHandler(async (req, res) => {

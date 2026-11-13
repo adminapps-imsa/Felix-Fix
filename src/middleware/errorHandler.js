@@ -30,7 +30,7 @@ export function errorHandler(err, req, res, next) {
   borrarTemporales(req);
 
   if (err instanceof HttpError) {
-    if (err.status >= 500) logger.error({ err }, err.message);
+    if (err.status >= 500) logger.error({ err, bitacora: false }, err.message);
     return res.status(err.status).json({
       error: err.extra?.code || err.name,
       message: err.message,
@@ -47,7 +47,9 @@ export function errorHandler(err, req, res, next) {
     return res.status(400).json({ error: 'UPLOAD_ERROR', message: err.message });
   }
 
-  logger.error({ err }, 'Error no controlado');
+  logger.error({ err, bitacora: false }, 'Error no controlado');
+  // La bitácora guarda el error real (al usuario, en producción, solo se le dice «Error interno»).
+  res.locals.bitacoraError = err?.message;
   res.status(500).json({
     error: 'INTERNAL_ERROR',
     message: env.nodeEnv === 'production' ? 'Error interno del servidor.' : err.message,

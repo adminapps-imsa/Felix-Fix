@@ -112,3 +112,53 @@ export const listarCorreos = () => api.get<CorreoInfo[]>(`${BASE}/correos`);
 export const verCorreo = (id: string) => api.get<CorreoVista>(`${BASE}/correos/${encodeURIComponent(id)}`);
 export const enviarPruebaCorreo = (id: string) => api.post<{ para: string[] }>(`${BASE}/correos/${encodeURIComponent(id)}/prueba`, {});
 export const enviarBienvenida = (userIds: string[]) => api.post<{ resultados: ResultadoBienvenida[] }>(`${BASE}/correos/bienvenida/enviar`, { userIds });
+
+// ---- Bitácora (Configuración → Bitácora) ----
+export type ClaseBitacora = 'actividad' | 'error';
+export type NivelBitacora = 'info' | 'aviso' | 'falla';
+
+export interface EventoBitacora {
+  id: number;
+  fecha: string;
+  nivel: NivelBitacora;
+  modulo: string;
+  moduloNombre: string;
+  accion: string;
+  mensaje: string | null;
+  codigo: string | null;
+  usuario: string | null;
+  usuarioNombre: string | null;
+  roles: string[];
+  metodo: string | null;
+  ruta: string | null;
+  estado: number | null;
+  duracionMs: number | null;
+  caso: string | null;
+  casoRuta: string | null;
+}
+
+export interface FiltrosBitacora {
+  clase: ClaseBitacora;
+  nivel?: '' | 'aviso' | 'falla';
+  modulo?: string;
+  usuario?: string;
+  rol?: string;
+  desde?: string;
+  hasta?: string;
+  q?: string;
+  page?: number;
+}
+
+export interface RespuestaBitacora {
+  clase: ClaseBitacora;
+  data: EventoBitacora[];
+  pagination: { page: number; pageSize: number; total: number; totalPages: number };
+  resumen: { actividad: number; errores: number; avisos: number; fallas: number; porModulo: Record<string, number> };
+  filtros: { modulos: { id: string; nombre: string }[]; usuarios: { usuario: string; nombre: string }[]; roles: string[] };
+}
+
+export function obtenerBitacora(f: FiltrosBitacora) {
+  const p = new URLSearchParams();
+  for (const [k, v] of Object.entries(f)) if (v !== undefined && v !== '' && v !== null) p.set(k, String(v));
+  return api.get<RespuestaBitacora>(`${BASE}/bitacora?${p.toString()}`);
+}

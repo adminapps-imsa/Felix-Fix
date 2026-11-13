@@ -26,3 +26,22 @@ export const tiendaUsuarioSchema = z.object({
   tiendaId: z.number().int().positive().nullable(),
   soloPropios: z.boolean(),
 });
+
+// Bitácora: filtros del visor. Fechas 'AAAA-MM-DD' (día de Panamá); vacío = sin filtro.
+const dia = z
+  .string()
+  .trim()
+  .refine((v) => v === '' || /^\d{4}-\d{2}-\d{2}$/.test(v), 'Fecha inválida (formato AAAA-MM-DD).')
+  .optional();
+export const bitacoraQuerySchema = z.object({
+  clase: z.enum(['actividad', 'error']).optional(),
+  nivel: z.enum(['', 'aviso', 'falla']).optional(),
+  modulo: z.string().trim().max(30).optional(),
+  usuario: z.string().trim().max(150).optional(),
+  rol: z.string().trim().max(100).optional(),
+  desde: dia,
+  hasta: dia,
+  q: z.string().max(200).optional(),
+  page: z.string().optional(),
+  pageSize: z.string().optional(),
+});
