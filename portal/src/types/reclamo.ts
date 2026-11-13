@@ -274,6 +274,12 @@ export interface PermisosReclamos {
   puedeDevolver: boolean;
   /** Corregir y reenviar cualquier reclamo devuelto (super administrador); los demás, solo los que crearon. */
   puedeCorregirCualquiera: boolean;
+  /** Por rol: «Corregir reclamos devueltos» (o administrador). */
+  puedeCorregir?: boolean;
+  /** Por rol: «Cambiar si el proveedor retira» (o administrador). */
+  puedeCambiarRetiro?: boolean;
+  /** Por rol: «Adjuntar en reclamos abiertos». */
+  puedeAdjuntarAbiertos?: boolean;
   /** Supervisor GOF: devolver al creador en cualquier estado antes de contabilidad. */
   puedeDevolverSupervisor: boolean;
   /** Super administrador: elimina el reclamo en cualquier estado. */

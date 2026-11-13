@@ -40,7 +40,7 @@ export async function registrarRetiro(token, { fecha }, foto, usuario) {
 /** Quien lo creó (o el super administrador) corrige si el proveedor lo retira o no. */
 export async function cambiarRetiro(token, { requerido }, usuario) {
   validarToken(token);
-  const quien = { username: nombreUsuario(usuario), esAdmin: tienePermiso(usuario, PERMISO_CONFIGURACION) };
+  const quien = { puede: tienePermiso(usuario, PERMISO_CONFIGURACION) || tienePermiso(usuario, 'reclamos.cambiar_retiro') };
   const res = await repo.cambiarRetiroProveedor(token, requerido, (fila) => dominio.motivoNoCambiarRetiro(fila, quien));
   if (!res) throw notFound('Reclamo no encontrado.');
   exigir(res.bloqueado);

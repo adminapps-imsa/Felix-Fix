@@ -135,10 +135,9 @@ export function ReporteDetalleModal({
   const [showDevolver, setShowDevolver] = useState(false);
   const [showCorregir, setShowCorregir] = useState(false);
   const tiendas = useTiendas();
-  const { puede, user } = useAuth();
-  // Igual que el backend: quien trabaja con el proveedor edita cualquier reporte; quien solo crea, los suyos.
-  const puedeEditar =
-    puede(P.pdAprobar, P.pdProcesar) || (puede(P.pdCrear) && Boolean(reporte) && reporte?.EmpleadoReportaUsuario === user?.username);
+  const { puede } = useAuth();
+  // Igual que el backend: por rol (no por quién lo creó), así todos los del rol ven lo mismo.
+  const puedeEditar = puede(P.pdAprobar, P.pdEnviar, P.pdProcesar, P.pdEditar);
 
   const cargar = () => {
     setLoading(true);

@@ -328,10 +328,11 @@ export function motivoNoRegistrarRetiro(reclamo, { fecha, tieneFoto, hoy }) {
  * crearlo): solo quien lo creó o el super administrador, nunca en una
  * devolución (siempre lo lleva) ni con la entrega ya registrada.
  */
-export function motivoNoCambiarRetiro(reclamo, { username, esAdmin = false }) {
+/** `puede`: el rol tiene «Cambiar si el proveedor retira» (o es el administrador). */
+export function motivoNoCambiarRetiro(reclamo, { puede = false }) {
   if (esDevolucion(reclamo)) return { mensaje: 'Los reclamos de devolución siempre los retira el proveedor.', code: 'ES_DEVOLUCION' };
   if (reclamo.RetiroProveedorFecha) return { mensaje: 'La entrega al proveedor ya está registrada; quítala primero si fue un error.', code: 'RETIRO_REGISTRADO' };
-  if (!esAdmin && reclamo.CreatedBy !== username) return { mensaje: 'Solo quien creó el reclamo puede cambiar si lo retira el proveedor.', code: 'NO_ES_CREADOR' };
+  if (!puede) return { mensaje: 'Tu rol no puede cambiar si el proveedor retira.', code: 'SIN_PERMISO_RETIRO' };
   return null;
 }
 
@@ -397,9 +398,10 @@ export function estadoAlReenviar({ StatusAntesDevolucion, LineasPendientes }) {
 }
 
 /** Corregir datos o archivos de un reclamo devuelto: solo quien lo creó (o el super administrador). */
-export function motivoNoCorregir({ Status, CreatedBy }, { username, esAdmin = false }) {
+/** `puede`: el rol tiene «Corregir reclamos devueltos» (o es el administrador). Depende del rol, no de quién lo creó. */
+export function motivoNoCorregir({ Status }, { puede = false }) {
   if (Status !== STATUS_DEVUELTO) return { mensaje: 'Solo se corrige un reclamo devuelto para corregir.', code: 'NO_DEVUELTO' };
-  if (!esAdmin && CreatedBy !== username) return { mensaje: 'Solo quien creó el reclamo puede corregirlo y reenviarlo.', code: 'NO_ES_CREADOR' };
+  if (!puede) return { mensaje: 'Tu rol no puede corregir reclamos devueltos.', code: 'SIN_PERMISO_CORREGIR' };
   return null;
 }
 

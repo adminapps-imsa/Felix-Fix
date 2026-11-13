@@ -129,14 +129,14 @@ export function ReclamoDetallePage() {
   const cerrado = reclamo.Status === 'resuelto' || reclamo.Status === 'rechazado';
   // Igual que el backend (409): ya enviado a contabilidad o cerrado, no se elimina ni se tocan los adjuntos.
   const bloqueado = cerrado || Boolean(reclamo.EnviadoContabilidadAt);
-  // Quien decide o tiene "Adjuntar en cualquier reclamo" (Torre de Control) adjunta en cualquiera; quien crea, en los suyos.
-  const puedeAdjuntar = Boolean(permisos?.puedeAdjuntar) || (Boolean(permisos?.puedeCrear) && permisos?.username === reclamo.CreatedBy);
-  // Devuelto por la compradora: lo corrige quien lo creó (o el super administrador), que también puede quitar adjuntos.
+  // Todo por rol, igual que el backend (2026-11-13): no depende de quién creó el reclamo,
+  // así todos los del rol (y la Vista por rol) ven los mismos botones.
+  const puedeAdjuntar = Boolean(permisos?.puedeAdjuntar) || Boolean(permisos?.puedeAdjuntarAbiertos);
+  // Devuelto: lo corrigen los roles con «Corregir reclamos devueltos», que también pueden quitar adjuntos.
   const devuelto = reclamo.Status === 'devuelto';
-  const puedeCorregir =
-    devuelto && Boolean(permisos?.puedeCrear) && (permisos?.username === reclamo.CreatedBy || Boolean(permisos?.puedeCorregirCualquiera));
-  // «¿Lo retira el proveedor?»: lo corrige quien lo creó o el super administrador.
-  const puedeCambiarRetiro = (Boolean(permisos?.puedeCrear) && permisos?.username === reclamo.CreatedBy) || Boolean(permisos?.puedeCorregirCualquiera);
+  const puedeCorregir = devuelto && Boolean(permisos?.puedeCorregir);
+  // «¿Lo retira el proveedor?»: los roles con «Cambiar si el proveedor retira».
+  const puedeCambiarRetiro = Boolean(permisos?.puedeCambiarRetiro);
   // Supervisor GOF: lo devuelve a quien lo creó en cualquier estado mientras no se haya enviado a contabilidad (el backend lo vuelve a revisar).
   const puedeDevolverSupervisor =
     Boolean(permisos?.puedeDevolverSupervisor) && Boolean(reclamo.CreatedBy) && !devuelto && !reclamo.EnviadoContabilidadAt;

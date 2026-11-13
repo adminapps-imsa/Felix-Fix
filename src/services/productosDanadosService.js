@@ -429,19 +429,20 @@ async function existeOFallar(reporteId) {
 
 /*
  * Correos y adjuntos del proveedor: los edita quien trabaja con el proveedor
- * (compradora, administrador) en cualquier reporte; quien solo crea reportes
- * (Tienda, Gof), únicamente en los que creó.
+ * (compradora, administrador) y los roles con «Editar correos y adjuntos»
+ * (Tienda, Gof), en los reportes que ven. Depende del rol, no de quién lo
+ * creó (2026-11-13): todos los del rol ven lo mismo.
  */
-const EDITAN_CUALQUIER_REPORTE = ['productos_danados.aprobar', 'productos_danados.enviar', 'productos_danados.procesar'];
+const EDITAN_REPORTES = ['productos_danados.aprobar', 'productos_danados.enviar', 'productos_danados.procesar', 'productos_danados.editar'];
 
-export function puedeEditarReporte(usuario, r) {
-  if (EDITAN_CUALQUIER_REPORTE.some((p) => tienePermiso(usuario, p))) return true;
-  return tienePermiso(usuario, 'productos_danados.crear') && Boolean(usuario?.username) && r.EmpleadoReportaUsuario === usuario.username;
+// eslint-disable-next-line no-unused-vars
+export function puedeEditarReporte(usuario, _r) {
+  return EDITAN_REPORTES.some((p) => tienePermiso(usuario, p));
 }
 
 async function exigirEdicion(reporteId, usuario) {
   const r = await existeOFallar(reporteId);
-  if (!puedeEditarReporte(usuario, r)) throw forbidden('Solo puedes cambiar los correos y archivos de los reportes que tú creaste.');
+  if (!puedeEditarReporte(usuario, r)) throw forbidden('Tu rol no puede cambiar los correos ni los archivos de los reportes.');
 }
 
 export async function guardarCorreos(reporteId, correos, usuario) {
