@@ -7,6 +7,10 @@
 #   felix-desplegar desplegar  -> despliega lo que haya nuevo en origin/main
 #   felix-desplegar reclamo REC-000006 -> muestra ese reclamo de Prod (solo lectura,
 #                                         deploy/prod/ver-reclamo.js)
+#   felix-desplegar exportar   -> solo lectura: manda por stdout un .tar.gz con los
+#                                 datos de Reclamos, Productos Dañados y tiendas por
+#                                 usuario (deploy/prod/exportar-datos.js) y sus archivos
+#                                 (uploads/Prod). QA lo carga con deploy/qa/importar-desde-prod.js.
 #
 # Pasos al desplegar (se detiene en el primer error):
 #   1. Revisa que Prod esté limpio, en `main`, y que lo nuevo avance sin conflictos.
@@ -45,8 +49,17 @@ fi
 if [[ "$ACCION" =~ ^reclamo\ ((REC-?)?[0-9]{1,9})$ ]]; then
   exec node deploy/prod/ver-reclamo.js "${BASH_REMATCH[1]}"
 fi
+if [ "$ACCION" = exportar ]; then
+  TMP=$(mktemp -d)
+  trap 'rm -rf "$TMP"' EXIT
+  node deploy/prod/exportar-datos.js > "$TMP/datos.json"
+  cd "$DIR/uploads/Prod"
+  # Solo las carpetas de archivos de los módulos; nada del .env ni del código.
+  tar czf - -C "$TMP" datos.json -C "$DIR/uploads/Prod" $(ls -d reclamos productos-danados 2>/dev/null)
+  exit 0
+fi
 if [ "$ACCION" != desplegar ]; then
-  echo "Acción no permitida: «$ACCION». Solo «estado», «desplegar» o «reclamo REC-000006»."
+  echo "Acción no permitida: «$ACCION». Solo «estado», «desplegar», «reclamo REC-000006» o «exportar»."
   exit 2
 fi
 
