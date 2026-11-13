@@ -43,9 +43,10 @@ const agregaCerrado = (usuario) => tienePermiso(usuario, 'reclamos.adjuntar') ||
  */
 export async function verificarPuedeAdjuntar(token, usuario) {
   const r = await obtenerOFallar(token);
-  const esCreador = r.CreatedBy === nombreUsuario(usuario) && tienePermiso(usuario, 'reclamos.crear');
-  if (!permisos(usuario).puedeAdjuntar && !esCreador) {
-    throw forbidden('Solo quien creó el reclamo, quien puede aprobarlo o quien tiene el permiso "Adjuntar en cualquier reclamo" puede adjuntar archivos.');
+  // Depende del rol: «Adjuntar en reclamos abiertos» o los que adjuntan en cualquiera (no de quién lo creó).
+  const enAbiertos = tienePermiso(usuario, 'reclamos.adjuntar_abiertos');
+  if (!permisos(usuario).puedeAdjuntar && !enAbiertos) {
+    throw forbidden('Tu rol no puede adjuntar archivos en reclamos.');
   }
   asegurarModificable(r, 'adjuntos', { agregaTorreControl: agregaCerrado(usuario) });
   return r;
@@ -200,12 +201,12 @@ export async function eliminarAdjunto(token, idx, usuario, f) {
   validarIndice(idx);
   // Quien tiene «Eliminar», o quien creó el reclamo mientras la compradora se lo devolvió para corregir.
   const puedeEliminar = tienePermiso(usuario, 'reclamos.eliminar');
-  const corrige = { username: nombreUsuario(usuario), esAdmin: tienePermiso(usuario, 'configuracion.administrar') };
+  const corrige = { puede: tienePermiso(usuario, 'configuracion.administrar') || tienePermiso(usuario, 'reclamos.corregir') };
   let borrado = null;
   let aBorrar = [];
   const res = await repo.modificarArchivos(token, (a, estado) => {
     if (!puedeEliminar && dominio.motivoNoCorregir(estado, corrige)) {
-      throw forbidden('Solo quien puede eliminar, o quien creó el reclamo mientras está devuelto para corregir, puede quitar adjuntos.');
+      throw forbidden('Solo quien puede eliminar, o un rol que corrige reclamos mientras está devuelto, puede quitar adjuntos.');
     }
     exigir(dominio.motivoNoEliminarAdjunto(estado));
     const i = indiceAdjunto(a.adjuntos, idx, f);

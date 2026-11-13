@@ -17,6 +17,7 @@ export const PERMISOS = [
   { codigo: 'productos_danados.ver', grupo: 'ver', modulo: 'Productos dañados', nombre: 'Ver reportes', descripcion: 'Ver la lista y el detalle de los reportes.' },
   { codigo: 'productos_danados.ver_nf', grupo: 'ver', modulo: 'Productos dañados', nombre: 'Ver solo NF y devoluciones', descripcion: 'Ver solo los reportes NF y, si el rol también sube el documento para contabilidad, las devoluciones aprobadas; no los pendientes. Con «Ver reportes» ve todos (Gof).' },
   { codigo: 'productos_danados.crear', grupo: 'hacer', modulo: 'Productos dañados', nombre: 'Crear reportes', descripcion: 'Registrar un producto dañado con su evidencia.' },
+  { codigo: 'productos_danados.editar', grupo: 'hacer', modulo: 'Productos dañados', nombre: 'Editar correos y adjuntos', descripcion: 'Cambiar los correos del proveedor y los adjuntos de los reportes que ve (Tienda, Gof). Quien aprueba, envía o procesa ya puede.' },
   { codigo: 'productos_danados.enviar', grupo: 'hacer', modulo: 'Productos dañados', nombre: 'Enviar al proveedor', descripcion: 'Enviar el reporte por correo al proveedor (con la foto y los adjuntos).' },
   { codigo: 'productos_danados.aprobar', grupo: 'hacer', modulo: 'Productos dañados', nombre: 'Devolución aprobada o NF', descripcion: 'Registrar la respuesta del proveedor: Devolución aprobada o NF.' },
   { codigo: 'productos_danados.nf_documento', grupo: 'hacer', modulo: 'Productos dañados', nombre: 'Documento 1700 de los NF', descripcion: 'En los reportes NF, marcar el check «Documento 1700» y pasarlo al supervisor GOF (Gof).' },
@@ -28,7 +29,11 @@ export const PERMISOS = [
   { codigo: 'productos_danados.eliminar', grupo: 'eliminar', modulo: 'Productos dañados', nombre: 'Eliminar', descripcion: 'Eliminar reportes con su foto y adjuntos (no los que están en contabilidad, cerrados o dados de baja en SAP).' },
 
   { codigo: 'reclamos.ver', grupo: 'ver', modulo: 'Reclamos', nombre: 'Ver reclamos', descripcion: 'Ver la lista, el detalle, los productos y los adjuntos.' },
-  { codigo: 'reclamos.crear', grupo: 'hacer', modulo: 'Reclamos', nombre: 'Crear reclamos', descripcion: 'Subir el Excel, crear el reclamo y adjuntar archivos a los propios.' },
+  { codigo: 'reclamos.crear', grupo: 'hacer', modulo: 'Reclamos', nombre: 'Crear reclamos', descripcion: 'Subir el Excel y crear el reclamo.' },
+  // Desde 2026-11-13 estos tres dependen del rol y no de «quien lo creó»: todos los del rol ven lo mismo (y la Vista por rol también).
+  { codigo: 'reclamos.adjuntar_abiertos', grupo: 'hacer', modulo: 'Reclamos', nombre: 'Adjuntar en reclamos abiertos', descripcion: 'Subir fotos, PDF o Excel en los reclamos que ve mientras no tengan decisión (Tienda, Gof).' },
+  { codigo: 'reclamos.corregir', grupo: 'hacer', modulo: 'Reclamos', nombre: 'Corregir reclamos devueltos', descripcion: 'En los reclamos devueltos que ve: corregir datos y productos, quitar adjuntos y reenviarlos.' },
+  { codigo: 'reclamos.cambiar_retiro', grupo: 'hacer', modulo: 'Reclamos', nombre: 'Cambiar si el proveedor retira', descripcion: 'Indicar en los reclamos que ve si el proveedor se lleva el producto (no en devoluciones).' },
   { codigo: 'reclamos.adjuntar', grupo: 'hacer', modulo: 'Reclamos', nombre: 'Adjuntar en cualquier reclamo', descripcion: 'Subir PDF o Excel en el detalle de cualquier reclamo, no solo en los propios (Torre de Control).' },
   { codigo: 'reclamos.decidir', grupo: 'hacer', modulo: 'Reclamos', nombre: 'Aprobar o rechazar', descripcion: 'Decidir reclamos y productos, adjuntar archivos a cualquier reclamo y enviar los reclamos cerrados a contabilidad.' },
   { codigo: 'reclamos.devolver_supervisor', grupo: 'hacer', modulo: 'Reclamos', nombre: 'Devolver al creador (supervisor GOF)', descripcion: 'Devolver a quien lo creó un reclamo con algo mal (adjunto, datos o productos), con el motivo, en cualquier estado mientras no se haya enviado a contabilidad. Al reenviarlo vuelve al estado que tenía (supervisor GOF).' },

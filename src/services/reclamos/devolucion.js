@@ -26,7 +26,8 @@ import { obtenerOFallar, validarToken, exigir, nombreUsuario, detalle, conDocume
 const SAP_DOC_OPCIONAL = env.reclamos.sapDocOpcional && env.nodeEnv !== 'production';
 
 /** Quien corrige: su username y si es el super administrador (puede corregir cualquiera). */
-const quien = (usuario) => ({ username: nombreUsuario(usuario), esAdmin: tienePermiso(usuario, PERMISO_CONFIGURACION) });
+// Corregir depende del rol («Corregir reclamos devueltos»), no de quién lo creó.
+const quien = (usuario) => ({ puede: tienePermiso(usuario, PERMISO_CONFIGURACION) || tienePermiso(usuario, 'reclamos.corregir') });
 
 const docsDe = (r) => [r.SapDoc1, r.SapDoc2, r.SapDoc3, ...parseJsonArray(r.SapDocsExtra)].filter((d) => d && String(d).trim());
 

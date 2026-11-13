@@ -193,19 +193,19 @@ test('devuelto: la compradora no decide ni cambia productos hasta que se reenví
   assert.equal(motivoNoCambiarLineas({ Status: 'pendiente' }), null);
 });
 
-test('corregir: solo quien lo creó (o el administrador) y solo devuelto', async () => {
+test('corregir: depende del rol («Corregir reclamos devueltos»), no de quién lo creó; solo devuelto', async () => {
   const { motivoNoCorregir } = await import('../../src/domain/reclamo.js');
   const r = { Status: 'devuelto', CreatedBy: 'kmojica' };
-  assert.equal(motivoNoCorregir(r, { username: 'kmojica' }), null);
-  assert.equal(motivoNoCorregir(r, { username: 'otra', esAdmin: true }), null);
-  assert.equal(motivoNoCorregir(r, { username: 'otra' }).code, 'NO_ES_CREADOR');
-  assert.equal(motivoNoCorregir({ ...r, Status: 'pendiente' }, { username: 'kmojica' }).code, 'NO_DEVUELTO');
+  assert.equal(motivoNoCorregir(r, { puede: true }), null);
+  assert.equal(motivoNoCorregir(r, { puede: false }).code, 'SIN_PERMISO_CORREGIR');
+  assert.equal(motivoNoCorregir(r, {}).code, 'SIN_PERMISO_CORREGIR');
+  assert.equal(motivoNoCorregir({ ...r, Status: 'pendiente' }, { puede: true }).code, 'NO_DEVUELTO');
 });
 
 test('reenviar: cada documento SAP con su PDF y sin PDF de un documento quitado', async () => {
   const { motivoNoReenviar } = await import('../../src/domain/reclamo.js');
   const r = { Status: 'devuelto', CreatedBy: 'kmojica' };
-  const u = { username: 'kmojica' };
+  const u = { puede: true };
   const pdf = (documento, nombre = `${documento}.pdf`) => ({ nombre, documento });
   assert.equal(motivoNoReenviar(r, u, { docs: ['4904151684'], pdfs: [pdf('0004904151684')] }), null);
   assert.equal(motivoNoReenviar(r, u, { docs: ['4904151684', '4904151698'], pdfs: [pdf('4904151684')] }).code, 'FALTAN_PDF_SAP');
@@ -247,14 +247,13 @@ test('lleva retiro: devoluciones siempre; los demás si se contestó que sí; te
   assert.equal(esperaRetiro({ Tipo: 'diferencias', RetiroProveedor: false, RetiroProveedorFecha: null }), false);
 });
 
-test('cambiar si lo retira el proveedor: quien lo creó o el administrador, no en devolución ni ya entregado', async () => {
+test('cambiar si lo retira el proveedor: depende del rol, no en devolución ni ya entregado', async () => {
   const { motivoNoCambiarRetiro } = await import('../../src/domain/reclamo.js');
   const r = { Tipo: 'danos_textil', CreatedBy: 'tienda1', RetiroProveedor: true, RetiroProveedorFecha: null };
-  assert.equal(motivoNoCambiarRetiro(r, { username: 'tienda1' }), null);
-  assert.equal(motivoNoCambiarRetiro(r, { username: 'otra', esAdmin: true }), null);
-  assert.equal(motivoNoCambiarRetiro(r, { username: 'otra' }).code, 'NO_ES_CREADOR');
-  assert.equal(motivoNoCambiarRetiro({ ...r, Tipo: 'devolucion' }, { username: 'tienda1' }).code, 'ES_DEVOLUCION');
-  assert.equal(motivoNoCambiarRetiro({ ...r, RetiroProveedorFecha: '2026-11-01' }, { username: 'tienda1' }).code, 'RETIRO_REGISTRADO');
+  assert.equal(motivoNoCambiarRetiro(r, { puede: true }), null);
+  assert.equal(motivoNoCambiarRetiro(r, { puede: false }).code, 'SIN_PERMISO_RETIRO');
+  assert.equal(motivoNoCambiarRetiro({ ...r, Tipo: 'devolucion' }, { puede: true }).code, 'ES_DEVOLUCION');
+  assert.equal(motivoNoCambiarRetiro({ ...r, RetiroProveedorFecha: '2026-11-01' }, { puede: true }).code, 'RETIRO_REGISTRADO');
 });
 
 test('excel: el motivo «devolución» se reconoce como tipo devolucion', async () => {

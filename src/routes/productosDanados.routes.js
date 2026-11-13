@@ -51,7 +51,7 @@ const ver = requirePermiso(
 );
 
 // Correos del proveedor y adjuntos: cualquiera que trabaje el reporte.
-const editar = requirePermiso('productos_danados.crear', 'productos_danados.aprobar', 'productos_danados.procesar');
+const editar = requirePermiso('productos_danados.editar', 'productos_danados.enviar', 'productos_danados.aprobar', 'productos_danados.procesar');
 
 router.get('/', ver, validateQuery(listarQuerySchema), controller.listar);
 router.get('/kpis', ver, validateQuery(listarQuerySchema), controller.kpis);

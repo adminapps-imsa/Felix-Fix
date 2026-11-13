@@ -28,6 +28,10 @@ export function permisos(usuario) {
     // Devolver a quien lo creó: quien decide (la compradora). Corregir y reenviar: quien lo creó o el super administrador.
     puedeDevolver: puedeDecidir,
     puedeCorregirCualquiera: tienePermiso(usuario, 'configuracion.administrar'),
+    // Por rol, no por quién lo creó (2026-11-13).
+    puedeCorregir: tienePermiso(usuario, 'configuracion.administrar') || tienePermiso(usuario, 'reclamos.corregir'),
+    puedeCambiarRetiro: tienePermiso(usuario, 'configuracion.administrar') || tienePermiso(usuario, 'reclamos.cambiar_retiro'),
+    puedeAdjuntarAbiertos: tienePermiso(usuario, 'reclamos.adjuntar_abiertos'),
     // Supervisor GOF: devolver al creador en cualquier estado antes de contabilidad.
     puedeDevolverSupervisor: tienePermiso(usuario, 'reclamos.devolver_supervisor'),
     // Marcar «Entregado al proveedor» en los reclamos que el proveedor retira (Gof).

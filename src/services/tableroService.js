@@ -4,7 +4,7 @@
 import * as repo from '../repositories/tableroRepository.js';
 import { obtenerKpis as kpisProductos } from '../repositories/productosDanadosRepository.js';
 import { obtenerKpis as kpisReclamos } from '../repositories/reclamosRepository.js';
-import { tienePermiso } from './acceso/permisos.js';
+import { tienePermiso, PERMISO_CONFIGURACION } from './acceso/permisos.js';
 import { alcanceVista, creadorVisible } from '../domain/productoDanado.js';
 import { compradoraDe } from './acceso/alcanceCompradora.js';
 import { tiendaDe } from './acceso/alcanceTienda.js';
@@ -144,7 +144,8 @@ async function tableroReclamos(usuario, { desde, ahora, gran, compradora, tienda
     colas: {
       porDecidir: cola('porDecidir'),
       porEnviar: cola('porEnviar'),
-      devueltos: cola('devuelto', (r) => r.CreatedBy === usuario.username),
+      // Por rol: quien puede corregir ve todos los devueltos que le tocan (no solo los que creó).
+      devueltos: tienePermiso(usuario, 'reclamos.corregir') || tienePermiso(usuario, PERMISO_CONFIGURACION) ? cola('devuelto') : [],
       devueltosTodos: cola('devuelto'),
     },
     serie: serie({ entradas: hitos.map((h) => h.Creado), salidas: hitos.map((h) => h.Decision), desde, ahora, gran }),
