@@ -1,3 +1,4 @@
+import type { Combinacion } from '../features/reclamos/lib/cadena';
 export type TipoReclamo =
   | 'faltante_real'
   | 'sobrante_real'
@@ -250,6 +251,8 @@ export interface RelacionProveedor {
   departamentos: string[];
   marcas: string[];
   compradoras: string[];
+  /** Filas del catálogo del proveedor (marca, mundo, departamento, compradora): para llenar en cadena. */
+  combinaciones?: Combinacion[];
 }
 
 export interface PermisosReclamos {
