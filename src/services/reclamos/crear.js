@@ -30,7 +30,7 @@ import { exigirDivision } from '../divisiones.js';
 import { avisarReclamo } from '../correo/avisosReclamos.js';
 import { env } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
-import { normalizarDocSap, motivoDocsRepetidos, motivoDocsEnOtrosReclamos, documentosUsados, motivoFechaLlegadaInvalida, esDevolucion, estadoAlCrear, motivoFaltantesNoEn911 } from '../../domain/reclamo.js';
+import { esSoloNotificacion, normalizarDocSap, motivoDocsRepetidos, motivoDocsEnOtrosReclamos, documentosUsados, motivoFechaLlegadaInvalida, esDevolucion, estadoAlCrear, motivoFaltantesNoEn911 } from '../../domain/reclamo.js';
 import { diaPanama } from '../../domain/tablero.js';
 import { tipoReal, tipoRealDeArchivo, nombreUsuario, detalle, exigir, conDocumentos, sucursalOficial } from './comun.js';
 import { reclamoArchivoPath } from '../../config/almacenamiento.js';
@@ -431,7 +431,8 @@ export async function crear(body, multerFile, usuario, pdfs = []) {
     if (data.motivo) data.motivo = await repo.asegurarValorCatalogo('motivo', data.motivo, nombreUsuario(usuario));
 
     const token = crypto.randomUUID();
-    const status = estadoAlCrear({ soloNotificacion: TIPOS_SOLO_NOTIFICACION.has(data.tipo), lineas });
+    // Solo notificación si TODOS los productos lo son (un reclamo con faltantes va a contabilidad).
+    const status = estadoAlCrear({ soloNotificacion: esSoloNotificacion({ tipo: data.tipo, lineas }, TIPOS_SOLO_NOTIFICACION), lineas });
     const alta = await repo.crear(
       {
         ...data,
