@@ -217,3 +217,30 @@ test('hoja de la plantilla CEDI con datos pero sin sus títulos: se avisa y no s
   assert.equal(m.code, 'HOJA_NO_RECONOCIDA');
   assert.match(m.mensaje, /No se pudo leer la hoja «Sobrante NO esperado»/);
 });
+
+test('Averia con DOCUMENTO y COMENTARIO (23294 - NOIR): el documento se suma a los del reclamo y no cuenta como unidades', () => {
+  const averia = [
+    'Averia',
+    [
+      ['Producto', 'Barcode', 'Descripción', 'Bodega', 'OC', 'UOM', 'Averia', 'Manchado ', 'Foto', 'DOCUMENTO', 'COMENTARIO'],
+      [200032509005, 2050039057719, 'A67-X30017 "LADIES 2PCS SET PIJ, NAVY, S', 'Domestic', 180131299, 'UN', 'manchado ', 1, '', 4904531844, 'DEFECTUOSO'],
+      [200032508004, 2050039057627, 'A67-X29121 "LADIES 2PCS SET P, LILAC, XL', 'Domestic', 180131299, 'UN', 'Tallas cruzada XL vs L', 3, '', 4904531844, 'DEFECTUOSO'],
+    ],
+  ];
+  const diferencia = [
+    'Diferencia',
+    [
+      ['Producto', 'Barcode', 'Descripción', 'Bodega', 'OC', 'UOM', 'Esperada', 'Recibida', ' Diferencia', 'DOCUMENTO', 'COMENTARIO'],
+      [200032507002, 2050039057528, 'A67-28888 "LADIES 2PCS SET PIJ, BLACK, M', 'Domestic', 180131299, 'UN', 71, 70, -1, 4904531843, 'FALTANTE REAL'],
+    ],
+  ];
+  const r = parsearPlantilla(libro(RESUMEN, averia, diferencia));
+  assert.deepEqual(r.documentosSap, ['4904531843', '4904531844']);
+  assert.equal(r.comentario, 'FALTANTE REAL | DEFECTUOSO');
+  const danos = r.lineas.filter((l) => l.tipo === 'danos_textil');
+  assert.deepEqual(danos.map((l) => [l.cantidad, l.cedi.documento]), [[1, '4904531844'], [3, '4904531844']]);
+
+  // Sin columna FOTO, DOCUMENTO tampoco cuenta como unidades.
+  const sinFoto = ['Averia', [['Barcode', 'Averia', 'Manchado', 'DOCUMENTO'], [2050039057719, 'manchado', 2, 4904531844]]];
+  assert.equal(parsearPlantilla(libro(RESUMEN, sinFoto)).lineas[0].cantidad, 2);
+});

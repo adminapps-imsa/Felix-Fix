@@ -647,7 +647,12 @@ export function filasConFoto(wb, nombreHoja) {
   return filas;
 }
 
-/** Hoja «Averia»: unidades = suma de las columnas numéricas entre AVERIA y FOTO (p. ej. «Manchado»). */
+/**
+ * Hoja «Averia»: unidades = suma de las columnas numéricas entre AVERIA y la
+ * primera de FOTO / DOCUMENTO / COMENTARIO (p. ej. «Manchado»). DOCUMENTO es
+ * el documento SAP de la avería (23294 - NOIR, 2026-11-13: antes no se leía y
+ * el PDF de ese documento no se aceptaba al crear).
+ */
 function lineasAveria({ filas, filaEncabezado, nombreHoja }, wb, averiasSinFoto) {
   const conFoto = filasConFoto(wb, nombreHoja);
   const headers = (filas[filaEncabezado] || []).map(normalizar);
@@ -656,7 +661,10 @@ function lineasAveria({ filas, filaEncabezado, nombreHoja }, wb, averiasSinFoto)
   const iDescripcion = buscarColumna(headers, (h) => h.startsWith('DESCRIPCION'));
   const iAveria = buscarColumna(headers, (h) => h.startsWith('AVERIA'));
   const iFoto = buscarColumna(headers, (h) => h.startsWith('FOTO'));
-  const fin = iFoto > iAveria ? iFoto : headers.length;
+  const iDocumento = buscarColumna(headers, (h) => h.startsWith('DOCUMENTO'));
+  const iComentario = buscarColumna(headers, (h) => h.startsWith('COMENTARIO'));
+  // Las unidades no pueden incluir el número de documento ni otra columna de texto.
+  const fin = Math.min(...[iFoto, iDocumento, iComentario].filter((c) => c > iAveria), headers.length);
   const lineas = [];
   filas.slice(filaEncabezado + 1).forEach((fila, i) => {
     const codigoBarra = aCodigoBarra(fila[iBarcode]);
@@ -682,7 +690,7 @@ function lineasAveria({ filas, filaEncabezado, nombreHoja }, wb, averiasSinFoto)
         recibida: null,
         diferencia: null,
         averiadas: unidades,
-        documento: null,
+        documento: iDocumento >= 0 ? textoCelda(fila[iDocumento]) || null : null,
       },
     });
   });
@@ -772,16 +780,22 @@ function parsearCediHojas(hojas, wb) {
     else if (h.clave === 'diferencia') lineas.push(...lineasDiferencia(h, faltantesSinDocumento));
     else lineas.push(...lineasSobranteNoEsperado(h));
   }
-  const dif = hojas.find((h) => h.clave === 'diferencia');
-  let documentos = [];
-  let comentario = null;
-  if (dif) {
-    const headers = (dif.filas[dif.filaEncabezado] || []).map(normalizar);
-    const datos = dif.filas.slice(dif.filaEncabezado + 1);
+  // Documentos SAP y comentario: de «Diferencia» y de «Averia» (cada una puede traer el suyo).
+  const documentos = [];
+  const comentarios = [];
+  for (const clave of ['diferencia', 'averia']) {
+    const h = hojas.find((x) => x.clave === clave);
+    if (!h) continue;
+    const headers = (h.filas[h.filaEncabezado] || []).map(normalizar);
+    const datos = h.filas.slice(h.filaEncabezado + 1);
     const iBarcode = headers.indexOf('BARCODE');
-    documentos = documentosSap(datos, buscarColumna(headers, (h) => h.startsWith('DOCUMENTO')), iBarcode);
-    comentario = comentarioGeneral(datos, buscarColumna(headers, (h) => h.startsWith('COMENTARIO')), iBarcode);
+    for (const d of documentosSap(datos, buscarColumna(headers, (x) => x.startsWith('DOCUMENTO')), iBarcode)) {
+      if (!documentos.some((y) => y.toUpperCase() === d.toUpperCase())) documentos.push(d);
+    }
+    const c = comentarioGeneral(datos, buscarColumna(headers, (x) => x.startsWith('COMENTARIO')), iBarcode);
+    if (c && !comentarios.some((y) => y.toUpperCase() === c.toUpperCase())) comentarios.push(c);
   }
+  const comentario = comentarios.join(' | ').slice(0, 1000) || null;
   return {
     formato: 'cedi',
     plantilla: 'cedi_hojas',
