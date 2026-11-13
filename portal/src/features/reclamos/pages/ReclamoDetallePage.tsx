@@ -156,7 +156,7 @@ export function ReclamoDetallePage() {
         <h1 className="numero-caso text-5xl">{reclamo.Numero}</h1>
         <TiendaDestacada className="mt-3" cedi={reclamo.Origen === 'cedi'} nombre={reclamo.Sucursal} />
         <div className="mt-3 flex flex-wrap justify-center gap-2">
-          <StatusReclamoBadge status={reclamo.Status} devueltoPor={reclamo.DevueltoPor} decisionBy={reclamo.DecisionBy} />
+          <StatusReclamoBadge status={reclamo.Status} devueltoPor={reclamo.DevueltoPor} decisionBy={reclamo.DecisionBy} enviadoContabilidad={Boolean(reclamo.EnviadoContabilidadAt)} />
           <RetiroBadge reclamo={reclamo} />
         </div>
         <RutaCaso pasos={rutaReclamo(reclamo)} className="mt-5 w-full max-w-3xl text-left" />

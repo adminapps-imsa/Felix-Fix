@@ -212,7 +212,8 @@ export const documentosSapQuerySchema = z.object({
 });
 
 export const listarQuerySchema = z.object({
-  status: z.enum(STATUS).optional().or(z.literal('')),
+  // 'enviado': los enviados a contabilidad (no es un Status guardado).
+  status: z.enum([...STATUS, 'enviado']).optional().or(z.literal('')),
   porEnviar: z.enum(['1']).optional(),
   q: z.string().max(200).optional(),
   // Filtro por lugar: 'cedi' o el TiendaId de una tienda.

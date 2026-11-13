@@ -262,7 +262,7 @@ export function InicioPage() {
                   <Flecha />
                   <Etapa n={rec.porEnviarContabilidad} label="Cerrados por enviar" to="/reclamos?porEnviar=1" />
                   <Flecha />
-                  <Etapa n={rec.resueltos + rec.rechazados - rec.porEnviarContabilidad} label="En contabilidad" />
+                  <Etapa n={rec.enviadosContabilidad} label="En contabilidad" to="/reclamos?estado=enviado" />
                 </ol>
                 <p className="text-sm opacity-65">
                   {formatCantidad(rec.productosPorDecidir)} productos esperando decisión · {formatCantidad(rec.notificados)} notificados (solo informativos)

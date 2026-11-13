@@ -1,4 +1,4 @@
-import { CheckCircle2, Clock, Bell, XCircle, Undo2, Truck } from 'lucide-react';
+import { CheckCircle2, Clock, Bell, XCircle, Undo2, Truck, Landmark } from 'lucide-react';
 import type React from 'react';
 import { cn } from '../../../lib/cn';
 import type { Reclamo, StatusReclamo, TipoReclamo } from '../../../types/reclamo';
@@ -26,13 +26,27 @@ export function StatusReclamoBadge({
   status,
   devueltoPor,
   decisionBy,
+  enviadoContabilidad,
   className,
 }: {
   status: StatusReclamo;
   devueltoPor?: string | null;
   decisionBy?: string | null;
+  /** Ya se envió a contabilidad (EnviadoContabilidadAt): es lo que se muestra, en vez de la decisión. */
+  enviadoContabilidad?: boolean;
   className?: string;
 }) {
+  if (enviadoContabilidad && (status === 'resuelto' || status === 'rechazado')) {
+    return (
+      <span
+        className={cn('badge-pill border border-sky-500/30 bg-sky-500/15 text-sky-700 dark:text-sky-300', className)}
+        title={status === 'rechazado' ? 'Rechazado por la compradora y enviado a contabilidad' : 'Cerrado y enviado a contabilidad'}
+      >
+        <Landmark size={12} />
+        Enviado a contabilidad
+      </span>
+    );
+  }
   return (
     <span className={cn('badge-pill', STATUS_STYLE[status], className)}>
       {STATUS_ICON[status]}

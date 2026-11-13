@@ -35,9 +35,16 @@ function aplicarFiltros(request, filtros) {
   // Filtro de la lista: «CEDI» o una tienda ({ nombre, codigo }).
   if (filtros.origen === 'cedi') condiciones.push("r.Origen = 'cedi'");
   if (filtros.tienda) condiciones.push(condicionSucursal(request, filtros.tienda, 'r', 'fil'));
-  if (filtros.status) {
+  // «Enviado a contabilidad» no es un Status guardado: es un reclamo cerrado con
+  // EnviadoContabilidadAt (2026-11-13, REC-30/38). Confirmados y rechazados son
+  // los que todavía no se envían.
+  if (filtros.status === 'enviado') {
+    condiciones.push('r.EnviadoContabilidadAt IS NOT NULL');
+  } else if (filtros.status) {
     request.input('status', sql.VarChar(15), filtros.status);
-    condiciones.push('r.Status = @status');
+    condiciones.push(
+      filtros.status === 'resuelto' || filtros.status === 'rechazado' ? 'r.Status = @status AND r.EnviadoContabilidadAt IS NULL' : 'r.Status = @status'
+    );
   }
   // Cerrados por la compradora que todavía no se mandan a contabilidad (tarea de Gof / Torre de Control).
   if (filtros.porEnviar) {
@@ -90,8 +97,9 @@ export async function obtenerKpis(username = null, alcance = null) {
       COUNT(*) AS total,
       SUM(CASE WHEN Status = 'pendiente' THEN 1 ELSE 0 END) AS pendientes,
       SUM(CASE WHEN Status = 'notificado' THEN 1 ELSE 0 END) AS notificados,
-      SUM(CASE WHEN Status = 'resuelto' THEN 1 ELSE 0 END) AS resueltos,
-      SUM(CASE WHEN Status = 'rechazado' THEN 1 ELSE 0 END) AS rechazados,
+      SUM(CASE WHEN Status = 'resuelto' AND EnviadoContabilidadAt IS NULL THEN 1 ELSE 0 END) AS resueltos,
+      SUM(CASE WHEN Status = 'rechazado' AND EnviadoContabilidadAt IS NULL THEN 1 ELSE 0 END) AS rechazados,
+      SUM(CASE WHEN EnviadoContabilidadAt IS NOT NULL THEN 1 ELSE 0 END) AS enviadosContabilidad,
       -- Solo productos de reclamos abiertos: los de reclamos cerrados ya no se deciden.
       (SELECT COUNT(*) FROM ${S}.ReclamoLineas l
          JOIN ${S}.Reclamos rr ON rr.Token = l.ReclamoToken
@@ -109,6 +117,7 @@ export async function obtenerKpis(username = null, alcance = null) {
     notificados: row.notificados || 0,
     resueltos: row.resueltos || 0,
     rechazados: row.rechazados || 0,
+    enviadosContabilidad: row.enviadosContabilidad || 0,
     productosPorDecidir: row.productosPorDecidir || 0,
     porEnviarContabilidad: row.porEnviarContabilidad || 0,
     devueltos: row.devueltos || 0,

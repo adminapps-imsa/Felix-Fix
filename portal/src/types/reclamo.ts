@@ -159,8 +159,13 @@ export interface ArticuloData {
   marca: string;
 }
 
+/** Filtro de la lista: un estado, o 'enviado' (los enviados a contabilidad; no es un estado guardado). */
+export type FiltroStatusReclamo = StatusReclamo | 'enviado';
+
 export interface KpisReclamos {
   total: number;
+  /** Enviados a contabilidad (confirmados y rechazados ya no los cuentan). */
+  enviadosContabilidad: number;
   pendientes: number;
   notificados: number;
   resueltos: number;

@@ -11,7 +11,7 @@ import type {
   Reclamo,
   ReclamoLinea,
   RelacionProveedor,
-  StatusReclamo,
+  FiltroStatusReclamo,
   TipoReclamo,
 } from '../types/reclamo';
 
@@ -23,7 +23,7 @@ const ruta = (token: string) => `${BASE}/${encodeURIComponent(token)}`;
 const conArchivo = (filename?: string) => (filename ? `?f=${encodeURIComponent(filename)}` : '');
 
 /** `tienda`: 'cedi' o el TiendaId de una tienda (por la sucursal del reclamo). */
-export function listarReclamos(filtros: { status?: StatusReclamo | ''; porEnviar?: boolean; q?: string; tienda?: string; page?: number; pageSize?: number }) {
+export function listarReclamos(filtros: { status?: FiltroStatusReclamo | ''; porEnviar?: boolean; q?: string; tienda?: string; page?: number; pageSize?: number }) {
   const params = new URLSearchParams();
   Object.entries(filtros).forEach(([k, v]) => {
     if (k === 'porEnviar') {
