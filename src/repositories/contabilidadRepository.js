@@ -116,3 +116,27 @@ export async function guardarDocumento(doc) {
   const accion = recordset[0]?.Accion;
   return accion === 'INSERT' ? 'insertado' : accion === 'UPDATE' ? 'actualizado' : 'sin_cambios';
 }
+
+/** Documentos pendientes cuya validación guardada tiene diferencias (para revalidarlos). */
+export async function pendientesConDiferencias() {
+  const pool = await getPool();
+  const { recordset } = await pool.request().query(`
+    SELECT d.DocumentoId, d.ReclamoId, d.Lineas, d.Validacion, r.Token AS ReclamoToken
+    FROM ${S}.ReclamoDocumentosContabilidad d
+    JOIN ${S}.Reclamos r ON r.ReclamoId = d.ReclamoId
+    WHERE d.Estado = 'pendiente' AND JSON_VALUE(d.Validacion, '$.estado') = 'diferencias'`);
+  return recordset;
+}
+
+/** Cambia solo líneas y validación de un documento que sigue pendiente. */
+export async function actualizarValidacion(documentoId, { lineas, validacion }) {
+  const pool = await getPool();
+  const { rowsAffected } = await pool
+    .request()
+    .input('id', sql.Int, documentoId)
+    .input('lineas', sql.NVarChar(sql.MAX), JSON.stringify(lineas ?? []))
+    .input('validacion', sql.NVarChar(sql.MAX), JSON.stringify(validacion ?? {}))
+    .query(`UPDATE ${S}.ReclamoDocumentosContabilidad SET Lineas = @lineas, Validacion = @validacion, UpdatedAt = SYSUTCDATETIME()
+            WHERE DocumentoId = @id AND Estado = 'pendiente'`);
+  return rowsAffected[0] > 0;
+}
