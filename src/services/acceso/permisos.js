@@ -44,7 +44,13 @@ export const PERMISOS = [
   { codigo: 'reclamos.solo_tienda', grupo: 'limite', modulo: 'Reclamos', nombre: 'Solo reclamos de Tienda', descripcion: 'Al crear un reclamo solo puede elegir Tienda, no CEDI (Gof).' },
   { codigo: 'reclamos.solo_cedi', grupo: 'limite', modulo: 'Reclamos', nombre: 'Solo reclamos de CEDI', descripcion: 'Al crear un reclamo solo puede elegir CEDI, no Tienda (Torre de Control).' },
   { codigo: 'reclamos.eliminar', grupo: 'eliminar', modulo: 'Reclamos', nombre: 'Eliminar', descripcion: 'Eliminar reclamos y sus adjuntos.' },
+
+  // Desde 2026-11-13: el supervisor GOF pone a los de Gof en su tienda sin ser administrador.
+  { codigo: 'usuarios.tiendas', grupo: 'hacer', modulo: 'Usuarios', nombre: 'Cambiar la tienda de los de Gof', descripcion: 'Entrar a Configuración → Tiendas y cambiar la tienda y «Solo lo que crea» de las personas con rol Gof; no ve ni cambia a las demás (supervisor GOF).' },
 ];
+
+/** Rol cuyas personas puede mover de tienda quien tiene «usuarios.tiendas» sin ser administrador. */
+export const ROL_GOF = 'Gof';
 
 export const PERMISO_CONFIGURACION = 'configuracion.administrar';
 

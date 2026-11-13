@@ -7,6 +7,10 @@ import { usuariosQuerySchema, permisosRolSchema, asignarRolSchema, bienvenidaSch
 
 const router = Router();
 
+// Tiendas: también el supervisor GOF (usuarios.tiendas), que ve y cambia solo a los de rol Gof.
+router.get('/tiendas', requireAuth, requirePermiso('configuracion.administrar', 'usuarios.tiendas'), controller.tiendas);
+router.put('/tiendas/usuarios/:id', requireAuth, requirePermiso('configuracion.administrar', 'usuarios.tiendas'), validateBody(tiendaUsuarioSchema), controller.guardarTiendaUsuario);
+
 router.use(requireAuth, requirePermiso('configuracion.administrar'));
 
 router.get('/roles', controller.roles);
@@ -17,8 +21,6 @@ router.delete('/usuarios/:id/roles/:rol', controller.quitarRol);
 router.get('/auditoria', controller.auditoria);
 // Bitácora: lo que se hace en el portal y lo que sale mal (src/services/bitacora/).
 router.get('/bitacora', validateQuery(bitacoraQuerySchema), controller.bitacora);
-router.get('/tiendas', controller.tiendas);
-router.put('/tiendas/usuarios/:id', validateBody(tiendaUsuarioSchema), controller.guardarTiendaUsuario);
 
 // Correos: vista previa con datos de ejemplo, prueba al propio correo y bienvenida.
 const envioLimiter = rateLimit({ windowMs: 60_000, max: 10, keyGenerator: (req) => req.user?.sub || req.ip, message: { error: 'HttpError', message: 'Demasiados envíos seguidos. Espera un minuto.' } });
