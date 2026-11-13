@@ -50,12 +50,13 @@ export const STATUS_LABEL: Record<StatusReclamo, string> = {
   resuelto: 'Confirmado por compradora',
   rechazado: 'Rechazado',
   notificado: 'Notificado',
-  devuelto: 'Con comentario de compradora',
+  // Devuelto por la compradora o el supervisor GOF para que lo arreglen (2026-11-13).
+  devuelto: 'En espera de arreglo',
 };
 
 /** Etiqueta del estado; el devuelto dice quién lo devolvió y el cerrado por el sistema, que se cerró solo. */
 export const etiquetaStatus = (status: StatusReclamo, devueltoPor?: string | null, decisionBy?: string | null) => {
-  if (status === 'devuelto' && devueltoPor === 'supervisor_gof') return 'Devuelto por supervisor GOF';
+  void devueltoPor; // quién lo devolvió se dice en el detalle; la etiqueta es la misma
   if (status === 'resuelto' && decisionBy === 'sistema') return 'Cerrado automáticamente';
   return STATUS_LABEL[status];
 };

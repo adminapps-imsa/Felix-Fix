@@ -12,6 +12,7 @@ import type {
   ReclamoLinea,
   RelacionProveedor,
   FiltroStatusReclamo,
+  HistorialReclamo,
   TipoReclamo,
 } from '../types/reclamo';
 
@@ -81,6 +82,9 @@ export function reemplazarExcel(token: string, archivo: File, ajustar = false) {
   form.set('excel', archivo);
   return api.putForm<Reclamo>(`${ruta(token)}/excel`, form);
 }
+/** Historial del reclamo (administrador y supervisor GOF). */
+export const obtenerHistorial = (token: string) => api.get<HistorialReclamo>(`${ruta(token)}/historial`);
+
 /** Administrador: quita el Excel del reclamo (y sus fotos). */
 export const quitarExcel = (token: string) => api.del<Reclamo>(`${ruta(token)}/excel`);
 

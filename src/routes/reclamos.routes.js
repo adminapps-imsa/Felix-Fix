@@ -46,9 +46,12 @@ router.post('/', crear, excelLimiter, uploadExcelReclamo, controller.crear);
 
 router.get('/:token', controller.detalle);
 router.get('/:token/excel', controller.excel);
-// Reemplazar o quitar el Excel del reclamo: solo el administrador (el permiso va ANTES de
-// multer, para no guardar el archivo de quien no puede). El servicio valida el Excel nuevo.
-router.put('/:token/excel', requirePermiso('configuracion.administrar'), excelLimiter, uploadExcelPrincipal, controller.reemplazarExcel);
+// Historial del reclamo (qué pasó, quién, cuándo y cuánto tardó): administrador y supervisor GOF.
+router.get('/:token/historial', requirePermiso('configuracion.administrar', 'reclamos.devolver_supervisor'), controller.historial);
+// Reemplazar el Excel: el administrador, o quien corrige mientras está en espera de arreglo
+// (el servicio lo revisa). Quitarlo: solo el administrador. El permiso va ANTES de multer,
+// para no guardar el archivo de quien no puede.
+router.put('/:token/excel', requirePermiso('configuracion.administrar', 'reclamos.corregir'), excelLimiter, uploadExcelPrincipal, controller.reemplazarExcel);
 router.delete('/:token/excel', requirePermiso('configuracion.administrar'), controller.quitarExcel);
 router.patch('/:token/decision', decidir, validateBody(decisionReclamoSchema), controller.decidir);
 router.delete('/:token', eliminar, controller.eliminar);

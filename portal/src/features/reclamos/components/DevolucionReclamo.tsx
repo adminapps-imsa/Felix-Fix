@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ListChecks, MessageSquareText, Pencil, Plus, Send, Trash2, Undo2 } from 'lucide-react';
+import { MessageSquareText, Pencil, Plus, Send, Trash2, Undo2 } from 'lucide-react';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { Modal } from '../../../components/ui/Modal';
 import { Button } from '../../../components/ui/Button';
@@ -12,8 +12,7 @@ import { ApiError } from '../../../api/client';
 import * as apiReclamos from '../../../api/reclamos';
 import { formatFecha } from '../../../lib/formatters';
 import { cn } from '../../../lib/cn';
-import type { CatalogosReclamo, ComentarioReclamo, Reclamo, ReclamoLinea, StatusReclamo } from '../../../types/reclamo';
-import { CorregirProductosModal } from './CorregirProductosModal';
+import type { CatalogosReclamo, ComentarioReclamo, Reclamo, StatusReclamo } from '../../../types/reclamo';
 import { STATUS_LABEL } from '../lib/tipos';
 import { useTiendas } from '../../productos-danados/hooks/useTiendas';
 
@@ -43,19 +42,14 @@ const destinoReenvio = (r: Reclamo) => (porSupervisor(r) ? 'Reenviar' : 'Reenvia
  */
 export function DevolucionReclamo({
   reclamo,
-  lineas,
   puedeCorregir,
   onActualizado,
-  onProductosCorregidos,
 }: {
   reclamo: Reclamo;
-  lineas: ReclamoLinea[];
   puedeCorregir: boolean;
   onActualizado: (r: Reclamo) => void;
-  onProductosCorregidos: (r: Reclamo) => void;
 }) {
   const [editar, setEditar] = useState(false);
-  const [productos, setProductos] = useState(false);
   const [reenviar, setReenviar] = useState(false);
   const comentarios = reclamo.Comentarios ?? [];
   const devuelto = reclamo.Status === 'devuelto';
@@ -67,7 +61,7 @@ export function DevolucionReclamo({
     <GlassCard className={cn('flex flex-col gap-4', devuelto && 'ring-2 ring-brand-500/40')}>
       <h2 className="flex items-center gap-2 text-base font-bold">
         <Undo2 size={17} className={devuelto ? 'text-brand-600 dark:text-brand-400' : undefined} />
-        {devuelto ? (porSupervisor(reclamo) ? 'Devuelto por el supervisor GOF' : 'Devuelto para corregir') : 'Correcciones'}
+        {devuelto ? `En espera de arreglo · devuelto por ${porSupervisor(reclamo) ? 'el supervisor GOF' : 'la compradora'}` : 'Correcciones'}
       </h2>
 
       {devuelto && ultima && (
@@ -84,10 +78,14 @@ export function DevolucionReclamo({
         (puedeCorregir ? (
           <>
             <ol className="flex flex-col gap-1.5 text-sm opacity-80">
-              <li>1. Corrige los datos o los documentos SAP con «Corregir datos», y los productos con «Corregir productos».</li>
-              <li>2. Si un adjunto está mal o cambiaste un documento SAP, sube el correcto en Adjuntos y quita el que ya no va.</li>
+              <li>1. Corrige los datos o los documentos SAP con «Corregir datos».</li>
               <li>
-                3. Pulsa «{destinoReenvio(reclamo)}».
+                2. Si los productos están mal, sube el Excel correcto con <strong className="font-semibold">«Reemplazar»</strong> en Adjuntos → Excel del
+                reclamo: el reclamo se ajusta a ese Excel.
+              </li>
+              <li>3. Si un adjunto está mal o cambiaste un documento SAP, sube el correcto en Adjuntos y quita el que ya no va.</li>
+              <li>
+                4. Pulsa «{destinoReenvio(reclamo)}».
                 {porSupervisor(reclamo) && reclamo.StatusAntesDevolucion && (
                   <> Vuelve a «{STATUS_LABEL[reclamo.StatusAntesDevolucion as StatusReclamo]}», como estaba.</>
                 )}
@@ -97,9 +95,6 @@ export function DevolucionReclamo({
               {/* Amarillo y grande: es lo primero que tiene que hacer quien recibe el reclamo devuelto. */}
               <Button variant="aviso" tamano="grande" onClick={() => setEditar(true)}>
                 <Pencil size={18} /> Corregir datos
-              </Button>
-              <Button variant="secondary" tamano="grande" onClick={() => setProductos(true)}>
-                <ListChecks size={18} /> Corregir productos
               </Button>
               <Button onClick={() => setReenviar(true)}>
                 <Send size={15} /> {destinoReenvio(reclamo)}
@@ -114,14 +109,6 @@ export function DevolucionReclamo({
 
       {comentarios.length > (devuelto ? 1 : 0) && <Historial comentarios={comentarios} />}
 
-      {productos && (
-        <CorregirProductosModal
-          reclamo={reclamo}
-          lineas={lineas}
-          onClose={() => setProductos(false)}
-          onGuardado={(r) => (onProductosCorregidos(r), setProductos(false))}
-        />
-      )}
       {editar && <EditarDatosModal reclamo={reclamo} onClose={() => setEditar(false)} onGuardado={(r) => (onActualizado(r), setEditar(false))} />}
       {reenviar && <ReenviarModal reclamo={reclamo} onClose={() => setReenviar(false)} onReenviado={(r) => (onActualizado(r), setReenviar(false))} />}
     </GlassCard>
@@ -288,7 +275,7 @@ function ReenviarModal({ reclamo, onClose, onReenviado }: { reclamo: Reclamo; on
   );
 }
 
-/** Quien lo creó corrige los datos del formulario y los documentos SAP. El origen y el tipo no cambian (los productos, en CorregirProductosModal). */
+/** Quien corrige el reclamo devuelto cambia los datos del formulario y los documentos SAP. El origen y el tipo no cambian; los productos se arreglan con «Reemplazar» el Excel. */
 function EditarDatosModal({ reclamo, onClose, onGuardado }: { reclamo: Reclamo; onClose: () => void; onGuardado: (r: Reclamo) => void }) {
   const tiendas = useTiendas();
   const [cat, setCat] = useState<CatalogosReclamo | null>(null);
@@ -341,8 +328,8 @@ function EditarDatosModal({ reclamo, onClose, onGuardado }: { reclamo: Reclamo; 
     <Modal title={`Corregir ${reclamo.Numero}`} onClose={onClose} wide dismissible={false}>
       <form onSubmit={guardar} className="flex flex-col gap-5 text-sm">
         <p className="opacity-75">
-          Corrige lo que se indicó en la devolución. El origen ({cedi ? 'CEDI' : 'Tienda'}) y el tipo no cambian; los productos se corrigen con
-          «Corregir productos».
+          Corrige lo que se indicó en la devolución. El origen ({cedi ? 'CEDI' : 'Tienda'}) y el tipo no cambian; los productos se arreglan
+          subiendo el Excel correcto con «Reemplazar» (Adjuntos → Excel del reclamo).
         </p>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {cedi ? null : (

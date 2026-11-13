@@ -36,6 +36,8 @@ export function permisos(usuario) {
     puedeAdjuntarAbiertos: tienePermiso(usuario, 'reclamos.adjuntar_abiertos'),
     // Supervisor GOF: devolver al creador en cualquier estado antes de contabilidad.
     puedeDevolverSupervisor: tienePermiso(usuario, 'reclamos.devolver_supervisor'),
+    // Historial del reclamo al final del detalle: administrador y supervisor GOF.
+    puedeVerHistorial: tienePermiso(usuario, 'configuracion.administrar') || tienePermiso(usuario, 'reclamos.devolver_supervisor'),
     // Marcar «Entregado al proveedor» en los reclamos que el proveedor retira (Gof).
     puedeRegistrarRetiro: tienePermiso(usuario, 'reclamos.retiro_proveedor'),
     // Data: carga el código de los sobrantes no esperados que creó en SAP.

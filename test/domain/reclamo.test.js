@@ -181,7 +181,10 @@ test('devolver: solo un reclamo pendiente, con quien lo creó y con comentario',
   assert.equal(motivoNoDevolver(r, 'El documento SAP no es el de esta factura'), null);
   assert.equal(motivoNoDevolver(r, '  ok ').code, 'FALTA_COMENTARIO');
   assert.equal(motivoNoDevolver({ ...r, Status: 'devuelto' }, 'texto largo').code, 'RECLAMO_DEVUELTO');
-  assert.equal(motivoNoDevolver({ ...r, Status: 'resuelto' }, 'texto largo').code, 'NO_DEVOLVIBLE');
+  // Desde 2026-11-13 la compradora también devuelve uno ya decidido, si no se envió a contabilidad.
+  assert.equal(motivoNoDevolver({ ...r, Status: 'resuelto' }, 'texto largo'), null);
+  assert.equal(motivoNoDevolver({ ...r, Status: 'rechazado' }, 'texto largo'), null);
+  assert.equal(motivoNoDevolver({ ...r, Status: 'resuelto', EnviadoContabilidadAt: new Date() }, 'texto largo').code, 'NO_DEVOLVIBLE');
   assert.equal(motivoNoDevolver({ ...r, Status: 'notificado' }, 'texto largo').code, 'NO_DEVOLVIBLE');
   assert.equal(motivoNoDevolver({ ...r, CreatedBy: null }, 'texto largo').code, 'NO_DEVOLVIBLE');
 });
