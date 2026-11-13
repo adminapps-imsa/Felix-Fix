@@ -48,14 +48,17 @@ export function AdjuntosSection({
   reclamo,
   esAdmin,
   puedeAdjuntar,
-  puedeCambiarExcel = false,
+  puedeReemplazarExcel = false,
+  puedeQuitarExcel = false,
   onActualizado,
 }: {
   reclamo: Reclamo;
   esAdmin: boolean;
   puedeAdjuntar: boolean;
-  /** Administrador, antes de contabilidad: reemplazar (validado) o quitar el Excel del reclamo. */
-  puedeCambiarExcel?: boolean;
+  /** Reemplazar (validado) el Excel del reclamo: administrador, o quien corrige mientras está en espera de arreglo. */
+  puedeReemplazarExcel?: boolean;
+  /** Quitar el Excel del reclamo: solo el administrador. */
+  puedeQuitarExcel?: boolean;
   onActualizado: (r: Reclamo) => void;
 }) {
   const [vista, setVista] = useState<Vista | null>(null);
@@ -154,7 +157,7 @@ export function AdjuntosSection({
         {!reclamo.TieneExcel ? (
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-sm opacity-60">Sin Excel: los productos se llenaron a mano en el formulario.</p>
-            {puedeCambiarExcel && botonCambiarExcel('Subir Excel', Upload)}
+            {puedeReemplazarExcel && botonCambiarExcel('Subir Excel', Upload)}
           </div>
         ) : (
         <div className="flex items-center gap-2 rounded-xl border border-black/10 px-3 py-2 text-sm dark:border-white/10">
@@ -167,13 +170,11 @@ export function AdjuntosSection({
           <Button variant="ghost" className="px-2 py-1 text-xs" onClick={descargarPrincipalConAviso}>
             <Download size={14} /> Descargar
           </Button>
-          {puedeCambiarExcel && (
-            <>
-              {botonCambiarExcel('Reemplazar', RefreshCw)}
-              <Button variant="ghost" className="px-2 py-1 text-xs text-danger" disabled={cambiandoExcel} onClick={() => setQuitandoExcel(true)}>
-                <Trash2 size={14} /> Quitar
-              </Button>
-            </>
+          {puedeReemplazarExcel && botonCambiarExcel('Reemplazar', RefreshCw)}
+          {puedeQuitarExcel && (
+            <Button variant="ghost" className="px-2 py-1 text-xs text-danger" disabled={cambiandoExcel} onClick={() => setQuitandoExcel(true)}>
+              <Trash2 size={14} /> Quitar
+            </Button>
           )}
         </div>
         )}

@@ -280,6 +280,8 @@ export interface PermisosReclamos {
   puedeCambiarRetiro?: boolean;
   /** Por rol: «Adjuntar en reclamos abiertos». */
   puedeAdjuntarAbiertos?: boolean;
+  /** Historial del reclamo (administrador y supervisor GOF). */
+  puedeVerHistorial?: boolean;
   /** Supervisor GOF: devolver al creador en cualquier estado antes de contabilidad. */
   puedeDevolverSupervisor: boolean;
   /** Reclamos de devolución: marcar que el proveedor retiró el producto (Gof). */
@@ -289,4 +291,21 @@ export interface PermisosReclamos {
   /** Igual a puedeDecidir (compatibilidad). */
   esAdmin: boolean;
   username: string;
+}
+
+/** Un paso del historial del reclamo (GET /reclamos/:token/historial). */
+export interface EventoHistorial {
+  fecha: string;
+  tipo: 'creado' | 'devuelto' | 'reenviado' | 'decision' | 'productos' | 'excel' | 'contabilidad' | 'retiro' | 'adjunto' | 'otro' | 'error';
+  titulo: string;
+  usuario: string | null;
+  usuarioNombre: string | null;
+  detalle: string | null;
+  error: false | 'aviso' | 'falla';
+  /** ms desde el paso anterior (null en el primero). */
+  desdeAnterior: number | null;
+}
+export interface HistorialReclamo {
+  eventos: EventoHistorial[];
+  resumen: { total: number; errores: number; vecesDevuelto: number; esperaArregloMs: number; enArregloDesde: string | null; duracionMs: number };
 }

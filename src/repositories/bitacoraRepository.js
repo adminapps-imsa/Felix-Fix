@@ -86,3 +86,14 @@ export async function opciones() {
   for (const { Roles } of recordsets[1]) for (const r of Roles.split(',')) if (r) roles.add(r);
   return { usuarios: recordsets[0], roles: [...roles].sort((a, b) => a.localeCompare(b, 'es')) };
 }
+
+/** Lo de un reclamo en la bitácora (para su historial), del más viejo al más nuevo. */
+export async function delReclamo(token) {
+  const pool = await getPool();
+  const { recordset } = await pool.request().input('token', sql.VarChar(64), String(token).toUpperCase()).query(`
+    SELECT b.Fecha, b.Clase, b.Nivel, b.Accion, b.Mensaje, b.Usuario
+    FROM ${S}.Bitacora b
+    WHERE b.RecursoTipo = 'reclamo' AND UPPER(b.RecursoId) = @token
+    ORDER BY b.Fecha`);
+  return recordset;
+}

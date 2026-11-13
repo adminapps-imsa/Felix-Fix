@@ -26,7 +26,7 @@ import { useAuth } from '../../../auth/useAuth';
 const KPI_CARDS: Array<{ key: keyof KpisReclamos; status: FiltroStatusReclamo | ''; label: string; icon: React.ReactNode; color: string }> = [
   { key: 'total', status: '', label: 'Total', icon: <ClipboardList size={18} />, color: '' },
   { key: 'pendientes', status: 'pendiente', label: 'Pendientes', icon: <Clock size={18} />, color: 'text-warning' },
-  { key: 'devueltos', status: 'devuelto', label: 'Con comentario', icon: <Undo2 size={18} />, color: 'text-brand-600 dark:text-brand-400' },
+  { key: 'devueltos', status: 'devuelto', label: 'En espera de arreglo', icon: <Undo2 size={18} />, color: 'text-brand-600 dark:text-brand-400' },
   { key: 'notificados', status: 'notificado', label: 'Notificados', icon: <Bell size={18} />, color: 'text-brand-500 dark:text-brand-400' },
   { key: 'resueltos', status: 'resuelto', label: 'Confirmados', icon: <CheckCircle2 size={18} />, color: 'text-success' },
   { key: 'rechazados', status: 'rechazado', label: 'Rechazados', icon: <XCircle size={18} />, color: 'text-danger' },

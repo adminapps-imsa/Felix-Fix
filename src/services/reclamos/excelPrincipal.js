@@ -42,6 +42,18 @@ function exigirAdmin(usuario) {
   if (!tienePermiso(usuario, PERMISO_CONFIGURACION)) throw forbidden('Solo el administrador puede cambiar o quitar el Excel del reclamo.');
 }
 
+/**
+ * Reemplazar: el administrador antes de contabilidad; los roles con «Corregir
+ * reclamos devueltos» (Gof) solo mientras está en espera de arreglo (devuelto
+ * por la compradora o el supervisor GOF). Pedido del 2026-11-13: es la forma de
+ * arreglar los productos (ya no hay «Corregir productos»).
+ */
+function exigirPuedeReemplazar(usuario, r) {
+  if (tienePermiso(usuario, PERMISO_CONFIGURACION)) return;
+  if (!tienePermiso(usuario, 'reclamos.corregir')) throw forbidden('Tu rol no puede cambiar el Excel del reclamo.');
+  if (r.Status !== dominio.STATUS_DEVUELTO) throw forbidden('El Excel se cambia cuando el reclamo está en espera de arreglo.');
+}
+
 /** Lee y valida el Excel nuevo contra el reclamo. Devuelve el resultado del parser o lanza 400 con lo que no cuadra. */
 async function validarExcelNuevo(r, multerFile) {
   const tipo = await tipoRealDeArchivo(multerFile);
@@ -131,8 +143,8 @@ export async function reemplazarExcel(token, multerFile, usuario, { ajustar = fa
   if (!multerFile) throw badRequest('Selecciona el Excel del reclamo.');
   const creados = [multerFile.filename];
   try {
-    exigirAdmin(usuario);
     const r = await obtenerOFallar(token);
+    exigirPuedeReemplazar(usuario, r);
     exigir(dominio.motivoNoCambiarExcel(r));
     const { tipo, parsed, actuales, delExcel, iguales } = await validarExcelNuevo(r, multerFile);
 

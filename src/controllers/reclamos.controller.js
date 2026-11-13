@@ -105,6 +105,10 @@ export const adjunto = asyncHandler(async (req, res, next) => {
   await enviarArchivo(res, next, await service.adjunto(req.params.token, req.params.idx, req.query.f));
 });
 
+export const historial = asyncHandler(async (req, res) => {
+  res.json(await service.historial(req.params.token));
+});
+
 export const reemplazarExcel = asyncHandler(async (req, res) => {
   // `ajustar` (campo del formulario): el administrador confirmó ajustar los productos al Excel.
   const ajustar = ['1', 'true', 'si'].includes(String(req.body?.ajustar ?? '').toLowerCase());

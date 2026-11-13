@@ -352,9 +352,16 @@ const MOTIVO_DEVUELTO = {
 };
 
 /** La compradora devuelve un reclamo pendiente, siempre con un comentario que diga qué corregir. */
-export function motivoNoDevolver({ Status, CreatedBy }, comentario) {
-  if (Status === STATUS_DEVUELTO) return { mensaje: 'Este reclamo ya está devuelto; espera a que lo corrijan y lo reenvíen.', code: 'RECLAMO_DEVUELTO' };
-  if (Status !== 'pendiente') return { mensaje: 'Solo se puede devolver un reclamo pendiente de decisión.', code: 'NO_DEVOLVIBLE' };
+/**
+ * Compradora: devuelve el reclamo para que lo arreglen. Pendiente o ya
+ * decidido (aprobado o rechazado; pedido del 2026-11-13), mientras no se haya
+ * enviado a contabilidad. Al reenviarlo vuelve al estado que tenía (estadoAlReenviar).
+ */
+export const ESTADOS_DEVOLVIBLES_COMPRADORA = new Set(['pendiente', 'resuelto', 'rechazado']);
+export function motivoNoDevolver({ Status, CreatedBy, EnviadoContabilidadAt }, comentario) {
+  if (Status === STATUS_DEVUELTO) return { mensaje: 'Este reclamo ya está en espera de arreglo; espera a que lo corrijan y lo reenvíen.', code: 'RECLAMO_DEVUELTO' };
+  if (EnviadoContabilidadAt) return { mensaje: 'Este reclamo ya se envió a contabilidad; ya no se puede devolver.', code: 'NO_DEVOLVIBLE' };
+  if (!ESTADOS_DEVOLVIBLES_COMPRADORA.has(Status)) return { mensaje: 'Solo se puede devolver un reclamo pendiente o ya decidido.', code: 'NO_DEVOLVIBLE' };
   if (!CreatedBy) return { mensaje: 'Este reclamo no tiene quién lo creó: no hay a quién devolverlo.', code: 'NO_DEVOLVIBLE' };
   if (String(comentario ?? '').trim().length < MIN_COMENTARIO_DEVOLUCION) {
     return { mensaje: 'Escribe qué hay que corregir para que quien lo creó sepa qué arreglar.', code: 'FALTA_COMENTARIO' };

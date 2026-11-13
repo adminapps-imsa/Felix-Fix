@@ -19,6 +19,7 @@ import type { Reclamo, ReclamoLinea } from '../../../types/reclamo';
 import { RetiroBadge, StatusReclamoBadge } from '../components/Badges';
 import { ProductosSection } from '../components/ProductosSection';
 import { AdjuntosSection } from '../components/AdjuntosSection';
+import { HistorialReclamo } from '../components/HistorialReclamo';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { DevolucionReclamo, DevolverModal } from '../components/DevolucionReclamo';
 import { RetiroProveedor } from '../components/RetiroProveedor';
@@ -139,6 +140,9 @@ export function ReclamoDetallePage() {
   // Supervisor GOF: lo devuelve a quien lo creó en cualquier estado mientras no se haya enviado a contabilidad (el backend lo vuelve a revisar).
   const puedeDevolverSupervisor =
     Boolean(permisos?.puedeDevolverSupervisor) && Boolean(reclamo.CreatedBy) && !devuelto && !reclamo.EnviadoContabilidadAt;
+  // Compradora: también devuelve un reclamo que ya decidió (aprobado o rechazado), mientras no se haya enviado a contabilidad.
+  const puedeDevolverDecidido =
+    !puedeDevolverSupervisor && Boolean(permisos?.puedeDevolver) && Boolean(reclamo.CreatedBy) && cerrado && !reclamo.EnviadoContabilidadAt;
 
   return (
     <div className="flex flex-col gap-6">
@@ -164,15 +168,10 @@ export function ReclamoDetallePage() {
       {/* Debajo de la tarjeta principal: sobre la franja de color no se leería. */}
       {aviso && <div className="rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-sm">{aviso}</div>}
 
-      <DevolucionReclamo
-        reclamo={reclamo}
-        lineas={lineas}
-        puedeCorregir={puedeCorregir}
-        onActualizado={setReclamo}
-        onProductosCorregidos={productosCorregidos}
-      />
+      <DevolucionReclamo reclamo={reclamo} puedeCorregir={puedeCorregir} onActualizado={setReclamo} />
 
       {puedeDevolverSupervisor && <RevisionSupervisor reclamo={reclamo} onDevuelto={setReclamo} />}
+      {puedeDevolverDecidido && <DevolverDecidido reclamo={reclamo} onDevuelto={setReclamo} />}
 
       {/* Lo retira el proveedor: Gof marca «Entregado al proveedor»; hasta entonces no está terminado. */}
       {(llevaRetiro(reclamo) || puedeCambiarRetiro) && (
@@ -233,10 +232,16 @@ export function ReclamoDetallePage() {
       <AdjuntosSection
         reclamo={reclamo}
         esAdmin={(puedeEliminar || puedeCorregir) && !reclamo.EnviadoContabilidadAt}
-        puedeCambiarExcel={Boolean(permisos?.puedeCorregirCualquiera) && !reclamo.EnviadoContabilidadAt}
+        // Reemplazar el Excel: el administrador antes de contabilidad; quien corrige, solo en espera de arreglo.
+        puedeReemplazarExcel={!reclamo.EnviadoContabilidadAt && (Boolean(permisos?.puedeCorregirCualquiera) || puedeCorregir)}
+        puedeQuitarExcel={Boolean(permisos?.puedeCorregirCualquiera) && !reclamo.EnviadoContabilidadAt}
         puedeAdjuntar={puedeAdjuntar && (!bloqueado || Boolean(permisos?.puedeAdjuntarCerrado))}
-        onActualizado={setReclamo}
+        // Al ajustar el reclamo al Excel nuevo cambian los productos: se vuelven a pedir.
+        onActualizado={productosCorregidos}
       />
+
+      {/* Al final: historial del reclamo, solo administrador y supervisor GOF. Se vuelve a pedir cuando cambia el estado. */}
+      {permisos?.puedeVerHistorial && <HistorialReclamo key={`${reclamo.Token}-${reclamo.Status}`} token={reclamo.Token} />}
 
       {confirmarEliminar && (
         <ConfirmModal
@@ -403,6 +408,34 @@ function EnvioContabilidad({
 }
 
 /**
+ * Compradora: el reclamo ya está decidido, pero algo hay que arreglar
+ * (2026-11-13). Lo devuelve a quien lo creó con el motivo; al reenviarlo
+ * vuelve a como estaba (o a pendiente si quedaron productos por decidir).
+ */
+function DevolverDecidido({ reclamo, onDevuelto }: { reclamo: Reclamo; onDevuelto: (r: Reclamo) => void }) {
+  const [abierto, setAbierto] = useState(false);
+  const creador = reclamo.CreatedByNombre || reclamo.CreatedBy;
+  return (
+    <GlassCard className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex items-start gap-2 text-sm">
+        <Undo2 size={18} className="mt-0.5 shrink-0 text-warning" />
+        <div>
+          <h2 className="text-base font-bold">¿Hay que arreglar algo?</h2>
+          <p className="opacity-75">
+            Ya lo decidiste, pero si algo está mal (productos, Excel, datos o un adjunto) devuélvelo a {creador} con el motivo. Queda en espera de
+            arreglo y, cuando lo reenvíe, vuelve a «{STATUS_LABEL[reclamo.Status]}».
+          </p>
+        </div>
+      </div>
+      <Button variant="aviso" tamano="grande" className="shrink-0" onClick={() => setAbierto(true)} title="Devolver para arreglo, con el motivo">
+        <Undo2 size={18} /> Devolver para arreglo
+      </Button>
+      {abierto && <DevolverModal reclamo={reclamo} onClose={() => setAbierto(false)} onDevuelto={(r) => (onDevuelto(r), setAbierto(false))} />}
+    </GlassCard>
+  );
+}
+
+/**
  * Supervisor GOF: si algo está mal (adjunto, datos o productos), devuelve el
  * reclamo a quien lo creó con el motivo. Al reenviarlo vuelve al estado que
  * tenía, así que no se pierde el avance del flujo.
@@ -542,7 +575,7 @@ function rutaFlujo(r: Reclamo): PasoRuta[] {
         }
       : r.Status === 'devuelto'
         ? {
-            titulo: r.DevueltoPor === 'supervisor_gof' ? 'Devuelto por supervisor GOF' : 'Con comentario de compradora',
+            titulo: 'En espera de arreglo',
             estado: 'actual',
             nota: `Esperando la corrección de ${r.CreatedByNombre || r.CreatedBy}`,
           }
