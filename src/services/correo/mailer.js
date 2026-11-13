@@ -108,9 +108,33 @@ export function resumenDestinatarios(direcciones) {
   return { destinatarios: lista.length, dominios: [...new Set(lista.map((d) => String(d).split('@')[1]?.toLowerCase()).filter(Boolean))] };
 }
 
+/**
+ * Fuera de Prod (QA) ningún correo sale a sus destinatarios reales: todos van
+ * solo a CORREOS_PRUEBA, con el asunto marcado y una nota de a quién iba
+ * (pedido del 2026-11-13, al copiar los datos de Prod a QA: tienen personas
+ * reales). En Prod devuelve null y el correo sale igual que siempre.
+ */
+export const CORREOS_PRUEBA = ['maltamiranda@maduro.com.pa', 'elais@maduro.com.pa'];
+export function redirigirFueraDeProd({ para, cc = [], asunto, html, texto }, esquema) {
+  if (esquema === 'Prod') return null;
+  const originales = [...para, ...cc];
+  const nota = `Correo de prueba de ${esquema}: solo les llega a ${CORREOS_PRUEBA.join(' y ')}. En Prod iría a: ${originales.join(', ') || '—'}.`;
+  const aviso = `<div style="background:#fff4d6;border:1px solid #e0b84c;border-radius:8px;padding:8px 12px;margin:0 0 12px;font:13px Arial,sans-serif;color:#5c4400">${escaparHtml(nota)}</div>`;
+  return {
+    para: [...CORREOS_PRUEBA],
+    cc: [],
+    asunto: `[${esquema}] ${asunto ?? ''}`,
+    html: html ? (/<body[^>]*>/i.test(html) ? html.replace(/<body[^>]*>/i, (m) => `${m}${aviso}`) : `${aviso}${html}`) : html,
+    texto: texto ? `${nota}\n\n${texto}` : texto,
+  };
+}
+
 /** Envía y devuelve el messageId. Errores de SMTP o n8n -> 502 con un mensaje genérico (el detalle va al log). */
 export async function enviarCorreo({ para, cc = [], responderA, asunto, html, texto, adjuntos = [] }) {
   validarDestinatarios([...para, ...cc]);
+  // QA: a nadie real, solo a CORREOS_PRUEBA (ver redirigirFueraDeProd).
+  const prueba = redirigirFueraDeProd({ para, cc, asunto, html, texto }, env.db.schema);
+  if (prueba) ({ para, cc, asunto, html, texto } = prueba);
   // El logo del encabezado va incrustado (cid) en todos los correos del diseño común.
   if (html?.includes(`cid:${LOGO_CID}`)) adjuntos = [...adjuntos, logoAdjunto()];
   // Antes de tocar n8n o SMTP: con el interruptor de pruebas no sale nada.
