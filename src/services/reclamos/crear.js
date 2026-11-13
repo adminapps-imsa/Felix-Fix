@@ -11,6 +11,7 @@ import {
   parsearPlantilla,
   leerLibro,
   FormatoNoReconocidoError,
+  PlantillaIncompletaError,
   FechaInvalidaError,
   detectarTipoPorMotivo,
   cantidadCedi,
@@ -97,6 +98,7 @@ export async function previsualizarExcel(multerFile) {
     parsed = parsearPlantilla(multerFile.buffer);
   } catch (err) {
     if (err instanceof FormatoNoReconocidoError) throw badRequest(err.message, { code: 'FORMATO_NO_RECONOCIDO' });
+    if (err instanceof PlantillaIncompletaError) throw badRequest(err.message, { code: err.code, faltas: err.faltas });
     if (err instanceof FechaInvalidaError) throw badRequest(err.message, { code: 'FECHA_INVALIDA' });
     throw badRequest('No se pudo leer el Excel. Verifica que no esté dañado ni protegido con contraseña.');
   }
@@ -395,6 +397,8 @@ export async function crear(body, multerFile, usuario, pdfs = []) {
       } catch (err) {
         // Una fecha inválida es un error de validación del Excel, no "sin detalle".
         if (err instanceof FechaInvalidaError) throw badRequest(err.message, { code: 'FECHA_INVALIDA' });
+        // Falta algo de la plantilla: se dice qué, en vez de crear el reclamo sin productos.
+        if (err instanceof PlantillaIncompletaError) throw badRequest(err.message, { code: err.code, faltas: err.faltas });
         logger.warn({ err: err.message }, 'Reclamo creado sin líneas: no se pudo extraer el detalle del Excel');
       }
       if (parsed) {

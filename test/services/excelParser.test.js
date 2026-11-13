@@ -7,6 +7,7 @@ import {
   cantidadCedi,
   normalizar,
   FormatoNoReconocidoError,
+  PlantillaIncompletaError,
   FechaInvalidaError,
 } from '../../src/services/reclamos/excelParser.js';
 
@@ -109,8 +110,8 @@ test('plantilla Tienda: una columna de texto con «UNIDADES» no se toma como ca
       [7702, 'ver caja', 'D1', 'SOBRANTE'],
     ],
   ]);
-  const r = parsearPlantilla(buf);
-  assert.deepEqual(r.lineas.map((l) => l.cantidad), [null, null]);
+  // Sin una columna de cantidad numérica, el error dice que falta CANTIDAD (antes quedaban en blanco).
+  assert.throws(() => parsearPlantilla(buf), (e) => e instanceof PlantillaIncompletaError && /falta la columna CANTIDAD/.test(e.message));
 });
 
 test('plantilla Tienda: factura, fecha y departamento desde la tabla si no vienen arriba', () => {
@@ -169,7 +170,7 @@ test('plantilla CEDI nueva: encabezado con proveedor, división y factura antes 
 });
 
 test('busca la plantilla en las hojas siguientes si la primera no lo es', () => {
-  const buf = libro(['Instrucciones', [['Llena la otra hoja']]], ['Vacía', []], ['Datos', [['BARCODE', 'MOTIVO'], [7701, 'SOBRANTE']]]);
+  const buf = libro(['Instrucciones', [['Llena la otra hoja']]], ['Vacía', []], ['Datos', [['BARCODE', 'MOTIVO', 'DIFERENCIA'], [7701, 'SOBRANTE', 1]]]);
   assert.equal(parsearPlantilla(buf).hoja, 'Datos');
 });
 
@@ -187,11 +188,54 @@ test('fecha en texto que no existe: FechaInvalidaError (no se adivina mm/dd)', (
 test('un rango declarado gigante no congela la lectura', () => {
   // SheetJS no puede escribir una hoja así (se congela él mismo): se arma un
   // libro normal y se cambia el <dimension> del XML, como vendría un Excel real.
-  const zip = XLSX.CFB.read(libro(['Hoja1', [['BARCODE', 'MOTIVO'], [7701, 'SOBRANTE']]]), { type: 'buffer' });
+  const zip = XLSX.CFB.read(libro(['Hoja1', [['BARCODE', 'MOTIVO', 'DIFERENCIA'], [7701, 'SOBRANTE', 1]]]), { type: 'buffer' });
   const hoja = XLSX.CFB.find(zip, zip.FullPaths.find((p) => p.endsWith('sheet1.xml')));
   hoja.content = Buffer.from(Buffer.from(hoja.content).toString('utf8').replace(/<dimension ref="[^"]*"/, '<dimension ref="A1:XFD1048576"'));
   const inicio = Date.now();
   const r = parsearPlantilla(XLSX.CFB.write(zip, { type: 'buffer', fileType: 'zip' }));
   assert.equal(r.lineas.length, 1);
   assert.ok(Date.now() - inicio < 5000);
+});
+
+// ---- Qué falta en la plantilla (pedido del 2026-11-13) ----
+const falta = (buf, re) =>
+  assert.throws(() => parsearPlantilla(buf), (e) => e instanceof PlantillaIncompletaError && re.test(e.message), String(re));
+
+test('Tienda sin MOTIVO: dice la columna que falta, no «no coincide con la plantilla»', () => {
+  falta(libro(['RECLAMOS', [['CODIGO DE BARRA', 'CANTIDAD', 'DOCUMENTO'], [7701, 1, 'D1']]]), /hoja «RECLAMOS» falta la columna MOTIVO de la plantilla de Tienda/);
+  falta(libro(['RECLAMOS', [['CODIGO DE BARRA', 'CANTIDAD'], [7701, 1]]]), /faltan las columnas MOTIVO y DOCUMENTO/);
+});
+
+test('Tienda: fila con código y sin cantidad', () => {
+  falta(libro(['RECLAMOS', [['CODIGO DE BARRA', 'CANTIDAD', 'DOCUMENTO', 'MOTIVO'], [7701, 1, 'D1', 'FALTANTE'], [7702, '', 'D1', 'FALTANTE']]]), /falta la CANTIDAD en la fila 3 \(7702\)/);
+});
+
+test('CEDI clásica: fila sin forma de saber la cantidad', () => {
+  falta(libro(['Hoja1', [['BARCODE', 'MOTIVO'], [7701, 'FALTANTE']]]), /no se sabe la cantidad de la fila 2 \(7701\)/);
+});
+
+test('productos en dos hojas con la plantilla: no se elige una en silencio', () => {
+  const t = (c) => [['CODIGO DE BARRA', 'CANTIDAD', 'DOCUMENTO', 'MOTIVO'], [c, 1, 'D1', 'FALTANTE']];
+  falta(libro(['RECLAMOS', t(7701)], ['RECLAMOS 2', t(7702)]), /«RECLAMOS», «RECLAMOS 2».*una sola hoja/s);
+  // Una hoja de listas (como «Hoja1» de la plantilla real) no cuenta.
+  assert.equal(parsearPlantilla(libro(['RECLAMOS', t(7701)], ['Hoja1', [['Daño'], ['Faltante']]])).lineas.length, 1);
+});
+
+test('CEDI por hojas: lo que falta en Averia y Sobrante NO esperado', () => {
+  falta(libro(['Averia', [['Barcode', 'Averia', 'Foto'], [7701, 'manchado', '']]]), /falta la columna de unidades averiadas/);
+  falta(libro(['Averia', [['Barcode', 'Averia', 'Manchado', 'Foto'], [7701, 'manchado', '', '']]]), /faltan las unidades averiadas en la fila 2 \(7701\)/);
+  falta(libro(['Sobrante NO esperado', [['REFERENCIA', 'COLOR', 'TALLA', 'CANTIDAD'], ['TY1', 'RED', 'S', '']]]), /falta la CANTIDAD en la fila 2 \(TY1\)/);
+  falta(libro(['Sobrante NO esperado', [['CODIGO', 'REFERENCIA', 'COLOR', 'CANTIDAD'], ['', '', 'RED', 2]]]), /falta el CODIGO o la REFERENCIA en la fila 2/);
+});
+
+test('CEDI por hojas: Diferencia sin la columna DOCUMENTO lo dice así', async () => {
+  const { motivoFaltantesSinDocumento } = await import('../../src/services/reclamos/excelParser.js');
+  const r = parsearPlantilla(libro(['Diferencia', [['Barcode', 'Esperada', 'Recibida', 'Diferencia'], [7701, 2, 1, -1]]]));
+  assert.match(motivoFaltantesSinDocumento(r.faltantesSinDocumento).mensaje, /le falta la columna DOCUMENTO/);
+});
+
+test('CEDI por hojas: DOCUMENTO también en «Sobrante NO esperado»', () => {
+  const r = parsearPlantilla(libro(['Sobrante NO esperado', [['REFERENCIA', 'CANTIDAD', 'DOCUMENTO'], ['TY1', 2, 4904531999]]]));
+  assert.deepEqual(r.documentosSap, ['4904531999']);
+  assert.equal(r.lineas[0].cedi.documento, '4904531999');
 });
