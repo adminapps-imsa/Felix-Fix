@@ -74,8 +74,10 @@ export function subirAdjunto(token: string, archivo: File) {
 }
 
 /** Administrador: cambia el Excel del reclamo (el backend valida que traiga los mismos productos). */
-export function reemplazarExcel(token: string, archivo: File) {
+export function reemplazarExcel(token: string, archivo: File, ajustar = false) {
   const form = new FormData();
+  // `ajustar`: el administrador confirmó ajustar los productos del reclamo al Excel.
+  if (ajustar) form.set('ajustar', '1');
   form.set('excel', archivo);
   return api.putForm<Reclamo>(`${ruta(token)}/excel`, form);
 }

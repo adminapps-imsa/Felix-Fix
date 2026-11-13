@@ -249,7 +249,7 @@ async function validarPdfsSap(docs, pdfs, usuario) {
  * Si algún PDF no se pudo leer, no se valida (no se frena el reclamo por eso).
  * El material SAP solo se busca para los que no aparecen por descripción.
  */
-async function exigirFaltantesEn911(lineas, pdfsSap) {
+export async function exigirFaltantesEn911(lineas, pdfsSap) {
   const faltantes = lineas.filter((l) => l.tipo === 'faltante_real');
   if (!faltantes.length || !pdfsSap.filas.length || !pdfsSap.legibles) return;
   let res = faltantesContra911(faltantes, pdfsSap.filas);

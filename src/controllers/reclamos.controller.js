@@ -106,7 +106,9 @@ export const adjunto = asyncHandler(async (req, res, next) => {
 });
 
 export const reemplazarExcel = asyncHandler(async (req, res) => {
-  res.json(await service.reemplazarExcel(req.params.token, req.file, req.user));
+  // `ajustar` (campo del formulario): el administrador confirmó ajustar los productos al Excel.
+  const ajustar = ['1', 'true', 'si'].includes(String(req.body?.ajustar ?? '').toLowerCase());
+  res.json(await service.reemplazarExcel(req.params.token, req.file, req.user, { ajustar }));
 });
 
 export const quitarExcel = asyncHandler(async (req, res) => {

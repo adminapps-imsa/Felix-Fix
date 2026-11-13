@@ -539,6 +539,105 @@ export async function cambiarExcelPrincipal(token, { archivo, nombre, imagenes }
 }
 
 /**
+ * Ajusta el reclamo a un Excel nuevo (administrador): cambia el Excel y sus
+ * fotos, quita y agrega productos y pone el estado, todo en una transacción
+ * con el reclamo bloqueado. `plan(fila, lineasActuales)` devuelve
+ * { motivo } o { quitar: [LineaId], agregar: [...], estado: { status, decisionSistema } }.
+ * Devuelve null (no existe), { bloqueado } o { anterior, quitados, agregados, desde, hacia }.
+ */
+export async function ajustarAlExcel(token, { archivo, nombre, imagenes }, { verificar, plan }) {
+  const pool = await getPool();
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+  try {
+    const { recordset } = await new sql.Request(transaction)
+      .input('token', sql.UniqueIdentifier, token)
+      .query(
+        `SELECT ReclamoId, Tipo, Status, DecisionBy, ArchivoExcel, ArchivoExcelNombre, ImagenesExcel, EnviadoContabilidadAt
+         FROM ${S}.Reclamos WITH (UPDLOCK, HOLDLOCK) WHERE Token = @token`
+      );
+    const fila = recordset[0];
+    if (!fila) {
+      await transaction.rollback();
+      return null;
+    }
+    const motivo = verificar(fila);
+    if (motivo) {
+      await transaction.rollback();
+      return { bloqueado: motivo };
+    }
+    const { recordset: actuales } = await new sql.Request(transaction)
+      .input('token', sql.UniqueIdentifier, token)
+      .query(`SELECT LineaId, Posicion, CodigoBarra, Cantidad, Tipo, DecStatus, Referencia, Color, Talla FROM ${S}.ReclamoLineas WHERE ReclamoToken = @token`);
+    const p = plan(fila, actuales);
+    if (p.motivo) {
+      await transaction.rollback();
+      return { bloqueado: p.motivo };
+    }
+    for (const id of p.quitar) {
+      await new sql.Request(transaction)
+        .input('token', sql.UniqueIdentifier, token)
+        .input('id', sql.BigInt, id)
+        .query(`DELETE FROM ${S}.ReclamoLineas WHERE ReclamoToken = @token AND LineaId = @id`);
+    }
+    if (p.agregar.length) {
+      const { recordset: mx } = await new sql.Request(transaction)
+        .input('token', sql.UniqueIdentifier, token)
+        .query(`SELECT ISNULL(MAX(Posicion), 0) AS maximo FROM ${S}.ReclamoLineas WHERE ReclamoToken = @token`);
+      let pos = mx[0].maximo;
+      for (const l of p.agregar) {
+        pos += 1;
+        await new sql.Request(transaction)
+          .input('token', sql.UniqueIdentifier, token)
+          .input('pos', sql.Int, pos)
+          .input('codigo', sql.VarChar(50), l.codigoBarra || null)
+          .input('cantidad', sql.Decimal(18, 3), l.cantidad)
+          .input('tipo', sql.VarChar(40), l.tipo)
+          .input('descripcion', sql.NVarChar(300), l.descripcion || null)
+          .input('referencia', sql.NVarChar(100), l.referencia || null)
+          .input('color', sql.NVarChar(100), l.color || null)
+          .input('talla', sql.NVarChar(50), l.talla || null)
+          .input('dec', sql.VarChar(10), l.decStatus)
+          .input('com', sql.NVarChar(500), l.decComentario || null)
+          .input('by', sql.VarChar(150), l.decBy || null).query(`
+            INSERT INTO ${S}.ReclamoLineas (ReclamoToken, Posicion, CodigoBarra, Cantidad, Tipo, DescripcionExcel, Referencia, Color, Talla,
+                                            DecStatus, DecComentario, DecAt, DecBy, EsperaData)
+            VALUES (@token, @pos, @codigo, @cantidad, @tipo, @descripcion, @referencia, @color, @talla,
+                    @dec, @com, CASE WHEN @dec = 'aprobado' THEN SYSUTCDATETIME() ELSE NULL END, @by,
+                    CASE WHEN @codigo IS NULL AND @tipo = 'sobrante_no_esperado' THEN 1 ELSE 0 END)`);
+      }
+    }
+    // Excel y fotos: las del Excel anterior se cambian por las del nuevo.
+    const todas = parseJsonArray(fila.ImagenesExcel);
+    const anteriores = todas.filter((i) => i.origen === 'principal');
+    const { status, decisionSistema } = p.estado;
+    await new sql.Request(transaction)
+      .input('token', sql.UniqueIdentifier, token)
+      .input('archivo', sql.NVarChar(255), archivo)
+      .input('nombre', sql.NVarChar(255), nombre)
+      .input('imagenes', sql.NVarChar(sql.MAX), JSON.stringify([...todas.filter((i) => i.origen !== 'principal'), ...imagenes]))
+      .input('status', sql.VarChar(15), status)
+      .input('sistema', sql.Int, decisionSistema === null ? null : decisionSistema ? 1 : 0).query(`
+        UPDATE ${S}.Reclamos
+        SET ArchivoExcel = @archivo, ArchivoExcelNombre = @nombre, ImagenesExcel = @imagenes, Status = @status,
+            DecisionBy = CASE WHEN @sistema = 1 THEN 'sistema' WHEN @sistema = 0 THEN NULL ELSE DecisionBy END,
+            DecisionAt = CASE WHEN @sistema = 1 THEN SYSUTCDATETIME() WHEN @sistema = 0 THEN NULL ELSE DecisionAt END
+        WHERE Token = @token`);
+    await transaction.commit();
+    return {
+      anterior: { archivo: fila.ArchivoExcel, nombre: fila.ArchivoExcelNombre, imagenes: anteriores },
+      quitados: p.quitar.length,
+      agregados: p.agregar.length,
+      desde: fila.Status,
+      hacia: status,
+    };
+  } catch (err) {
+    await transaction.rollback().catch(() => {});
+    throw err;
+  }
+}
+
+/**
  * Borra líneas + encabezado en una transacción, con la fila bloqueada.
  * `motivoBloqueo({ Status, EnviadoContabilidadAt })` (regla del dominio)
  * devuelve por qué no se puede, o null. Devuelve { fila } (la fila borrada,

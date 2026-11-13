@@ -13,6 +13,8 @@ import type { AdjuntoExtra, Reclamo } from '../../../types/reclamo';
 import { ExcelPreviewModal, PdfPreviewModal } from './VisoresLazy';
 import type { FotoDeHoja } from './ExcelPreviewModal';
 import { ConfirmModal } from './ConfirmModal';
+import { STATUS_LABEL } from '../lib/tipos';
+import type { StatusReclamo } from '../../../types/reclamo';
 import { ImagenPreviewModal } from './ImagenPreviewModal';
 
 const ORIGEN_PRINCIPAL = 'principal';
@@ -24,6 +26,18 @@ function separarMotivo(mensaje: string) {
 }
 
 type Vista = { kind: 'principal' } | { kind: 'adjunto'; idx: number; adj: AdjuntoExtra };
+
+/** Lo que cambiaría al ajustar el reclamo al Excel nuevo (respuesta 409 EXCEL_PRODUCTOS_DISTINTOS). */
+interface AjusteExcel {
+  quitar: { producto: string; descripcion: string | null }[];
+  agregar: { producto: string; descripcion: string | null; decision: 'aprobado' | 'pendiente' }[];
+  iguales: number;
+  estadoActual: StatusReclamo;
+  estadoNuevo: StatusReclamo;
+}
+
+const textoEstado = (actual: StatusReclamo, nuevo: StatusReclamo) =>
+  nuevo === 'resuelto' && actual !== 'resuelto' ? 'Cerrado automáticamente' : STATUS_LABEL[nuevo] ?? nuevo;
 
 /**
  * Adjuntos unificados: Excel principal + adjuntos extra (Excel/PDF). Las
@@ -100,6 +114,8 @@ export function AdjuntosSection({
   const [cambiandoExcel, setCambiandoExcel] = useState(false);
   const [errorExcel, setErrorExcel] = useState<string | null>(null);
   const [quitandoExcel, setQuitandoExcel] = useState(false);
+  // Excel con otros productos: se muestra el ajuste y se pide confirmar.
+  const [ajuste, setAjuste] = useState<{ archivo: File; datos: AjusteExcel } | null>(null);
   const reemplazarExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     e.target.value = '';
@@ -110,7 +126,9 @@ export function AdjuntosSection({
       onActualizado(await apiReclamos.reemplazarExcel(token, f));
       avisos.ok(`Excel cambiado por «${f.name}»: trae los mismos productos del reclamo.`);
     } catch (err) {
-      setErrorExcel(err instanceof ApiError ? err.message : 'No se pudo cambiar el Excel.');
+      const p = err instanceof ApiError ? (err.payload as { code?: string; ajuste?: AjusteExcel } | undefined) : undefined;
+      if (p?.code === 'EXCEL_PRODUCTOS_DISTINTOS' && p.ajuste) setAjuste({ archivo: f, datos: p.ajuste });
+      else setErrorExcel(err instanceof ApiError ? err.message : 'No se pudo cambiar el Excel.');
     } finally {
       setCambiandoExcel(false);
     }
@@ -297,6 +315,64 @@ export function AdjuntosSection({
             onClose={() => setVista(null)}
           />
         ))}
+
+      {ajuste && (
+        <ConfirmModal
+          titulo="Ajustar el reclamo al Excel nuevo"
+          textoConfirmar="Ajustar el reclamo a este Excel"
+          onClose={() => setAjuste(null)}
+          onConfirm={async () => {
+            const r = await apiReclamos.reemplazarExcel(token, ajuste.archivo, true);
+            onActualizado(r);
+            avisos.ok(`Reclamo ajustado a «${ajuste.archivo.name}».`);
+            setAjuste(null);
+          }}
+        >
+          <div className="flex flex-col gap-3">
+            <p>
+              <strong>{ajuste.archivo.name}</strong> no trae los mismos productos que el reclamo. Si lo confirmas, el reclamo queda igual al Excel:
+            </p>
+            {ajuste.datos.agregar.length > 0 && (
+              <div className="rounded-xl border border-success/30 bg-success/10 px-3 py-2">
+                <span className="text-xs font-bold uppercase tracking-wide text-success">Se agregan ({ajuste.datos.agregar.length})</span>
+                <ul className="mt-1 flex flex-col gap-1">
+                  {ajuste.datos.agregar.map((l, i) => (
+                    <li key={i}>
+                      <span className="font-mono text-xs">{l.producto}</span>
+                      {l.descripcion && <span className="block text-xs opacity-70">{l.descripcion}</span>}
+                      <span className="block text-xs font-semibold">{l.decision === 'aprobado' ? 'Se aprueba solo' : 'Queda para que decida la compradora'}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {ajuste.datos.quitar.length > 0 && (
+              <div className="rounded-xl border border-danger/30 bg-danger/10 px-3 py-2">
+                <span className="text-xs font-bold uppercase tracking-wide text-danger">Se quitan ({ajuste.datos.quitar.length})</span>
+                <ul className="mt-1 flex flex-col gap-1">
+                  {ajuste.datos.quitar.map((l, i) => (
+                    <li key={i}>
+                      <span className="font-mono text-xs">{l.producto}</span>
+                      {l.descripcion && <span className="block text-xs opacity-70">{l.descripcion}</span>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <p className="text-xs opacity-75">
+              {ajuste.datos.iguales} producto(s) quedan igual, con su decisión. Estado del reclamo:{' '}
+              <strong>{STATUS_LABEL[ajuste.datos.estadoActual] ?? ajuste.datos.estadoActual}</strong>
+              {ajuste.datos.estadoNuevo !== ajuste.datos.estadoActual && (
+                <>
+                  {' '}
+                  → <strong>{textoEstado(ajuste.datos.estadoActual, ajuste.datos.estadoNuevo)}</strong>
+                </>
+              )}
+              . Los faltantes nuevos deben estar en los 911 del reclamo. No se manda ningún correo.
+            </p>
+          </div>
+        </ConfirmModal>
+      )}
 
       {quitandoExcel && (
         <ConfirmModal
