@@ -551,3 +551,58 @@ export function motivoNoCambiarExcel({ EnviadoContabilidadAt }) {
   if (EnviadoContabilidadAt) return bloqueado('Este reclamo ya se envió a contabilidad; su Excel ya no se puede cambiar.');
   return null;
 }
+
+/**
+ * Ajustar los productos del reclamo al Excel nuevo (administrador, botón
+ * «Reemplazar»; REC-000004, 2026-11-13). Se emparejan por código, cantidad y
+ * motivo (claveProductoReclamo):
+ *   - los que están en los dos se quedan como están (con su decisión);
+ *   - los que solo están en el reclamo se quitan;
+ *   - los que solo están en el Excel se agregan (aprobados solos si su motivo
+ *     es automático; si no, quedan para que decida la compradora).
+ *   actuales: filas de ReclamoLineas; delExcel: [{ codigo, cantidad, tipo, descripcion, referencia, color, talla }]
+ * Devuelve { quitar: [filas], agregar: [productos], iguales: n }.
+ */
+export function planAjusteExcel(actuales, delExcel, esAuto) {
+  const libres = new Map();
+  for (const l of actuales) {
+    const k = claveProductoReclamo({ codigo: l.CodigoBarra, cantidad: l.Cantidad, tipo: l.Tipo, referencia: l.Referencia, color: l.Color, talla: l.Talla });
+    if (!libres.has(k)) libres.set(k, []);
+    libres.get(k).push(l);
+  }
+  const agregar = [];
+  let iguales = 0;
+  for (const n of delExcel) {
+    const k = claveProductoReclamo(n);
+    const lista = libres.get(k);
+    if (lista?.length) {
+      lista.shift();
+      iguales += 1;
+    } else {
+      agregar.push({ ...n, decStatus: esAuto(n.tipo) ? 'aprobado' : 'pendiente' });
+    }
+  }
+  const quitar = [...libres.values()].flat();
+  return { quitar, agregar, iguales };
+}
+
+/** Texto corto de un producto para mostrar el ajuste: «2050039048670 × 2 (sobrante_real)». */
+export const textoProductoAjuste = (l) => claveProductoReclamo(l);
+
+/**
+ * Estado del reclamo después de ajustar sus productos:
+ *   - devuelto: sigue devuelto (quien lo creó lo reenvía);
+ *   - con algún producto por decidir: 'pendiente' (la compradora decide);
+ *   - todo aprobado y lo había cerrado el sistema (o estaba pendiente o
+ *     notificado): lo que tendría al crearlo (cierre automático o notificado);
+ *   - cerrado por una persona y nada por decidir: se queda como está.
+ * Devuelve { status, decisionSistema } (decisionSistema: true → DecisionBy 'sistema'; false → se limpia; null → no se toca).
+ */
+export function estadoTrasAjuste({ Status, DecisionBy, Tipo }, lineas, tiposSoloNotificacion) {
+  if (Status === STATUS_DEVUELTO) return { status: Status, decisionSistema: null };
+  if (lineas.some((l) => l.decStatus === 'pendiente')) return { status: 'pendiente', decisionSistema: false };
+  const delSistema = Status === 'pendiente' || Status === 'notificado' || DecisionBy === 'sistema';
+  if (!delSistema) return { status: Status, decisionSistema: null };
+  const status = estadoAlCrear({ soloNotificacion: esSoloNotificacion({ tipo: Tipo, lineas }, tiposSoloNotificacion), lineas });
+  return { status, decisionSistema: status === 'resuelto' ? true : false };
+}
