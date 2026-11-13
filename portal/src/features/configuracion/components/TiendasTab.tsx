@@ -10,6 +10,8 @@ import * as apiConfig from '../../../api/configuracion';
 import type { TiendaConfig, UsuarioTienda } from '../../../api/configuracion';
 import { nombreRol } from '../../../lib/roles';
 import { cn } from '../../../lib/cn';
+import { useAuth } from '../../../auth/useAuth';
+import { P } from '../../../auth/permisos';
 
 /** Qué grupo de la fila de arriba se está viendo. */
 type Filtro = 'todos' | 'sin' | 'propios' | number;
@@ -32,6 +34,7 @@ export function TiendasTab() {
   const [guardando, setGuardando] = useState<string | null>(null);
   const [recien, setRecien] = useState<string | null>(null);
   const avisos = useAvisos();
+  const esAdmin = useAuth().puede(P.config);
 
   useEffect(() => {
     setError(null);
@@ -151,7 +154,7 @@ export function TiendasTab() {
           <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 opacity-50" />
           <Input className="pl-9" placeholder="Buscar por nombre, usuario o correo" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
-        <span className="text-xs opacity-60">Solo personas con algún rol del portal.</span>
+        <span className="text-xs opacity-60">{esAdmin ? 'Solo personas con algún rol del portal.' : 'Solo personas con rol Gof.'}</span>
       </GlassCard>
 
       <GlassCard className="overflow-x-auto p-0">

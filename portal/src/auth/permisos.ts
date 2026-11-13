@@ -27,6 +27,7 @@ export const P = {
   recSoloCedi: 'reclamos.solo_cedi',
   recRetiro: 'reclamos.retiro_proveedor',
   config: 'configuracion.administrar',
+  usuariosTiendas: 'usuarios.tiendas',
 } as const;
 
 /** Quién ve cada módulo en el menú (igual que en las rutas del backend). */

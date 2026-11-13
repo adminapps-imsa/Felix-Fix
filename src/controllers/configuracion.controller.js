@@ -49,7 +49,7 @@ export const enviarBienvenida = asyncHandler(async (req, res) => {
 });
 
 export const tiendas = asyncHandler(async (req, res) => {
-  res.json(await service.tiendas());
+  res.json(await service.tiendas(req.user));
 });
 
 export const guardarTiendaUsuario = asyncHandler(async (req, res) => {

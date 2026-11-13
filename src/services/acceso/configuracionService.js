@@ -1,8 +1,8 @@
 import * as kc from './keycloakAdmin.js';
 import * as repo from '../../repositories/accesoRepository.js';
-import { PERMISOS, ASIGNABLES, CODIGOS, PERMISO_CONFIGURACION } from './permisos.js';
+import { PERMISOS, ASIGNABLES, CODIGOS, PERMISO_CONFIGURACION, ROL_GOF, tienePermiso } from './permisos.js';
 import { esSuperAdminRol, invalidarPermisos, permisosGuardados } from './acceso.js';
-import { badRequest, conflict, notFound, serviceUnavailable } from '../../utils/httpError.js';
+import { badRequest, conflict, forbidden, notFound, serviceUnavailable } from '../../utils/httpError.js';
 import { CORREOS } from '../correo/catalogoCorreos.js';
 import { plantillaBienvenida } from '../correo/plantillaBienvenida.js';
 import { enviarCorreo, correoConfigurado, resumenDestinatarios } from '../correo/mailer.js';
@@ -113,12 +113,30 @@ export const auditoria = () => repo.listarAuditoria(100);
  * Las tiendas con cuántas personas tiene cada una, y los usuarios del portal
  * (los que tienen algún rol) con su tienda y «Solo lo que crea».
  */
-export async function tiendas() {
-  const [lista, asignaciones, { usuarios: conRol }] = await Promise.all([
+/**
+ * El administrador ve y cambia a todos; quien solo tiene «usuarios.tiendas»
+ * (supervisor GOF), solo a los de rol Gof que no son administradores.
+ */
+const soloRolGof = (usuario) => !tienePermiso(usuario, PERMISO_CONFIGURACION);
+const esDeGof = (roles) => roles.includes(ROL_GOF) && !roles.some(esSuperAdminRol);
+
+/**
+ * Cuentas genéricas de GOF (la general y las de cada tienda) que ya no se usan (pedido del
+ * 2026-11-13): no salen en Configuración → Tiendas. Siguen en Keycloak.
+ * Se comparan usuario y nombre sin espacios, acentos ni mayúsculas.
+ */
+const OCULTOS_EN_TIENDAS = new Set(['gof', 'gofaltaplaza', 'gofcostaeste', 'gofmetromall', 'gofmultiplaza', 'gofviaespana']);
+const compacto = (s) => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/gi, '').toLowerCase();
+export const ocultoEnTiendas = (u) => OCULTOS_EN_TIENDAS.has(compacto(u.username)) || OCULTOS_EN_TIENDAS.has(compacto(u.nombre));
+
+export async function tiendas(usuario) {
+  const [lista, asignaciones, { usuarios: todos }] = await Promise.all([
     tiendasRepo.listarTiendasActivas(),
     tiendasRepo.listarUsuarioTiendas(),
     kc.usuariosConAlgunRol({ first: 0, max: 5000 }),
   ]);
+  const visibles = todos.filter((u) => !ocultoEnTiendas(u));
+  const conRol = soloRolGof(usuario) ? visibles.filter((u) => esDeGof(u.roles)) : visibles;
   const porUsuario = new Map(asignaciones.map((a) => [a.Username.trim().toLowerCase(), a]));
   const usuarios = conRol.map((u) => {
     const a = porUsuario.get(String(u.username).toLowerCase());
@@ -136,6 +154,9 @@ export async function guardarTiendaUsuario(userId, { tiendaId, soloPropios }, us
   const u = await kc.obtenerUsuario(userId).catch(() => {
     throw notFound('Ese usuario no existe en Keycloak.');
   });
+  if (soloRolGof(usuario) && !esDeGof([...((await kc.mapaRoles()).porUsuario.get(u.id) || [])])) {
+    throw forbidden('Solo puedes cambiar la tienda de las personas con rol Gof.');
+  }
   let tienda = null;
   if (tiendaId != null) {
     tienda = await tiendasRepo.obtenerTiendaPorId(tiendaId);

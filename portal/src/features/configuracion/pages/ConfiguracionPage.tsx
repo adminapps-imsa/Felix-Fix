@@ -1,5 +1,7 @@
 import { Activity, History, KeyRound, Mail, Settings, Store, Users } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
+import { useAuth } from '../../../auth/useAuth';
+import { P } from '../../../auth/permisos';
 import { BandaPagina, TituloPagina } from '../../../components/ui/TituloPagina';
 import { cn } from '../../../lib/cn';
 import { UsuariosTab } from '../components/UsuariosTab';
@@ -63,8 +65,11 @@ const SECCIONES: { id: Seccion; titulo: string; resumen: string; descripcion: st
 export function ConfiguracionPage() {
   // La sección queda en la dirección (?seccion=tiendas): se puede compartir y sobrevive a recargar.
   const [params, setParams] = useSearchParams();
+  const { puede } = useAuth();
+  // Sin ser administrador (supervisor GOF con usuarios.tiendas) solo ve Tiendas.
+  const secciones = puede(P.config) ? SECCIONES : SECCIONES.filter((s) => s.id === 'tiendas');
   const pedida = params.get('seccion');
-  const actual = SECCIONES.find((s) => s.id === pedida) ?? SECCIONES[0];
+  const actual = secciones.find((s) => s.id === pedida) ?? secciones[0];
   const elegir = (id: Seccion) =>
     setParams(
       (p) => {
@@ -82,8 +87,9 @@ export function ConfiguracionPage() {
       <BandaPagina>
         <TituloPagina icono={Settings} titulo="Configuración">
           <p className="bajada-pagina">
-            Quién entra al portal, dónde trabaja y qué puede hacer. Los usuarios y roles vienen de Keycloak; las tiendas y los permisos se definen
-            aquí.
+            {puede(P.config)
+              ? 'Quién entra al portal, dónde trabaja y qué puede hacer. Los usuarios y roles vienen de Keycloak; las tiendas y los permisos se definen aquí.'
+              : 'En qué tienda trabaja cada persona con rol Gof.'}
           </p>
         </TituloPagina>
       </BandaPagina>
@@ -92,7 +98,7 @@ export function ConfiguracionPage() {
         {/* Secciones: columna en escritorio, fila deslizable en celular. */}
         <nav aria-label="Secciones de configuración" className="min-w-0 lg:sticky lg:top-24 lg:self-start">
           <ul role="tablist" aria-orientation="vertical" className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 lg:mx-0 lg:flex-col lg:gap-1 lg:overflow-visible lg:px-0 lg:pb-0">
-            {SECCIONES.map((s) => {
+            {secciones.map((s) => {
               const activo = s.id === actual.id;
               const I = s.icono;
               return (

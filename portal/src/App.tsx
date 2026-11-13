@@ -44,7 +44,8 @@ export default function App() {
   const accesoProductos = puede(...ACCESO_PRODUCTOS);
   const accesoReclamos = puede(...ACCESO_RECLAMOS);
   const accesoContabilidad = puede(...ACCESO_CONTABILIDAD);
-  const accesoConfig = puede(P.config);
+  // Configuración: el administrador todo; el supervisor GOF (usuarios.tiendas) solo la sección Tiendas.
+  const accesoConfig = puede(P.config, P.usuariosTiendas);
   // Página de inicio: "Inicio" (lo que le toca hoy) para quien trabaja en algún módulo.
   const accesoInicio = accesoProductos || accesoReclamos || accesoContabilidad;
   const inicio = accesoInicio ? '/inicio' : accesoConfig ? '/configuracion' : '/sin-acceso';

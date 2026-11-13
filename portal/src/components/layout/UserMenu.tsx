@@ -25,7 +25,7 @@ export function UserMenu() {
   const menuId = useId();
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const esAdmin = puede(P.config);
+  const esAdmin = puede(P.config, P.usuariosTiendas);
 
   if (!user) return null;
 
@@ -69,7 +69,7 @@ export function UserMenu() {
                 className={cn(ITEM, pathname.startsWith('/configuracion') && 'text-brand-600 dark:text-brand-400')}
                 onClick={() => {
                   setAbierto(false);
-                  navigate('/configuracion');
+                  navigate(puede(P.config) ? '/configuracion' : '/configuracion?seccion=tiendas');
                 }}
               >
                 <Settings size={15} className="opacity-70" /> Configuración
