@@ -2,7 +2,7 @@ import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import * as controller from '../controllers/reclamos.controller.js';
 import { requireAuth, requirePermiso } from '../middleware/auth.js';
-import { uploadExcelReclamo, uploadExcelPreview, uploadPdfPreview, uploadAdjuntoReclamo, uploadFotoRetiro } from '../middleware/uploadReclamos.js';
+import { uploadExcelReclamo, uploadExcelPreview, uploadPdfPreview, uploadAdjuntoReclamo, uploadFotoRetiro, uploadExcelPrincipal } from '../middleware/uploadReclamos.js';
 import { validateBody, validateQuery } from '../validators/validate.js';
 import { borrarSiFalla } from '../middleware/upload.js';
 import { exigirAlcance } from '../services/acceso/alcanceCompradora.js';
@@ -46,6 +46,10 @@ router.post('/', crear, excelLimiter, uploadExcelReclamo, controller.crear);
 
 router.get('/:token', controller.detalle);
 router.get('/:token/excel', controller.excel);
+// Reemplazar o quitar el Excel del reclamo: solo el administrador (el permiso va ANTES de
+// multer, para no guardar el archivo de quien no puede). El servicio valida el Excel nuevo.
+router.put('/:token/excel', requirePermiso('configuracion.administrar'), excelLimiter, uploadExcelPrincipal, controller.reemplazarExcel);
+router.delete('/:token/excel', requirePermiso('configuracion.administrar'), controller.quitarExcel);
 router.patch('/:token/decision', decidir, validateBody(decisionReclamoSchema), controller.decidir);
 router.delete('/:token', eliminar, controller.eliminar);
 router.post('/:token/enviar-contabilidad', enviarContabilidad, envioLimiter, controller.enviarAContabilidad);

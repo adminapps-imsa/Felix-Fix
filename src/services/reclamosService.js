@@ -25,6 +25,7 @@ export {
 } from './reclamos/crear.js';
 export { decidir, lineas, decidirLinea, decidirLineas, deshacerLinea } from './reclamos/decisiones.js';
 export { verificarPuedeAdjuntar, agregarAdjunto, eliminarAdjunto } from './reclamos/adjuntos.js';
+export { reemplazarExcel, quitarExcel } from './reclamos/excelPrincipal.js';
 export { enviarAContabilidad } from './reclamos/envioContabilidad.js';
 export { eliminar } from './reclamos/eliminar.js';
 export { devolver, devolverSupervisor, corregirDatos, corregirLineas, reenviar } from './reclamos/devolucion.js';

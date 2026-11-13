@@ -73,6 +73,15 @@ export function subirAdjunto(token: string, archivo: File) {
   return api.postForm<Reclamo>(`${ruta(token)}/adjuntos`, form);
 }
 
+/** Administrador: cambia el Excel del reclamo (el backend valida que traiga los mismos productos). */
+export function reemplazarExcel(token: string, archivo: File) {
+  const form = new FormData();
+  form.set('excel', archivo);
+  return api.putForm<Reclamo>(`${ruta(token)}/excel`, form);
+}
+/** Administrador: quita el Excel del reclamo (y sus fotos). */
+export const quitarExcel = (token: string) => api.del<Reclamo>(`${ruta(token)}/excel`);
+
 export const eliminarAdjunto = (token: string, idx: number, filename?: string) =>
   api.del<Reclamo>(`${ruta(token)}/adjuntos/${idx}${conArchivo(filename)}`);
 export const eliminarReclamo = (token: string) => api.del<void>(ruta(token));
