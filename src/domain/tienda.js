@@ -15,9 +15,28 @@ export const normalizar = (s) =>
 
 const mismoUsuario = (a, b) => normalizar(a) !== '' && normalizar(a) === normalizar(b);
 
-/** true si la sucursal escrita en un reclamo es la tienda (por nombre o código). */
-export const esSucursalDe = (sucursal, tienda) =>
-  Boolean(tienda) && normalizar(sucursal) !== '' && [tienda.nombre, tienda.codigo].some((v) => normalizar(v) === normalizar(sucursal));
+/** Además, sin espacios: «ALTAPLAZA» = «Alta Plaza». */
+const compacto = (s) => normalizar(s).replace(/ /g, '');
+
+/**
+ * Otros nombres con que se escribe cada tienda (por código). TD28 se llamaba
+ * «Town Center» y la gente escribe «Costa del Este»: desde el 2026-11-13 su
+ * nombre es «Costa del Este» (migración 038) y «Town Center» queda como alias.
+ */
+export const ALIAS_TIENDAS = { TD28: ['Town Center', 'Town Center Costa del Este', 'Costa del Este Town Center'] };
+
+/** Todas las formas válidas de escribir la tienda (`tienda`: { nombre, codigo }), compactas. */
+export const formasDe = (tienda) => [tienda.nombre, tienda.codigo, ...(ALIAS_TIENDAS[String(tienda.codigo ?? '').toUpperCase()] ?? [])].map(compacto).filter(Boolean);
+
+/** true si la sucursal escrita en un reclamo es la tienda (por nombre, código o alias; sin acentos ni espacios). */
+export const esSucursalDe = (sucursal, tienda) => Boolean(tienda) && compacto(sucursal) !== '' && formasDe(tienda).includes(compacto(sucursal));
+
+/**
+ * La tienda del catálogo que corresponde a lo escrito («TD28», «costa del
+ * este», «ALTAPLAZA», «Town Center»), o null. `tiendas`: filas { Codigo, Nombre }.
+ */
+export const tiendaDeSucursal = (sucursal, tiendas) =>
+  (tiendas ?? []).find((t) => esSucursalDe(sucursal, { nombre: t.Nombre, codigo: t.Codigo })) ?? null;
 
 /** true si el usuario con ese alcance ve el reporte de Productos Dañados `r`. */
 export function veReporte(alcance, r) {

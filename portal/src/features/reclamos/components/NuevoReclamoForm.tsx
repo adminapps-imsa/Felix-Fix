@@ -19,6 +19,7 @@ import { TIPOS, TIPO_LABEL, TIPO_LABEL_CORTO, TIPOS_SOLO_NOTIFICACION, categoria
 import { TipoBadge } from './Badges';
 import { ExcelPreviewModal, PdfPreviewModal } from './VisoresLazy';
 import { ImagenPreviewModal } from './ImagenPreviewModal';
+import { SelectSucursal } from './SelectSucursal';
 
 interface Campos {
   origen: OrigenReclamo | '';
@@ -806,20 +807,7 @@ export function NuevoReclamoForm({
               ) : (
                 <>
                   <Field label="Sucursal" tag={tag('sucursal')} resaltar={autos.has('sucursal')}>
-                    <Input
-                      list="reclamos-tiendas"
-                      required
-                      value={campos.sucursal}
-                      onChange={(e) => set('sucursal', e.target.value)}
-                      maxLength={150}
-                      readOnly={Boolean(tiendaPropia)}
-                      title={tiendaPropia ? 'Tu usuario está en esta tienda' : undefined}
-                    />
-                    <datalist id="reclamos-tiendas">
-                      {tiendas.map((t) => (
-                        <option key={t.TiendaId} value={t.Nombre} />
-                      ))}
-                    </datalist>
+                    <SelectSucursal value={campos.sucursal} onChange={(v) => set('sucursal', v)} tiendas={tiendas} fija={Boolean(tiendaPropia)} />
                   </Field>
                   {campoFactura('N° embarque / factura')}
                   {campoProveedor}

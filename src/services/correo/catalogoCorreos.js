@@ -32,7 +32,7 @@ const reclamo = (extra = {}) => ({
   Status: 'pendiente',
   Proveedor: 'PROVEEDOR DE EJEMPLO S.A.',
   Origen: 'tienda',
-  Sucursal: 'Town Center',
+  Sucursal: 'Costa del Este',
   SapDocs: ['4900099001'],
   LineasTotal: 3,
   LineasAprobadas: 0,

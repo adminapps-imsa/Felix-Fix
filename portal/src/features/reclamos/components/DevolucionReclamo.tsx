@@ -5,6 +5,7 @@ import { Modal } from '../../../components/ui/Modal';
 import { Button } from '../../../components/ui/Button';
 import { useAvisos } from '../../../components/ui/Avisos';
 import { Field, Input, Textarea } from '../../../components/ui/Input';
+import { SelectSucursal } from './SelectSucursal';
 import { Combobox } from '../../../components/ui/Combobox';
 import { CampoFecha } from '../../../components/ui/CampoFecha';
 import { ApiError } from '../../../api/client';
@@ -346,12 +347,7 @@ function EditarDatosModal({ reclamo, onClose, onGuardado }: { reclamo: Reclamo; 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {cedi ? null : (
             <Field label="Sucursal">
-              <Input list="corregir-tiendas" required value={campos.sucursal} onChange={(e) => set('sucursal', e.target.value)} maxLength={150} />
-              <datalist id="corregir-tiendas">
-                {tiendas.map((t) => (
-                  <option key={t.TiendaId} value={t.Nombre} />
-                ))}
-              </datalist>
+              <SelectSucursal value={campos.sucursal} onChange={(v) => set('sucursal', v)} tiendas={tiendas} />
             </Field>
           )}
           <Field label={cedi ? 'Factura / Embarque' : 'N° embarque / factura'} opcional>

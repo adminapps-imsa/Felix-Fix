@@ -31,10 +31,10 @@ import { env } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
 import { normalizarDocSap, motivoDocsRepetidos, motivoDocsEnOtrosReclamos, documentosUsados, motivoFechaLlegadaInvalida, esDevolucion, estadoAlCrear, motivoFaltantesNoEn911 } from '../../domain/reclamo.js';
 import { diaPanama } from '../../domain/tablero.js';
-import { tipoReal, tipoRealDeArchivo, nombreUsuario, detalle, exigir, conDocumentos } from './comun.js';
+import { tipoReal, tipoRealDeArchivo, nombreUsuario, detalle, exigir, conDocumentos, sucursalOficial } from './comun.js';
 import { reclamoArchivoPath } from '../../config/almacenamiento.js';
 import { tiendaDe } from '../acceso/alcanceTienda.js';
-import { motivoTiendaReclamo } from '../../domain/tienda.js';
+import { motivoTiendaReclamo, tiendaDeSucursal } from '../../domain/tienda.js';
 import { copiarPdf, TIPO_RECLAMO } from '../evidenceStorage/copiasPdf.js';
 
 export const ORIGEN_PRINCIPAL = 'principal';
@@ -74,15 +74,14 @@ async function autocompletarProveedor(parsed) {
 }
 
 /**
- * La plantilla Tienda trae el código ("TD28"); el formulario usa el nombre del
- * catálogo de tiendas ("Town Center"). Si no está en el catálogo se deja tal cual.
+ * La plantilla Tienda trae el código ("TD28") o el nombre escrito a mano
+ * ("COSTA DEL ESTE"); el formulario usa el nombre del catálogo ("Costa del
+ * Este"). Si no está en el catálogo se deja tal cual (el formulario pide elegirla).
  */
 async function nombreSucursal(valor) {
   if (!valor) return null;
   try {
-    const v = valor.trim().toUpperCase();
-    const t = (await tiendasRepo.listarTiendasActivas()).find((x) => x.Codigo.toUpperCase() === v || x.Nombre.toUpperCase() === v);
-    return t ? t.Nombre : valor;
+    return tiendaDeSucursal(valor, await tiendasRepo.listarTiendasActivas())?.Nombre ?? valor;
   } catch {
     return valor;
   }
@@ -354,6 +353,8 @@ export async function crear(body, multerFile, usuario, pdfs = []) {
     if (data.origen === 'tienda' && tienePermiso(usuario, 'reclamos.solo_cedi')) {
       throw badRequest('Tu rol solo crea reclamos de CEDI, no de Tienda.', { code: 'SOLO_CEDI' });
     }
+    // Sucursal con el nombre del catálogo (o 400 si no es una tienda).
+    if (data.origen === 'tienda') data.sucursal = await sucursalOficial(data.sucursal);
     // Usuario en una tienda (Configuración → Tiendas): solo reclamos de su tienda.
     const ajena = motivoTiendaReclamo(await tiendaDe(usuario), data);
     if (ajena) throw badRequest(ajena, { code: 'TIENDA_AJENA' });
