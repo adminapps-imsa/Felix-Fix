@@ -3,7 +3,7 @@ import { RequirePermiso } from '../../../auth/RequirePermiso';
 import { P } from '../../../auth/permisos';
 import type React from 'react';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
-import { Bell, CheckCircle2, ChevronRight, ClipboardList, Clock, FilterX, Plus, Search, SearchX, Store, Undo2, Warehouse, X, XCircle } from 'lucide-react';
+import { Bell, CheckCircle2, ChevronRight, ClipboardList, Clock, FilterX, Plus, Search, SearchX, Store, Undo2, Warehouse, X, XCircle, Landmark } from 'lucide-react';
 import { BandaPagina, TituloPagina } from '../../../components/ui/TituloPagina';
 import { Button } from '../../../components/ui/Button';
 import { GlassCard } from '../../../components/ui/GlassCard';
@@ -16,20 +16,22 @@ import { cn } from '../../../lib/cn';
 import { formatFecha } from '../../../lib/formatters';
 import * as apiReclamos from '../../../api/reclamos';
 import type { PaginationMeta, Tienda } from '../../../types/productoDanado';
-import type { KpisReclamos, Reclamo, StatusReclamo } from '../../../types/reclamo';
+import type { FiltroStatusReclamo, KpisReclamos, Reclamo } from '../../../types/reclamo';
 import { useTiendas } from '../../productos-danados/hooks/useTiendas';
 import { RetiroBadge, StatusReclamoBadge } from '../components/Badges';
 import { NuevoReclamoForm } from '../components/NuevoReclamoForm';
 import { STATUS_LABEL, TIPO_LABEL_CORTO, formatFechaCorta } from '../lib/tipos';
 import { useAuth } from '../../../auth/useAuth';
 
-const KPI_CARDS: Array<{ key: keyof KpisReclamos; status: StatusReclamo | ''; label: string; icon: React.ReactNode; color: string }> = [
+const KPI_CARDS: Array<{ key: keyof KpisReclamos; status: FiltroStatusReclamo | ''; label: string; icon: React.ReactNode; color: string }> = [
   { key: 'total', status: '', label: 'Total', icon: <ClipboardList size={18} />, color: '' },
   { key: 'pendientes', status: 'pendiente', label: 'Pendientes', icon: <Clock size={18} />, color: 'text-warning' },
   { key: 'devueltos', status: 'devuelto', label: 'Con comentario', icon: <Undo2 size={18} />, color: 'text-brand-600 dark:text-brand-400' },
   { key: 'notificados', status: 'notificado', label: 'Notificados', icon: <Bell size={18} />, color: 'text-brand-500 dark:text-brand-400' },
   { key: 'resueltos', status: 'resuelto', label: 'Confirmados', icon: <CheckCircle2 size={18} />, color: 'text-success' },
   { key: 'rechazados', status: 'rechazado', label: 'Rechazados', icon: <XCircle size={18} />, color: 'text-danger' },
+  // Los enviados ya no cuentan como confirmados ni rechazados.
+  { key: 'enviadosContabilidad', status: 'enviado', label: 'En contabilidad', icon: <Landmark size={18} />, color: 'text-sky-600 dark:text-sky-400' },
 ];
 
 /** Texto comparable: sin acentos, mayúsculas ni espacios de sobra (igual que src/domain/tienda.js). */
@@ -70,7 +72,9 @@ export function ReclamosPage() {
   // Desde Inicio se llega con el filtro en el enlace (?estado=pendiente, ?porEnviar=1, ?nuevo=1).
   const [params] = useSearchParams();
   const estadoInicial = params.get('estado');
-  const [status, setStatus] = useState<StatusReclamo | ''>(estadoInicial && Object.hasOwn(STATUS_LABEL, estadoInicial) ? (estadoInicial as StatusReclamo) : '');
+  const [status, setStatus] = useState<FiltroStatusReclamo | ''>(
+    estadoInicial && (Object.hasOwn(STATUS_LABEL, estadoInicial) || estadoInicial === 'enviado') ? (estadoInicial as FiltroStatusReclamo) : ''
+  );
   const [porEnviar, setPorEnviar] = useState(params.get('porEnviar') === '1');
   const [q, setQ] = useState('');
   const [qDebounced, setQDebounced] = useState('');
@@ -145,7 +149,7 @@ export function ReclamosPage() {
 
       {aviso && <div className="rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-sm">{aviso}</div>}
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 xl:grid-cols-7">
         {KPI_CARDS.map((c) => (
           <button
             key={c.key}
@@ -286,7 +290,7 @@ export function ReclamosPage() {
                 <span className="flex items-center justify-between gap-3">
                   <span className="numero-caso whitespace-nowrap text-lg leading-tight">{r.Numero}</span>
                   <span className="flex flex-wrap justify-end gap-1.5">
-                    <StatusReclamoBadge status={r.Status} devueltoPor={r.DevueltoPor} decisionBy={r.DecisionBy} />
+                    <StatusReclamoBadge status={r.Status} devueltoPor={r.DevueltoPor} decisionBy={r.DecisionBy} enviadoContabilidad={Boolean(r.EnviadoContabilidadAt)} />
                     <RetiroBadge reclamo={r} />
                   </span>
                 </span>
@@ -367,7 +371,7 @@ export function ReclamosPage() {
                     </td>
                     <td className="px-3 py-3.5">
                       <span className="flex flex-wrap gap-1.5">
-                        <StatusReclamoBadge status={r.Status} devueltoPor={r.DevueltoPor} decisionBy={r.DecisionBy} />
+                        <StatusReclamoBadge status={r.Status} devueltoPor={r.DevueltoPor} decisionBy={r.DecisionBy} enviadoContabilidad={Boolean(r.EnviadoContabilidadAt)} />
                         <RetiroBadge reclamo={r} />
                       </span>
                     </td>
