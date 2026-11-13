@@ -6,8 +6,9 @@
 // Copia los archivos (Excel, PDF, fotos, adjuntos) a uploads/QA.
 // No toca roles, permisos, compradoras ni la bitácora.
 //
-// Protecciones: solo corre con DB_SCHEMA=QA y con el correo apagado
-// (MAIL_DESACTIVADO=true): los datos de Prod tienen personas reales.
+// Protecciones: solo corre con DB_SCHEMA=QA. Los datos de Prod tienen
+// personas reales: fuera de Prod todo correo va solo a CORREOS_PRUEBA
+// (services/correo/mailer.js), así que ninguna prueba les escribe.
 //
 // Uso (como felixops, que lee el .env de QA):
 //   ssh -i ~/.ssh/felix-desplegar root@172.16.99.160 exportar > /tmp/felix-prod.tgz
@@ -18,6 +19,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { env } from '../../src/config/env.js';
 import { getPool, closePool, sql, S } from '../../src/config/db.js';
+import { redirigirFueraDeProd, CORREOS_PRUEBA } from '../../src/services/correo/mailer.js';
 
 const TABLAS = [
   'Tiendas',
@@ -50,9 +52,8 @@ function salir(mensaje) {
 const archivo = process.argv[2];
 if (!archivo || !fs.existsSync(archivo)) salir('Indica el archivo exportado de Prod (.tgz). Ver el comentario de este script.');
 if (env.db.schema !== 'QA') salir(`Este script solo carga en QA (el .env dice DB_SCHEMA=${env.db.schema}).`);
-if (!env.correo.desactivado) {
-  salir('El correo de QA está encendido. Pon MAIL_DESACTIVADO=true en el .env de QA y reinicia la API antes de cargar datos de Prod (tienen personas reales).');
-}
+if (!redirigirFueraDeProd({ para: ['x@x.com'], asunto: '' }, env.db.schema)) salir('El correo de este ambiente no está redirigido a los de prueba.');
+console.log(`Correo de QA: ${env.correo.desactivado ? 'apagado' : `solo a ${CORREOS_PRUEBA.join(' y ')}`}.`);
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'felix-prod-'));
 try {

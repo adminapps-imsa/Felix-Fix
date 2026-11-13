@@ -2,6 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 // Antes de cargar la configuración: correo encendido pero con un n8n falso (fetch simulado).
+// El envío normal es el de Prod (fuera de Prod todo va solo a los correos de prueba, ver correoQa.test.js).
+process.env.DB_SCHEMA = 'Prod';
 process.env.MAIL_DESACTIVADO = 'false';
 process.env.MAIL_N8N_WEBHOOK_URL = 'http://127.0.0.1:9/n8n-falso';
 process.env.MAIL_SOLO_DOMINIOS = '';
