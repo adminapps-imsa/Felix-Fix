@@ -1,6 +1,7 @@
 import { createApp } from './app.js';
 import { env } from './config/env.js';
 import { closePool } from './config/db.js';
+import { vaciarBitacora } from './services/bitacora/registro.js';
 import { logger } from './utils/logger.js';
 import { prepararEvidencia } from './services/evidenceStorage/index.js';
 import { mapaRoles } from './services/acceso/keycloakAdmin.js';
@@ -30,6 +31,7 @@ process.on('uncaughtException', (err) => {
 function apagar(signal) {
   logger.info(`${signal} recibido: cerrando el servidor`);
   server.close(async () => {
+    await vaciarBitacora().catch(() => {});
     await closePool();
     process.exit(0);
   });

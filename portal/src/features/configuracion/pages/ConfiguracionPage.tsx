@@ -1,4 +1,4 @@
-import { History, KeyRound, Mail, Settings, Store, Users } from 'lucide-react';
+import { Activity, History, KeyRound, Mail, Settings, Store, Users } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { BandaPagina, TituloPagina } from '../../../components/ui/TituloPagina';
 import { cn } from '../../../lib/cn';
@@ -7,8 +7,9 @@ import { TiendasTab } from '../components/TiendasTab';
 import { RolesTab } from '../components/RolesTab';
 import { HistorialTab } from '../components/HistorialTab';
 import { CorreosTab } from '../components/CorreosTab';
+import { BitacoraTab } from '../components/BitacoraTab';
 
-type Seccion = 'usuarios' | 'tiendas' | 'roles' | 'correos' | 'historial';
+type Seccion = 'usuarios' | 'tiendas' | 'roles' | 'correos' | 'historial' | 'bitacora';
 
 /**
  * Secciones en el orden en que se configura a alguien: quién entra (roles),
@@ -49,6 +50,13 @@ const SECCIONES: { id: Seccion; titulo: string; resumen: string; descripcion: st
     resumen: 'Quién cambió qué',
     descripcion: 'Los últimos 100 cambios de accesos: roles, permisos, tiendas y bienvenidas.',
     icono: History,
+  },
+  {
+    id: 'bitacora',
+    titulo: 'Bitácora',
+    resumen: 'Qué pasa en el portal',
+    descripcion: 'Todo lo que hace cada persona y todo lo que sale mal, por fecha, persona, rol y módulo. Se guarda 180 días.',
+    icono: Activity,
   },
 ];
 
@@ -140,6 +148,7 @@ export function ConfiguracionPage() {
             {actual.id === 'roles' && <RolesTab />}
             {actual.id === 'correos' && <CorreosTab />}
             {actual.id === 'historial' && <HistorialTab />}
+            {actual.id === 'bitacora' && <BitacoraTab />}
           </div>
         </section>
       </div>

@@ -9,6 +9,8 @@ import { logger } from '../utils/logger.js';
 export const keycloakCode = asyncHandler(async (req, res) => {
   const { code, redirectUri, codeVerifier } = req.body;
   const { token, user, idToken } = await iniciarSesionConCodigo(code, redirectUri, codeVerifier);
+  // Bitácora: el inicio de sesión todavía no tiene req.user.
+  res.locals.bitacoraUsuario = { username: user.username, name: user.name, roles: user.roles };
   res.json({
     token,
     idToken,

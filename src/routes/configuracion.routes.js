@@ -3,7 +3,7 @@ import rateLimit from 'express-rate-limit';
 import * as controller from '../controllers/configuracion.controller.js';
 import { requireAuth, requirePermiso } from '../middleware/auth.js';
 import { validateBody, validateQuery } from '../validators/validate.js';
-import { usuariosQuerySchema, permisosRolSchema, asignarRolSchema, bienvenidaSchema, tiendaUsuarioSchema } from '../validators/configuracion.schema.js';
+import { usuariosQuerySchema, permisosRolSchema, asignarRolSchema, bienvenidaSchema, tiendaUsuarioSchema, bitacoraQuerySchema } from '../validators/configuracion.schema.js';
 
 const router = Router();
 
@@ -15,6 +15,8 @@ router.get('/usuarios', validateQuery(usuariosQuerySchema), controller.usuarios)
 router.post('/usuarios/:id/roles', validateBody(asignarRolSchema), controller.asignarRol);
 router.delete('/usuarios/:id/roles/:rol', controller.quitarRol);
 router.get('/auditoria', controller.auditoria);
+// Bitácora: lo que se hace en el portal y lo que sale mal (src/services/bitacora/).
+router.get('/bitacora', validateQuery(bitacoraQuerySchema), controller.bitacora);
 router.get('/tiendas', controller.tiendas);
 router.put('/tiendas/usuarios/:id', validateBody(tiendaUsuarioSchema), controller.guardarTiendaUsuario);
 
