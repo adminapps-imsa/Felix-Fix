@@ -59,9 +59,27 @@ export async function vistaValida(rol) {
 export async function permisosDeRoles(roles) {
   if ([...roles].some(esSuperAdminRol)) return new Set(CODIGOS);
   const guardados = await permisosGuardados();
+  return unirPermisos([...roles].map((rol) => guardados.get(rol) || []));
+}
+
+/**
+ * Une los permisos de varios roles: se suman. Excepción (pedido del
+ * 2026-11-16, Ana: Gof + Torre de Control): «Solo reclamos de Tienda» y
+ * «Solo reclamos de CEDI» aplican solo si TODOS los roles del usuario que
+ * crean reclamos la tienen; así quien es Gof («Solo Tienda») y Torre de
+ * Control («Solo CEDI») crea de los dos. El resto de las limitaciones
+ * («Solo los reportes que creó») se suman como antes.
+ * Solo los asignables: Configuración queda para el super administrador.
+ * @param porRol  [Set|Array de permisos de cada rol]
+ */
+const LIMITES_AL_CREAR = ['reclamos.solo_tienda', 'reclamos.solo_cedi'];
+
+export function unirPermisos(porRol) {
+  const listas = porRol.map((l) => [...(l || [])].filter((p) => ASIGNABLES.has(p)));
   const permisos = new Set();
-  // Solo los asignables: Configuración queda para el super administrador.
-  for (const rol of roles) for (const p of guardados.get(rol) || []) if (ASIGNABLES.has(p)) permisos.add(p);
+  for (const l of listas) for (const p of l) if (!LIMITES_AL_CREAR.includes(p)) permisos.add(p);
+  const crean = listas.filter((l) => l.includes('reclamos.crear'));
+  for (const r of LIMITES_AL_CREAR) if (crean.length && crean.every((l) => l.includes(r))) permisos.add(r);
   return permisos;
 }
 
