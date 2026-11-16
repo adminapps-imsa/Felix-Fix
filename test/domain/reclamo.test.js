@@ -329,3 +329,17 @@ test('estadoAlCrear: se cierra solo si todos los productos se aprobaron solos', 
   assert.equal(estadoAlCrear({ soloNotificacion: false, lineas: [] }), 'pendiente');
   assert.equal(estadoAlCrear({ soloNotificacion: true, lineas: [auto] }), 'notificado');
 });
+
+test('REC-000050: notificado que al reenviarlo ya no es solo de notificación se recalcula', async () => {
+  const { estadoAlReenviar } = await import('../../src/domain/reclamo.js');
+  const tipos = new Set(['danos_textil', 'danos_perfumeria_gof']);
+  const base = { StatusAntesDevolucion: 'notificado', LineasPendientes: 0, Tipo: 'danos_textil' };
+  // Devolución aprobada sola → cierre automático (va a contabilidad).
+  assert.equal(estadoAlReenviar({ ...base, Lineas: [{ Tipo: 'devolucion', DecStatus: 'aprobado' }] }, tipos), 'resuelto');
+  // Un producto por decidir → pendiente.
+  assert.equal(estadoAlReenviar({ ...base, LineasPendientes: 1, Lineas: [{ Tipo: 'sobrante_real', DecStatus: 'pendiente' }] }, tipos), 'pendiente');
+  // Sigue siendo solo de notificación → notificado.
+  assert.equal(estadoAlReenviar({ ...base, Lineas: [{ Tipo: 'danos_textil', DecStatus: 'aprobado' }] }, tipos), 'notificado');
+  // Otros estados de antes no cambian.
+  assert.equal(estadoAlReenviar({ StatusAntesDevolucion: 'pendiente', LineasPendientes: 0, Tipo: 'devolucion', Lineas: [{ Tipo: 'devolucion', DecStatus: 'aprobado' }] }, tipos), 'pendiente');
+});

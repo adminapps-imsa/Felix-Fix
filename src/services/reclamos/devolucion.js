@@ -10,7 +10,7 @@ import { parseJsonArray } from '../../repositories/reclamosRepository.js';
 import * as dominio from '../../domain/reclamo.js';
 import { diaPanama } from '../../domain/tablero.js';
 import { corregirDatosSchema, corregirLineasSchema } from '../../validators/reclamos.schema.js';
-import { esAutoAprobado, COMENTARIO_AUTO_APROBADO, USUARIO_SISTEMA } from './tipos.js';
+import { esAutoAprobado, COMENTARIO_AUTO_APROBADO, USUARIO_SISTEMA, TIPOS_SOLO_NOTIFICACION } from './tipos.js';
 import { tienePermiso, PERMISO_CONFIGURACION } from '../acceso/permisos.js';
 import { leerNotaPdf } from '../contabilidad/leerNotaPdf.js';
 import { reclamoArchivoPath } from '../../config/almacenamiento.js';
@@ -179,7 +179,7 @@ export async function reenviar(token, { comentario }, usuario) {
   const res = await repo.reenviar(token, {
       comentario: texto,
       usuario: nombreUsuario(usuario),
-      hacia: dominio.estadoAlReenviar,
+      hacia: (fila) => dominio.estadoAlReenviar(fila, TIPOS_SOLO_NOTIFICACION),
       verificar: (fila) =>
         dominio.motivoNoReenviar(fila, quien(usuario), {
           docs: docsDe(fila),
