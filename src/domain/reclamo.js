@@ -398,9 +398,17 @@ export function motivoNoDevolverSupervisor({ Status, CreatedBy, EnviadoContabili
  * quedaron productos por decidir (quien lo creó los cambió), vuelve a
  * pendiente para que la compradora los decida.
  */
-export function estadoAlReenviar({ StatusAntesDevolucion, LineasPendientes }) {
+export function estadoAlReenviar({ StatusAntesDevolucion, LineasPendientes, Tipo, Lineas }, tiposSoloNotificacion = null) {
   const antes = StatusAntesDevolucion && StatusAntesDevolucion !== STATUS_DEVUELTO ? StatusAntesDevolucion : 'pendiente';
   if (estaCerrado(antes) && Number(LineasPendientes) > 0) return 'pendiente';
+  // Era «notificado» y al corregirlo (p. ej. «Reemplazar» el Excel) ya no es
+  // solo de notificación: toma el estado que tendría al crearlo (REC-000050,
+  // 2026-11-16: daño textil → devolución aprobada sola; se quedaba notificado
+  // y sin envío a contabilidad).
+  if (antes === 'notificado' && Array.isArray(Lineas) && Lineas.length && tiposSoloNotificacion) {
+    const lineas = Lineas.map((l) => ({ tipo: l.tipo ?? l.Tipo, decStatus: l.decStatus ?? l.DecStatus }));
+    return estadoAlCrear({ soloNotificacion: esSoloNotificacion({ tipo: Tipo, lineas }, tiposSoloNotificacion), lineas });
+  }
   return antes;
 }
 
