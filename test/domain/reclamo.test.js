@@ -259,6 +259,18 @@ test('cambiar si lo retira el proveedor: depende del rol, no en devolución ni y
   assert.equal(motivoNoCambiarRetiro({ ...r, RetiroProveedorFecha: '2026-11-01' }, { puede: true }).code, 'RETIRO_REGISTRADO');
 });
 
+test('solo faltante: no hay entrega al proveedor ni se puede pedir', async () => {
+  const { llevaRetiro, esperaRetiro, motivoNoCambiarRetiro, motivoNoRegistrarRetiro } = await import('../../src/domain/reclamo.js');
+  const r = { Tipo: 'faltante_real', LineasDevolucion: 0, LineasNoFaltante: 0, RetiroProveedor: true, RetiroProveedorFecha: null };
+  assert.equal(llevaRetiro(r), false);
+  assert.equal(esperaRetiro(r), false);
+  assert.equal(motivoNoCambiarRetiro(r, { puede: true }).code, 'SOLO_FALTANTE');
+  assert.equal(motivoNoRegistrarRetiro(r, { fecha: '2026-11-18', tieneFoto: true, hoy: '2026-11-18' }).code, 'SIN_RETIRO');
+  // Con otro motivo además del faltante sí puede llevarlo.
+  assert.equal(llevaRetiro({ ...r, LineasNoFaltante: 1 }), true);
+  assert.equal(motivoNoCambiarRetiro({ ...r, LineasNoFaltante: 2 }, { puede: true }), null);
+});
+
 test('excel: el motivo «devolución» se reconoce como tipo devolucion', async () => {
   const { detectarTipoPorMotivo } = await import('../../src/services/reclamos/excelParser.js');
   for (const t of ['DEVOLUCIÓN', 'Devolucion al proveedor', 'devoluciones']) assert.equal(detectarTipoPorMotivo(t), 'devolucion');
@@ -342,4 +354,41 @@ test('REC-000050: notificado que al reenviarlo ya no es solo de notificación se
   assert.equal(estadoAlReenviar({ ...base, Lineas: [{ Tipo: 'danos_textil', DecStatus: 'aprobado' }] }, tipos), 'notificado');
   // Otros estados de antes no cambian.
   assert.equal(estadoAlReenviar({ StatusAntesDevolucion: 'pendiente', LineasPendientes: 0, Tipo: 'devolucion', Lineas: [{ Tipo: 'devolucion', DecStatus: 'aprobado' }] }, tipos), 'pendiente');
+});
+
+test('REC-000058: daño con documento SAP no es solo de notificación (va a contabilidad)', async () => {
+  const { esSoloNotificacion, tieneDocumentoSap, estadoTrasAjuste, estadoAlReenviar } = await import('../../src/domain/reclamo.js');
+  const tipos = new Set(['danos_textil', 'danos_perfumeria_gof']);
+  const lineas = [{ tipo: 'danos_textil', decStatus: 'aprobado' }];
+  assert.equal(esSoloNotificacion({ tipo: 'danos_textil', lineas }, tipos), true);
+  assert.equal(esSoloNotificacion({ tipo: 'danos_textil', lineas, conDocumentoSap: true }, tipos), false);
+  assert.equal(tieneDocumentoSap({ SapDoc1: '4904538271' }), true);
+  assert.equal(tieneDocumentoSap({ SapDoc1: null, SapDocsExtra: '["4904538271"]' }), true);
+  assert.equal(tieneDocumentoSap({ SapDoc1: ' ', SapDocsExtra: '[]' }), false);
+  // Ajuste de un notificado con documento: se cierra solo.
+  const r = { Status: 'notificado', DecisionBy: null, Tipo: 'danos_textil', SapDoc1: '4904538271' };
+  assert.deepEqual(estadoTrasAjuste(r, lineas, tipos), { status: 'resuelto', decisionSistema: true });
+  assert.deepEqual(estadoTrasAjuste({ ...r, SapDoc1: null }, lineas, tipos), { status: 'notificado', decisionSistema: false });
+  // Reenviar un notificado con documento: se cierra solo.
+  const fila = { StatusAntesDevolucion: 'notificado', LineasPendientes: 0, Tipo: 'danos_textil', SapDoc1: '4904538271', Lineas: [{ Tipo: 'danos_textil', DecStatus: 'aprobado' }] };
+  assert.equal(estadoAlReenviar(fila, tipos), 'resuelto');
+});
+
+test('Torre de Control: abre para editar un CEDI antes de contabilidad y lo corrige con «Editar reclamos de CEDI»', async () => {
+  const { motivoNoAbrirEdicion, motivoNoCorregir, DEVUELTO_POR_EDICION } = await import('../../src/domain/reclamo.js');
+  assert.equal(motivoNoAbrirEdicion({ Status: 'pendiente', Origen: 'cedi' }), null);
+  assert.equal(motivoNoAbrirEdicion({ Status: 'notificado', Origen: 'cedi' }), null);
+  // Cerrado solo por el sistema: nadie lo aprobó, se puede editar; decidido por la compradora, no.
+  assert.equal(motivoNoAbrirEdicion({ Status: 'resuelto', Origen: 'cedi', DecisionBy: 'sistema' }), null);
+  assert.equal(motivoNoAbrirEdicion({ Status: 'resuelto', Origen: 'cedi', DecisionBy: 'zlopez' }).code, 'YA_DECIDIDO');
+  assert.equal(motivoNoAbrirEdicion({ Status: 'rechazado', Origen: 'cedi', DecisionBy: 'zlopez' }).code, 'YA_DECIDIDO');
+  assert.equal(motivoNoAbrirEdicion({ Status: 'pendiente', Origen: 'tienda' }).code, 'NO_CEDI');
+  assert.equal(motivoNoAbrirEdicion({ Status: 'resuelto', Origen: 'cedi', DecisionBy: 'sistema', EnviadoContabilidadAt: new Date() }).code, 'NO_EDITABLE');
+  assert.equal(motivoNoAbrirEdicion({ Status: 'devuelto', Origen: 'cedi' }).code, 'RECLAMO_DEVUELTO');
+  // En edición: lo corrige quien tiene el permiso de editar, aunque no tenga «Corregir reclamos devueltos».
+  const enEdicion = { Status: 'devuelto', DevueltoPor: DEVUELTO_POR_EDICION };
+  assert.equal(motivoNoCorregir(enEdicion, { puede: false, puedeEdicion: true }), null);
+  assert.equal(motivoNoCorregir(enEdicion, { puede: false, puedeEdicion: false }).code, 'SIN_PERMISO_CORREGIR');
+  // Uno que devolvió la compradora sigue necesitando «Corregir reclamos devueltos».
+  assert.equal(motivoNoCorregir({ Status: 'devuelto', DevueltoPor: 'compradora' }, { puede: false, puedeEdicion: true }).code, 'SIN_PERMISO_CORREGIR');
 });

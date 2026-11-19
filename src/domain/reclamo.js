@@ -16,13 +16,27 @@ export const numeroReclamo = (id) => `REC-${String(id).padStart(6, '0')}`;
  * Si no, 'pendiente' hasta que la compradora lo cierre.
  */
 /**
- * Solo notificación: el tipo del reclamo es de notificación (daños textil…) y
- * TODOS sus productos también. Si mezcla otros (p. ej. faltantes con su 911,
- * como el 23294 - NOIR / REC-000044), sigue el flujo normal y va a
- * contabilidad. `tipos`: los tipos de solo notificación.
+ * Solo notificación: el tipo del reclamo es de notificación (daños textil…),
+ * TODOS sus productos también y NO trae documento SAP. Si mezcla otros (p. ej.
+ * faltantes con su 911, como el 23294 - NOIR / REC-000044) o trae documento
+ * SAP (una nota de débito al proveedor: REC-000058, 2026-11-18), sigue el
+ * flujo normal y va a contabilidad. `tipos`: los tipos de solo notificación.
  */
-export const esSoloNotificacion = ({ tipo, lineas }, tipos) =>
-  tipos.has(tipo) && (lineas ?? []).every((l) => tipos.has(l.tipo ?? l.Tipo));
+export const esSoloNotificacion = ({ tipo, lineas, conDocumentoSap = false }, tipos) =>
+  !conDocumentoSap && tipos.has(tipo) && (lineas ?? []).every((l) => tipos.has(l.tipo ?? l.Tipo));
+
+/** true si el reclamo tiene algún documento SAP (SapDoc1..3 o SapDocsExtra, JSON o arreglo). */
+export function tieneDocumentoSap({ SapDoc1, SapDoc2, SapDoc3, SapDocsExtra }) {
+  let extra = SapDocsExtra;
+  if (typeof extra === 'string') {
+    try {
+      extra = JSON.parse(extra);
+    } catch {
+      extra = [];
+    }
+  }
+  return [SapDoc1, SapDoc2, SapDoc3, ...(Array.isArray(extra) ? extra : [])].some((d) => d && String(d).trim());
+}
 
 export function estadoAlCrear({ soloNotificacion, lineas }) {
   if (soloNotificacion) return 'notificado';
@@ -302,7 +316,14 @@ export const esDevolucion = ({ Tipo, LineasDevolucion }) => Tipo === 'devolucion
  * se contestó que sí (RetiroProveedor). Los creados antes de la pregunta
  * (RetiroProveedor null) solo si son de devolución.
  */
-export const llevaRetiro = (r) => esDevolucion(r) || r.RetiroProveedor === true || r.RetiroProveedor === 1;
+export const llevaRetiro = (r) => !esSoloFaltante(r) && (esDevolucion(r) || r.RetiroProveedor === true || r.RetiroProveedor === 1);
+
+/**
+ * Solo faltante: el producto no llegó, no hay nada que entregarle al
+ * proveedor (2026-11-18). `LineasNoFaltante`: productos de otro motivo.
+ */
+export const esSoloFaltante = ({ Tipo, LineasNoFaltante }) =>
+  Tipo === 'faltante_real' && LineasNoFaltante !== undefined && LineasNoFaltante !== null && Number(LineasNoFaltante) === 0;
 
 /** Esperando que el proveedor se lo lleve: lleva retiro y todavía no se registró la entrega. */
 export const esperaRetiro = (r) => llevaRetiro(r) && !r.RetiroProveedorFecha;
@@ -331,6 +352,7 @@ export function motivoNoRegistrarRetiro(reclamo, { fecha, tieneFoto, hoy }) {
 /** `puede`: el rol tiene «Cambiar si el proveedor retira» (o es el administrador). */
 export function motivoNoCambiarRetiro(reclamo, { puede = false }) {
   if (esDevolucion(reclamo)) return { mensaje: 'Los reclamos de devolución siempre los retira el proveedor.', code: 'ES_DEVOLUCION' };
+  if (esSoloFaltante(reclamo)) return { mensaje: 'Es solo de faltante: no hay producto que entregarle al proveedor.', code: 'SOLO_FALTANTE' };
   if (reclamo.RetiroProveedorFecha) return { mensaje: 'La entrega al proveedor ya está registrada; quítala primero si fue un error.', code: 'RETIRO_REGISTRADO' };
   if (!puede) return { mensaje: 'Tu rol no puede cambiar si el proveedor retira.', code: 'SIN_PERMISO_RETIRO' };
   return null;
@@ -379,6 +401,29 @@ export function motivoNoDevolver({ Status, CreatedBy, EnviadoContabilidadAt }, c
 export const DEVUELTO_POR_COMPRADORA = 'compradora';
 export const DEVUELTO_POR_SUPERVISOR = 'supervisor_gof';
 export const ESTADOS_DEVOLVIBLES_SUPERVISOR = new Set(['pendiente', 'notificado', 'resuelto', 'rechazado']);
+/** Torre de Control abrió su reclamo de CEDI para editarlo (2026-11-19): nadie se lo devolvió. */
+export const DEVUELTO_POR_EDICION = 'edicion';
+
+/**
+ * Abrir para editar un reclamo de CEDI ya creado (Torre de Control, permiso
+ * «Editar reclamos de CEDI»): solo antes de que la compradora lo apruebe o
+ * rechace (2026-11-19): pendiente, notificado o cerrado automáticamente (nadie
+ * lo decidió), y nunca después de enviarlo a contabilidad. Queda como devuelto
+ * (en edición) y al guardar vuelve a su estado.
+ */
+export function motivoNoAbrirEdicion({ Status, Origen, EnviadoContabilidadAt, DecisionBy }) {
+  if (Origen !== 'cedi') return { mensaje: 'Solo se editan así los reclamos de CEDI.', code: 'NO_CEDI' };
+  if (Status === STATUS_DEVUELTO) return { mensaje: 'Este reclamo ya está abierto para corregir.', code: 'RECLAMO_DEVUELTO' };
+  if (EnviadoContabilidadAt) return { mensaje: 'Este reclamo ya se envió a contabilidad; ya no se puede editar.', code: 'NO_EDITABLE' };
+  if (!esEditableAntesDeDecision({ Status, DecisionBy })) {
+    return { mensaje: 'La compradora ya decidió este reclamo; solo se edita antes de que lo apruebe o rechace.', code: 'YA_DECIDIDO' };
+  }
+  return null;
+}
+
+/** Todavía sin decisión de la compradora: pendiente, notificado o cerrado solo por el sistema. */
+export const esEditableAntesDeDecision = ({ Status, DecisionBy }) =>
+  Status === 'pendiente' || Status === 'notificado' || (Status === 'resuelto' && DecisionBy === 'sistema');
 
 /** El supervisor GOF devuelve el reclamo a quien lo creó, siempre con el motivo. */
 export function motivoNoDevolverSupervisor({ Status, CreatedBy, EnviadoContabilidadAt }, comentario) {
@@ -398,7 +443,8 @@ export function motivoNoDevolverSupervisor({ Status, CreatedBy, EnviadoContabili
  * quedaron productos por decidir (quien lo creó los cambió), vuelve a
  * pendiente para que la compradora los decida.
  */
-export function estadoAlReenviar({ StatusAntesDevolucion, LineasPendientes, Tipo, Lineas }, tiposSoloNotificacion = null) {
+export function estadoAlReenviar(fila, tiposSoloNotificacion = null) {
+  const { StatusAntesDevolucion, LineasPendientes, Tipo, Lineas } = fila;
   const antes = StatusAntesDevolucion && StatusAntesDevolucion !== STATUS_DEVUELTO ? StatusAntesDevolucion : 'pendiente';
   if (estaCerrado(antes) && Number(LineasPendientes) > 0) return 'pendiente';
   // Era «notificado» y al corregirlo (p. ej. «Reemplazar» el Excel) ya no es
@@ -407,15 +453,20 @@ export function estadoAlReenviar({ StatusAntesDevolucion, LineasPendientes, Tipo
   // y sin envío a contabilidad).
   if (antes === 'notificado' && Array.isArray(Lineas) && Lineas.length && tiposSoloNotificacion) {
     const lineas = Lineas.map((l) => ({ tipo: l.tipo ?? l.Tipo, decStatus: l.decStatus ?? l.DecStatus }));
-    return estadoAlCrear({ soloNotificacion: esSoloNotificacion({ tipo: Tipo, lineas }, tiposSoloNotificacion), lineas });
+    return estadoAlCrear({ soloNotificacion: esSoloNotificacion({ tipo: Tipo, lineas, conDocumentoSap: tieneDocumentoSap(fila) }, tiposSoloNotificacion), lineas });
   }
   return antes;
 }
 
 /** Corregir datos o archivos de un reclamo devuelto: solo quien lo creó (o el super administrador). */
 /** `puede`: el rol tiene «Corregir reclamos devueltos» (o es el administrador). Depende del rol, no de quién lo creó. */
-export function motivoNoCorregir({ Status }, { puede = false }) {
+/**
+ * `puede`: «Corregir reclamos devueltos» (o administrador).
+ * `puedeEdicion`: «Editar reclamos de CEDI»: corrige los que se abrieron para editar.
+ */
+export function motivoNoCorregir({ Status, DevueltoPor }, { puede = false, puedeEdicion = false }) {
   if (Status !== STATUS_DEVUELTO) return { mensaje: 'Solo se corrige un reclamo devuelto para corregir.', code: 'NO_DEVUELTO' };
+  if (DevueltoPor === DEVUELTO_POR_EDICION && puedeEdicion) return null;
   if (!puede) return { mensaje: 'Tu rol no puede corregir reclamos devueltos.', code: 'SIN_PERMISO_CORREGIR' };
   return null;
 }
@@ -615,11 +666,12 @@ export const textoProductoAjuste = (l) => claveProductoReclamo(l);
  *   - cerrado por una persona y nada por decidir: se queda como está.
  * Devuelve { status, decisionSistema } (decisionSistema: true → DecisionBy 'sistema'; false → se limpia; null → no se toca).
  */
-export function estadoTrasAjuste({ Status, DecisionBy, Tipo }, lineas, tiposSoloNotificacion) {
+export function estadoTrasAjuste(reclamo, lineas, tiposSoloNotificacion) {
+  const { Status, DecisionBy, Tipo } = reclamo;
   if (Status === STATUS_DEVUELTO) return { status: Status, decisionSistema: null };
   if (lineas.some((l) => l.decStatus === 'pendiente')) return { status: 'pendiente', decisionSistema: false };
   const delSistema = Status === 'pendiente' || Status === 'notificado' || DecisionBy === 'sistema';
   if (!delSistema) return { status: Status, decisionSistema: null };
-  const status = estadoAlCrear({ soloNotificacion: esSoloNotificacion({ tipo: Tipo, lineas }, tiposSoloNotificacion), lineas });
+  const status = estadoAlCrear({ soloNotificacion: esSoloNotificacion({ tipo: Tipo, lineas, conDocumentoSap: tieneDocumentoSap(reclamo) }, tiposSoloNotificacion), lineas });
   return { status, decisionSistema: status === 'resuelto' ? true : false };
 }

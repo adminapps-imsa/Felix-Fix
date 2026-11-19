@@ -73,6 +73,8 @@ export interface Reclamo {
   Status: StatusReclamo;
   /** Productos con motivo «devolución» (para saber si lleva el retiro del proveedor). */
   LineasDevolucion?: number;
+  /** Productos que no son faltante (0 en un reclamo solo de faltante: no hay entrega al proveedor). */
+  LineasNoFaltante?: number;
   /** «¿El proveedor va a retirar el producto?» al crearlo; null = creado antes de la pregunta. */
   RetiroProveedor?: boolean | null;
   /** Entrega al proveedor: día, quién la registró y cuándo. */
@@ -84,7 +86,8 @@ export interface Reclamo {
   /** Estado que tenía al devolverlo (al reenviar vuelve a él). */
   StatusAntesDevolucion?: StatusReclamo | null;
   /** Quién lo devolvió: la compradora o el supervisor GOF (null = compradora). */
-  DevueltoPor?: 'compradora' | 'supervisor_gof' | null;
+  /** 'edicion': Torre de Control lo abrió para editar (nadie se lo devolvió). */
+  DevueltoPor?: 'compradora' | 'supervisor_gof' | 'edicion' | null;
   /** Historial de devoluciones y reenvíos (viene en el detalle). */
   Comentarios?: ComentarioReclamo[];
   Comentario: string | null;
@@ -276,6 +279,8 @@ export interface PermisosReclamos {
   puedeCorregirCualquiera: boolean;
   /** Por rol: «Corregir reclamos devueltos» (o administrador). */
   puedeCorregir?: boolean;
+  /** «Editar reclamos de CEDI» (Torre de Control): abrir para editar un CEDI ya creado. */
+  puedeEditarCedi?: boolean;
   /** Por rol: «Cambiar si el proveedor retira» (o administrador). */
   puedeCambiarRetiro?: boolean;
   /** Por rol: «Adjuntar en reclamos abiertos». */

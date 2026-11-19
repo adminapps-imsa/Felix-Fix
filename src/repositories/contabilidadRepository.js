@@ -7,8 +7,12 @@ const SELECT_BASE = `
     d.DocumentoId, d.ReclamoId, d.AdjuntoFilename, d.AdjuntoNombre, d.NumeroDocumento, d.TipoDocumento,
     d.Movimiento, d.FechaDocumento, d.Total, d.Lineas, d.Validacion, d.Estado, d.EnviadoAt, d.EnviadoPor,
     d.CreatedAt, d.UpdatedAt,
+    d.EnviadoProveedorAt, d.EnviadoProveedorPor, d.EnviadoProveedorA, d.ComentarioProveedor, d.EnviosProveedor,
+    d.RespuestaAt, d.RespuestaPor, d.RegistroSap, d.RespuestaArchivo, d.RespuestaArchivoNombre,
+    d.DecisionConta, d.DecisionContaAt, d.DecisionContaPor, d.DecisionContaComentario,
+    r.CorreosProveedor,
     r.Token AS ReclamoToken, r.Proveedor, r.NumeroEmbarqueFactura, r.Compradora, r.AdjuntosExtra,
-    r.Status AS ReclamoStatus, r.Comentario AS DecisionComentario
+    r.Status AS ReclamoStatus, r.Comentario AS DecisionComentario, r.DecisionBy AS ReclamoDecisionBy
   FROM ${S}.ReclamoDocumentosContabilidad d
   JOIN ${S}.Reclamos r ON r.ReclamoId = d.ReclamoId
 `;
@@ -139,4 +143,192 @@ export async function actualizarValidacion(documentoId, { lineas, validacion }) 
     .query(`UPDATE ${S}.ReclamoDocumentosContabilidad SET Lineas = @lineas, Validacion = @validacion, UpdatedAt = SYSUTCDATETIME()
             WHERE DocumentoId = @id AND Estado = 'pendiente'`);
   return rowsAffected[0] > 0;
+}
+
+// ------------------------------------------------------------------
+// Envío al proveedor (contabilidad manda la nota de débito)
+// ------------------------------------------------------------------
+
+/**
+ * Reserva el envío antes de mandar el correo: solo una petición a la vez por
+ * documento (un doble clic no manda dos correos). Una reserva de más de 2 min
+ * se da por caída. true si se reservó.
+ */
+export async function reservarEnvioProveedor(documentoId) {
+  const pool = await getPool();
+  const { rowsAffected } = await pool.request().input('id', sql.Int, documentoId).query(`
+    UPDATE ${S}.ReclamoDocumentosContabilidad SET EnviandoProveedorAt = SYSUTCDATETIME()
+    WHERE DocumentoId = @id
+      AND (EnviandoProveedorAt IS NULL OR EnviandoProveedorAt < DATEADD(MINUTE, -2, SYSUTCDATETIME()))`);
+  return rowsAffected[0] === 1;
+}
+
+export async function liberarEnvioProveedor(documentoId) {
+  const pool = await getPool();
+  await pool
+    .request()
+    .input('id', sql.Int, documentoId)
+    .query(`UPDATE ${S}.ReclamoDocumentosContabilidad SET EnviandoProveedorAt = NULL WHERE DocumentoId = @id`);
+}
+
+/** El correo salió: guarda el envío en el documento y los correos en el reclamo (para la próxima vez). */
+export async function registrarEnvioProveedor(documentoId, { usuario, para, comentario }) {
+  const pool = await getPool();
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+  try {
+    await new sql.Request(transaction)
+      .input('id', sql.Int, documentoId)
+      .input('usuario', sql.NVarChar(150), usuario.slice(0, 150))
+      .input('para', sql.NVarChar(2000), para.join(', ').slice(0, 2000))
+      .input('comentario', sql.NVarChar(2000), comentario ? comentario.slice(0, 2000) : null)
+      .input('correos', sql.NVarChar(sql.MAX), JSON.stringify(para)).query(`
+        UPDATE ${S}.ReclamoDocumentosContabilidad
+           SET EnviadoProveedorAt = SYSUTCDATETIME(), EnviadoProveedorPor = @usuario, EnviadoProveedorA = @para,
+               ComentarioProveedor = @comentario, EnviosProveedor = EnviosProveedor + 1, EnviandoProveedorAt = NULL,
+               UpdatedAt = SYSUTCDATETIME()
+         WHERE DocumentoId = @id;
+        UPDATE r SET CorreosProveedor = @correos
+          FROM ${S}.Reclamos r JOIN ${S}.ReclamoDocumentosContabilidad d ON d.ReclamoId = r.ReclamoId
+         WHERE d.DocumentoId = @id;`);
+    await transaction.commit();
+  } catch (err) {
+    await transaction.rollback().catch(() => {});
+    throw err;
+  }
+}
+
+// ------------------------------------------------------------------
+// Respuesta del proveedor (aprobado: nota de crédito; no aprobado: registro SAP + documento)
+// ------------------------------------------------------------------
+
+/**
+ * Guarda la respuesta si el documento sigue pendiente (la regla se revisa con
+ * la fila bloqueada). `verificar(fila)` devuelve el motivo para no hacerlo o null.
+ * -> null (no existe) | { bloqueado } | { ok: true }
+ */
+export async function registrarRespuesta(documentoId, { estado, registroSap, archivo, archivoNombre, usuario }, verificar) {
+  const pool = await getPool();
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+  try {
+    const { recordset } = await new sql.Request(transaction)
+      .input('id', sql.Int, documentoId)
+      .query(`SELECT DocumentoId, Estado, DecisionConta FROM ${S}.ReclamoDocumentosContabilidad WITH (UPDLOCK, HOLDLOCK) WHERE DocumentoId = @id`);
+    const fila = recordset[0];
+    if (!fila) {
+      await transaction.rollback();
+      return null;
+    }
+    const motivo = verificar(fila);
+    if (motivo) {
+      await transaction.rollback();
+      return { bloqueado: motivo };
+    }
+    await new sql.Request(transaction)
+      .input('id', sql.Int, documentoId)
+      .input('estado', sql.NVarChar(30), estado)
+      .input('registro', sql.NVarChar(50), registroSap ? registroSap.slice(0, 50) : null)
+      .input('archivo', sql.NVarChar(255), archivo)
+      .input('nombre', sql.NVarChar(255), archivoNombre ? archivoNombre.slice(0, 255) : null)
+      .input('usuario', sql.NVarChar(150), usuario.slice(0, 150)).query(`
+        UPDATE ${S}.ReclamoDocumentosContabilidad
+           SET Estado = @estado, RegistroSap = @registro, RespuestaArchivo = @archivo, RespuestaArchivoNombre = @nombre,
+               RespuestaAt = SYSUTCDATETIME(), RespuestaPor = @usuario, UpdatedAt = SYSUTCDATETIME()
+         WHERE DocumentoId = @id`);
+    await transaction.commit();
+    return { ok: true };
+  } catch (err) {
+    await transaction.rollback().catch(() => {});
+    throw err;
+  }
+}
+
+/** Quita la respuesta (vuelve a pendiente). -> null | { bloqueado } | { archivoAnterior } */
+export async function quitarRespuesta(documentoId, verificar) {
+  const pool = await getPool();
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+  try {
+    const { recordset } = await new sql.Request(transaction)
+      .input('id', sql.Int, documentoId)
+      .query(`SELECT DocumentoId, Estado, RespuestaArchivo FROM ${S}.ReclamoDocumentosContabilidad WITH (UPDLOCK, HOLDLOCK) WHERE DocumentoId = @id`);
+    const fila = recordset[0];
+    if (!fila) {
+      await transaction.rollback();
+      return null;
+    }
+    const motivo = verificar(fila);
+    if (motivo) {
+      await transaction.rollback();
+      return { bloqueado: motivo };
+    }
+    await new sql.Request(transaction).input('id', sql.Int, documentoId).query(`
+      UPDATE ${S}.ReclamoDocumentosContabilidad
+         SET Estado = 'pendiente', RegistroSap = NULL, RespuestaArchivo = NULL, RespuestaArchivoNombre = NULL,
+             RespuestaAt = NULL, RespuestaPor = NULL, UpdatedAt = SYSUTCDATETIME()
+       WHERE DocumentoId = @id`);
+    await transaction.commit();
+    return { archivoAnterior: fila.RespuestaArchivo };
+  } catch (err) {
+    await transaction.rollback().catch(() => {});
+    throw err;
+  }
+}
+
+// ------------------------------------------------------------------
+// Decisión de contabilidad: reclamar o no al proveedor
+// ------------------------------------------------------------------
+
+async function conFilaBloqueada(documentoId, verificar, cambiar) {
+  const pool = await getPool();
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+  try {
+    const { recordset } = await new sql.Request(transaction).input('id', sql.Int, documentoId).query(`
+      SELECT DocumentoId, Estado, DecisionConta, EnviadoProveedorAt
+      FROM ${S}.ReclamoDocumentosContabilidad WITH (UPDLOCK, HOLDLOCK) WHERE DocumentoId = @id`);
+    const fila = recordset[0];
+    if (!fila) {
+      await transaction.rollback();
+      return null;
+    }
+    const motivo = verificar(fila);
+    if (motivo) {
+      await transaction.rollback();
+      return { bloqueado: motivo };
+    }
+    await cambiar(new sql.Request(transaction).input('id', sql.Int, documentoId));
+    await transaction.commit();
+    return { ok: true };
+  } catch (err) {
+    await transaction.rollback().catch(() => {});
+    throw err;
+  }
+}
+
+/** Reclamar (sigue pendiente) o no reclamar (queda 'no_reclamado'). -> null | { bloqueado } | { ok } */
+export function registrarDecision(documentoId, { decision, comentario, usuario }, verificar) {
+  return conFilaBloqueada(documentoId, verificar, (req) =>
+    req
+      .input('decision', sql.NVarChar(20), decision)
+      .input('comentario', sql.NVarChar(2000), comentario ? comentario.slice(0, 2000) : null)
+      .input('usuario', sql.NVarChar(150), usuario.slice(0, 150)).query(`
+        UPDATE ${S}.ReclamoDocumentosContabilidad
+           SET DecisionConta = @decision, DecisionContaComentario = @comentario, DecisionContaAt = SYSUTCDATETIME(),
+               DecisionContaPor = @usuario, UpdatedAt = SYSUTCDATETIME(),
+               Estado = CASE WHEN @decision = 'no_reclamar' THEN 'no_reclamado' ELSE Estado END
+         WHERE DocumentoId = @id`)
+  );
+}
+
+/** Quita la decisión: vuelve a pendiente sin decisión. */
+export function quitarDecision(documentoId, verificar) {
+  return conFilaBloqueada(documentoId, verificar, (req) =>
+    req.query(`
+      UPDATE ${S}.ReclamoDocumentosContabilidad
+         SET DecisionConta = NULL, DecisionContaComentario = NULL, DecisionContaAt = NULL, DecisionContaPor = NULL,
+             Estado = 'pendiente', UpdatedAt = SYSUTCDATETIME()
+       WHERE DocumentoId = @id`)
+  );
 }

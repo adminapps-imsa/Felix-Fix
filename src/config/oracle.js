@@ -25,7 +25,12 @@ export function getSapOraclePool() {
         connectString: env.sap.connectString,
         poolMin: 0,
         poolMax: 5,
-        poolTimeout: 60,
+        // Conexiones libres se guardan 10 min: abrir una nueva a SAP tarda.
+        poolTimeout: 600,
+        // Si SAP no contesta, se rinde a los 8 s (antes 20 s por intento).
+        transportConnectTimeout: 8,
+        // Revisa cada minuto que la conexión guardada siga viva (un firewall puede cortarla).
+        expireTime: 1,
       })
       .catch((err) => {
         poolPromise = null;

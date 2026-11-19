@@ -36,10 +36,14 @@ export const TIPO_LABEL_CORTO: Record<TipoReclamo, string> = {
 /** Reclamo de devolución: del tipo, o con algún producto de ese motivo (lleva el retiro del proveedor). */
 export const esDevolucion = (r: { Tipo: TipoReclamo; LineasDevolucion?: number }) => r.Tipo === 'devolucion' || Number(r.LineasDevolucion) > 0;
 
-type ConRetiro = { Tipo: TipoReclamo; LineasDevolucion?: number; RetiroProveedor?: boolean | null; RetiroProveedorFecha?: string | null };
+type ConRetiro = { Tipo: TipoReclamo; LineasDevolucion?: number; LineasNoFaltante?: number; RetiroProveedor?: boolean | null; RetiroProveedorFecha?: string | null };
+
+/** Solo faltante: el producto no llegó, no hay nada que entregarle al proveedor (igual que el backend). */
+export const esSoloFaltante = (r: { Tipo: TipoReclamo; LineasNoFaltante?: number }) =>
+  r.Tipo === 'faltante_real' && r.LineasNoFaltante != null && Number(r.LineasNoFaltante) === 0;
 
 /** Lo retira el proveedor: devoluciones siempre; los demás si al crearlo se contestó que sí (igual que el backend). */
-export const llevaRetiro = (r: ConRetiro) => esDevolucion(r) || r.RetiroProveedor === true;
+export const llevaRetiro = (r: ConRetiro) => !esSoloFaltante(r) && (esDevolucion(r) || r.RetiroProveedor === true);
 
 /** Esperando que el proveedor se lo lleve: hasta entonces el reclamo no está terminado. */
 export const esperaRetiro = (r: ConRetiro) => llevaRetiro(r) && !r.RetiroProveedorFecha;
@@ -56,7 +60,8 @@ export const STATUS_LABEL: Record<StatusReclamo, string> = {
 
 /** Etiqueta del estado; el devuelto dice quién lo devolvió y el cerrado por el sistema, que se cerró solo. */
 export const etiquetaStatus = (status: StatusReclamo, devueltoPor?: string | null, decisionBy?: string | null) => {
-  void devueltoPor; // quién lo devolvió se dice en el detalle; la etiqueta es la misma
+  // Abierto para editar por Torre de Control: no lo devolvió nadie.
+  if (status === 'devuelto' && devueltoPor === 'edicion') return 'En edición';
   if (status === 'resuelto' && decisionBy === 'sistema') return 'Cerrado automáticamente';
   return STATUS_LABEL[status];
 };

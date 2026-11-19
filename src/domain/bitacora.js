@@ -46,6 +46,7 @@ const RUTAS = [
   ['DELETE', '/reclamos/:token/excel', 'reclamos', 'Quitó el Excel del reclamo', 'reclamo'],
   ['PATCH', '/reclamos/:token/decision', 'reclamos', 'Cerró el reclamo (decisión)', 'reclamo'],
   ['POST', '/reclamos/:token/enviar-contabilidad', 'reclamos', 'Envió el reclamo a contabilidad', 'reclamo'],
+  ['POST', '/reclamos/:token/editar', 'reclamos', 'Abrió el reclamo para editar (CEDI)', 'reclamo'],
   ['POST', '/reclamos/:token/devolver-supervisor', 'reclamos', 'Devolvió el reclamo (supervisor GOF)', 'reclamo'],
   ['POST', '/reclamos/:token/devolver', 'reclamos', 'Devolvió el reclamo con comentario', 'reclamo'],
   ['PATCH', '/reclamos/:token/datos', 'reclamos', 'Corrigió los datos del reclamo', 'reclamo'],
@@ -61,6 +62,12 @@ const RUTAS = [
   ['POST', '/reclamos/:token/adjuntos', 'reclamos', 'Adjuntó un archivo', 'reclamo'],
   ['DELETE', '/reclamos/:token/adjuntos/:idx', 'reclamos', 'Eliminó un adjunto', 'reclamo'],
   ['DELETE', '/reclamos/:token', 'reclamos', 'Eliminó el reclamo', 'reclamo'],
+
+  ['POST', '/contabilidad/documentos/:id/correo-proveedor/enviar', 'contabilidad', 'Envió la nota de débito al proveedor'],
+  ['POST', '/contabilidad/documentos/:id/decision', 'contabilidad', 'Decidió si se reclama al proveedor'],
+  ['DELETE', '/contabilidad/documentos/:id/decision', 'contabilidad', 'Quitó la decisión de reclamar'],
+  ['POST', '/contabilidad/documentos/:id/respuesta', 'contabilidad', 'Registró la respuesta del proveedor'],
+  ['DELETE', '/contabilidad/documentos/:id/respuesta', 'contabilidad', 'Quitó la respuesta del proveedor'],
 
   ['POST', '/productos-danados', 'productos_danados', 'Creó un reporte'],
   ['PUT', '/productos-danados/:id/correos', 'productos_danados', 'Guardó los correos del proveedor', 'reporte'],

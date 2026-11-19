@@ -116,6 +116,23 @@ export const uploadFotoRetiro = multer({
 /** Adjunto de soporte adicional (foto, Excel o PDF), uno por petición. */
 export const uploadAdjuntoReclamo = multer({ storage: diskStorage, fileFilter: imagenExcelOPdf, limits }).single('archivo');
 
+/** Máximo de archivos extra que contabilidad adjunta al correo del proveedor. */
+export const MAX_ADJUNTOS_CORREO = 10;
+
+/** Contabilidad: archivos extra para el correo al proveedor (fotos, Excel o PDF), varios a la vez. */
+export const uploadAdjuntosCorreo = multer({
+  storage: diskStorage,
+  fileFilter: imagenExcelOPdf,
+  limits: { ...limits, files: MAX_ADJUNTOS_CORREO },
+}).array('adjuntos', MAX_ADJUNTOS_CORREO);
+
+/** Contabilidad: nota de crédito o documento del registro SAP (PDF o foto), uno por petición. */
+export const uploadRespuestaProveedor = multer({
+  storage: diskStorage,
+  fileFilter: (req, file, cb) => (esPdf(file) || esImagen(file) ? cb(null, true) : cb(badRequest('El archivo debe ser un PDF o una foto (JPG, PNG o WebP).'))),
+  limits,
+}).single('archivo');
+
 /** Excel nuevo del reclamo (el administrador lo reemplaza). */
 export const uploadExcelPrincipal = multer({ storage: diskStorage, fileFilter: soloExcel, limits }).single('excel');
 

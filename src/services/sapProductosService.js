@@ -115,23 +115,71 @@ async function precios(matnrs) {
   return new Map(filas.map((f) => [f.MATNR, f.KBETR == null ? null : Number(f.KBETR)]));
 }
 
-export async function consultarProductos(codigos) {
+// Productos ya consultados (descripción y precio cambian poco): 10 min en
+// memoria, así abrir el detalle de un reclamo no vuelve a ir a SAP cada vez.
+// Si SAP no respondió, por 1 min no se le insiste (cada intento esperaba
+// hasta 20 s la conexión y el detalle tardaba eso en abrir; 2026-11-18).
+const productosCache = new Map(); // codigo -> { producto | null, exp }
+const PRODUCTO_TTL = 10 * 60 * 1000;
+const NO_ENCONTRADO_TTL = 60 * 1000;
+const PAUSA_SAP_CAIDO = 60 * 1000;
+let sapCaidoHasta = 0;
+
+const enCache = (codigo) => {
+  const c = productosCache.get(codigo);
+  return c && c.exp > Date.now() ? c : null;
+};
+
+async function buscarProductos(unicos) {
+  const materiales = await materialesPorCodigo(unicos);
+  const matnrs = [...new Set(materiales.values())];
+  const [desc, prec] = matnrs.length ? await Promise.all([descripciones(matnrs), precios(matnrs)]) : [new Map(), new Map()];
+  for (const codigo of unicos) {
+    const matnr = materiales.get(codigo);
+    const producto = matnr ? { descripcion: desc.get(matnr) ?? null, precioVenta: prec.get(matnr) ?? null } : null;
+    // No encontrado: solo 1 min (Data puede crearlo en cualquier momento).
+    productosCache.set(codigo, { producto, exp: Date.now() + (producto ? PRODUCTO_TTL : NO_ENCONTRADO_TTL) });
+  }
+}
+
+/**
+ * `esperaMaxMs`: para solo mostrar (el detalle), cuánto esperar a SAP como
+ * máximo; si no alcanza, devuelve disponible:false y la consulta sigue y
+ * queda en caché para la próxima vez. Sin él (crear, validar) espera todo.
+ */
+export async function consultarProductos(codigos, { esperaMaxMs = null } = {}) {
   const unicos = [...new Set((codigos || []).map((c) => String(c ?? '').trim()).filter(Boolean))];
   if (!isSapConfigured()) return { disponible: false, productos: new Map() };
   if (!unicos.length) return { disponible: true, productos: new Map() };
-  try {
-    const materiales = await materialesPorCodigo(unicos);
-    const matnrs = [...new Set(materiales.values())];
-    const [desc, prec] = matnrs.length ? await Promise.all([descripciones(matnrs), precios(matnrs)]) : [new Map(), new Map()];
-    const productos = new Map();
-    for (const [codigo, matnr] of materiales) {
-      productos.set(codigo, { descripcion: desc.get(matnr) ?? null, precioVenta: prec.get(matnr) ?? null });
+  const faltan = unicos.filter((c) => !enCache(c));
+  if (faltan.length) {
+    // Solo al mostrar se salta SAP si acaba de fallar; crear y validar siempre lo intentan.
+    if (esperaMaxMs && sapCaidoHasta > Date.now()) return { disponible: false, productos: new Map() };
+    const busqueda = buscarProductos(faltan).catch((err) => {
+      sapCaidoHasta = Date.now() + PAUSA_SAP_CAIDO;
+      logger.warn({ err: err.message }, 'SAP no disponible: no se validan los códigos de barra');
+      return 'error';
+    });
+    let resultado;
+    if (esperaMaxMs) {
+      let timer;
+      const tope = new Promise((resolve) => {
+        timer = setTimeout(() => resolve('tarde'), esperaMaxMs);
+      });
+      resultado = await Promise.race([busqueda, tope]);
+      clearTimeout(timer);
+      if (resultado === 'tarde') logger.warn({ codigos: faltan.length, esperaMaxMs }, 'SAP lento: el detalle se muestra sin validar los códigos');
+    } else {
+      resultado = await busqueda;
     }
-    return { disponible: true, productos };
-  } catch (err) {
-    logger.warn({ err: err.message }, 'SAP no disponible: no se validan los códigos de barra');
-    return { disponible: false, productos: new Map() };
+    if (resultado === 'error' || resultado === 'tarde') return { disponible: false, productos: new Map() };
   }
+  const productos = new Map();
+  for (const codigo of unicos) {
+    const p = enCache(codigo)?.producto;
+    if (p) productos.set(codigo, p);
+  }
+  return { disponible: true, productos };
 }
 
 /**

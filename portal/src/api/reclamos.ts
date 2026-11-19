@@ -116,6 +116,8 @@ export const imagenPath = (token: string, idx: number) => `${ruta(token)}/imagen
 
 // Devolución a quien lo creó: la compradora lo devuelve con un comentario; quien lo creó corrige y lo reenvía.
 export const devolverReclamo = (token: string, comentario: string) => api.post<Reclamo>(`${ruta(token)}/devolver`, { comentario });
+/** Torre de Control: abrir para editar un reclamo de CEDI ya creado. */
+export const abrirEdicion = (token: string, motivo: string) => api.post<Reclamo>(`${ruta(token)}/editar`, { motivo });
 export const devolverReclamoSupervisor = (token: string, comentario: string) => api.post<Reclamo>(`${ruta(token)}/devolver-supervisor`, { comentario });
 
 /** Productos corregidos de un reclamo devuelto: `lineaId` en los que ya estaban; sin él, los nuevos. */

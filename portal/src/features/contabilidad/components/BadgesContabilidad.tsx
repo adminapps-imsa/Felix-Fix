@@ -1,6 +1,6 @@
-import { AlertTriangle, Check, CheckCircle2, FileQuestion, Shuffle, X } from 'lucide-react';
+import { AlertTriangle, Ban, Bot, Check, CheckCircle2, Clock, XCircle, FileQuestion, Shuffle, X } from 'lucide-react';
 import { cn } from '../../../lib/cn';
-import type { DecisionLinea, ValidacionDocumento } from '../../../types/contabilidad';
+import type { DecisionLinea, EstadoDocumentoContabilidad, ValidacionDocumento } from '../../../types/contabilidad';
 
 const VERDE = 'border border-success/30 bg-success/15 text-success';
 const ROJO = 'border border-danger/30 bg-danger/15 text-danger';
@@ -43,14 +43,45 @@ export function MezclaBadge({ compacto = false }: { compacto?: boolean }) {
   );
 }
 
-/** Igual que el badge de decisión de ProductosSection. */
-export function DecisionBadge({ decision }: { decision: DecisionLinea }) {
+/** Igual que el badge de decisión de ProductosSection. `automatica`: lo aprobó el sistema por su tipo, no la compradora. */
+export function DecisionBadge({ decision, automatica = false }: { decision: DecisionLinea; automatica?: boolean }) {
   if (!decision) return <span className="text-xs opacity-50">Sin decisión</span>;
+  const auto = automatica && decision === 'aprobado';
   return (
-    <span className={cn('badge-pill', decision === 'aprobado' ? VERDE : ROJO)}>
-      {decision === 'aprobado' ? <Check size={12} /> : <X size={12} />}
-      {decision === 'aprobado' ? 'Aprobado' : 'Rechazado'}
+    <span
+      className={cn('badge-pill', decision === 'aprobado' ? VERDE : ROJO)}
+      title={auto ? 'Se aprobó solo por su tipo; la compradora no tuvo que decidirlo' : decision === 'aprobado' ? 'Aprobado por la compradora' : 'Rechazado por la compradora'}
+    >
+      {auto ? <Bot size={12} /> : decision === 'aprobado' ? <Check size={12} /> : <X size={12} />}
+      {auto ? 'Aprobado automáticamente' : decision === 'aprobado' ? 'Aprobado' : 'Rechazado'}
     </span>
   );
 }
 
+
+/** Estado del documento en contabilidad: pendiente o la respuesta del proveedor. */
+export function EstadoDocumentoBadge({ estado, compacto = false }: { estado: EstadoDocumentoContabilidad; compacto?: boolean }) {
+  if (estado === 'aprobado')
+    return (
+      <span className={cn('badge-pill', VERDE)} title="El proveedor aprobó">
+        <CheckCircle2 size={12} /> {compacto ? 'Aprobado' : 'Aprobado por el proveedor'}
+      </span>
+    );
+  if (estado === 'no_aprobado')
+    return (
+      <span className={cn('badge-pill', ROJO)} title="El proveedor no aprobó">
+        <XCircle size={12} /> {compacto ? 'No aprobado' : 'No aprobado por el proveedor'}
+      </span>
+    );
+  if (estado === 'no_reclamado')
+    return (
+      <span className={cn('badge-pill', AMBAR)} title="Contabilidad decidió no reclamarlo al proveedor">
+        <Ban size={12} /> No reclamado
+      </span>
+    );
+  return (
+    <span className={cn('badge-pill', GRIS)} title="Esperando la decisión de contabilidad o la respuesta del proveedor">
+      <Clock size={12} /> Pendiente
+    </span>
+  );
+}

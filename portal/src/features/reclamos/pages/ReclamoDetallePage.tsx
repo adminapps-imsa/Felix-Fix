@@ -23,9 +23,10 @@ import { HistorialReclamo } from '../components/HistorialReclamo';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { DevolucionReclamo, DevolverModal } from '../components/DevolucionReclamo';
 import { RetiroProveedor } from '../components/RetiroProveedor';
+import { EditarReclamoCedi } from '../components/EditarReclamoCedi';
 import { MotivosProductos, agruparMotivos } from '../components/MotivosProductos';
 import { usePermisosReclamos } from '../lib/usePermisosReclamos';
-import { STATUS_LABEL, TIPO_LABEL, TIPO_LABEL_CORTO, formatFechaCorta, llevaRetiro } from '../lib/tipos';
+import { STATUS_LABEL, TIPO_LABEL, TIPO_LABEL_CORTO, esSoloFaltante, formatFechaCorta, llevaRetiro } from '../lib/tipos';
 
 export function ReclamoDetallePage() {
   const { token = '' } = useParams();
@@ -135,7 +136,13 @@ export function ReclamoDetallePage() {
   const puedeAdjuntar = Boolean(permisos?.puedeAdjuntar) || Boolean(permisos?.puedeAdjuntarAbiertos);
   // Devuelto: lo corrigen los roles con «Corregir reclamos devueltos», que también pueden quitar adjuntos.
   const devuelto = reclamo.Status === 'devuelto';
-  const puedeCorregir = devuelto && Boolean(permisos?.puedeCorregir);
+  // Abierto para editar por Torre de Control: lo corrige quien tiene «Editar reclamos de CEDI».
+  const puedeCorregir = devuelto && (Boolean(permisos?.puedeCorregir) || (Boolean(permisos?.puedeEditarCedi) && reclamo.DevueltoPor === 'edicion'));
+  // Torre de Control: abrir para editar un CEDI ya creado, antes de que la compradora lo decida
+  // (pendiente, notificado o cerrado solo por el sistema) y nunca después de contabilidad.
+  const sinDecisionCompradora =
+    reclamo.Status === 'pendiente' || reclamo.Status === 'notificado' || (reclamo.Status === 'resuelto' && reclamo.DecisionBy === 'sistema');
+  const puedeAbrirEdicion = Boolean(permisos?.puedeEditarCedi) && reclamo.Origen === 'cedi' && sinDecisionCompradora && !reclamo.EnviadoContabilidadAt;
   // «¿Lo retira el proveedor?»: los roles con «Cambiar si el proveedor retira».
   const puedeCambiarRetiro = Boolean(permisos?.puedeCambiarRetiro);
   // Supervisor GOF: lo devuelve a quien lo creó en cualquier estado mientras no se haya enviado a contabilidad (el backend lo vuelve a revisar).
@@ -179,11 +186,13 @@ export function ReclamoDetallePage() {
 
       <DevolucionReclamo reclamo={reclamo} puedeCorregir={puedeCorregir} onActualizado={setReclamo} />
 
+      {puedeAbrirEdicion && <EditarReclamoCedi reclamo={reclamo} onAbierto={setReclamo} />}
+
       {puedeDevolverSupervisor && <RevisionSupervisor reclamo={reclamo} onDevuelto={setReclamo} />}
       {puedeDevolverDecidido && <DevolverDecidido reclamo={reclamo} onDevuelto={setReclamo} />}
 
       {/* Lo retira el proveedor: Gof marca «Entregado al proveedor»; hasta entonces no está terminado. */}
-      {(llevaRetiro(reclamo) || puedeCambiarRetiro) && (
+      {(llevaRetiro(reclamo) || (puedeCambiarRetiro && !esSoloFaltante(reclamo))) && (
         <RetiroProveedor reclamo={reclamo} puedeRegistrar={Boolean(permisos?.puedeRegistrarRetiro)} puedeCambiar={puedeCambiarRetiro} onActualizado={setReclamo} />
       )}
 

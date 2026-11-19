@@ -5,6 +5,7 @@ import { detectarTipoArchivo } from '../../utils/tipoArchivo.js';
 import * as repo from '../../repositories/reclamosRepository.js';
 import { parseJsonArray } from '../../repositories/reclamosRepository.js';
 import * as dominio from '../../domain/reclamo.js';
+import { tienePermiso } from '../acceso/permisos.js';
 import { USUARIO_SISTEMA } from './tipos.js';
 import { nombresDeUsuarios } from '../acceso/keycloakAdmin.js';
 import { badRequest, conflict, notFound } from '../../utils/httpError.js';
@@ -150,3 +151,9 @@ export async function detalle(token) {
   const nombres = await nombresDeUsuarios(comentarios.map((c) => c.Usuario));
   return { ...dto, Comentarios: comentarios.map((c) => ({ ...c, UsuarioNombre: nombres.get(c.Usuario) || c.Usuario })) };
 }
+
+/** Qué puede corregir: devueltos («Corregir reclamos devueltos» o administrador) y los abiertos para editar (CEDI). */
+export const corrector = (usuario) => ({
+  puede: tienePermiso(usuario, 'configuracion.administrar') || tienePermiso(usuario, 'reclamos.corregir'),
+  puedeEdicion: tienePermiso(usuario, 'reclamos.editar_cedi'),
+});

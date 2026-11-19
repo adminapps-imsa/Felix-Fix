@@ -1,6 +1,7 @@
 // Bandeja de contabilidad: consulta de los documentos (notas de débito) de
-// los reclamos enviados a contabilidad. Las acciones de contabilidad sobre
-// cada documento se definirán después; por ahora todos quedan 'pendiente'.
+// los reclamos enviados a contabilidad. Cada documento queda 'pendiente' hasta
+// que contabilidad registra la respuesta del proveedor (respuestaProveedor.js).
+import { USUARIO_SISTEMA } from '../reclamos/tipos.js';
 import * as repo from '../../repositories/contabilidadRepository.js';
 import * as reclamosRepo from '../../repositories/reclamosRepository.js';
 import { parseJsonArray } from '../../repositories/reclamosRepository.js';
@@ -109,7 +110,7 @@ export async function detalle(id) {
   if (!d) throw notFound('Documento no encontrado.');
 
   const [nombres, lineasReclamo, docsReclamo] = await Promise.all([
-    nombresDeUsuarios([d.EnviadoPor]),
+    nombresDeUsuarios([d.EnviadoPor, d.EnviadoProveedorPor, d.RespuestaPor, d.DecisionContaPor]),
     reclamosRepo.listarLineas(d.ReclamoToken),
     repo.lineasDeReclamo(d.ReclamoId),
   ]);
@@ -117,6 +118,8 @@ export async function detalle(id) {
   const conDocumento = new Set(
     docsReclamo.flatMap((x) => parseJsonArray(x.Lineas).map((l) => l?.lineaId)).filter((v) => v !== null && v !== undefined).map(Number)
   );
+  // Aprobado por el sistema (por su tipo), no por la compradora: se muestra distinto.
+  const automaticas = new Set(lineasReclamo.filter((l) => l.DecBy === USUARIO_SISTEMA).map((l) => Number(l.LineaId)));
   const reclamoSinDocumento = lineasReclamo
     .filter((l) => !conDocumento.has(Number(l.LineaId)))
     .map((l) => ({
@@ -127,13 +130,52 @@ export async function detalle(id) {
       cantidad: aNumero(l.Cantidad),
       tipo: l.Tipo,
       decision: l.DecStatus === 'aprobado' || l.DecStatus === 'rechazado' ? l.DecStatus : null,
+      automatica: automaticas.has(Number(l.LineaId)),
     }));
 
   return {
     ...aDto(d, nombres),
-    Lineas: parseJsonArray(d.Lineas).map(lineaDto),
+    Lineas: parseJsonArray(d.Lineas)
+      .map(lineaDto)
+      .map((l) => ({ ...l, automatica: l.lineaId !== null && automaticas.has(l.lineaId) })),
     ReclamoSinDocumento: reclamoSinDocumento,
     ReclamoStatus: d.ReclamoStatus,
     DecisionComentario: d.DecisionComentario ?? null,
+    // 'sistema': se cerró solo (todos los productos se aprobaron por su tipo).
+    ReclamoDecisionBy: d.ReclamoDecisionBy ?? null,
+    // Envío al proveedor: los correos usados en el reclamo y el último envío de este documento.
+    CorreosProveedor: parseJsonArray(d.CorreosProveedor).filter((c) => typeof c === 'string'),
+    EnvioProveedor: d.EnviadoProveedorAt
+      ? {
+          at: aIso(d.EnviadoProveedorAt),
+          por: d.EnviadoProveedorPor ?? null,
+          porNombre: d.EnviadoProveedorPor ? nombres.get(d.EnviadoProveedorPor) || d.EnviadoProveedorPor : null,
+          para: d.EnviadoProveedorA ?? null,
+          comentario: d.ComentarioProveedor ?? null,
+          veces: Number(d.EnviosProveedor) || 0,
+        }
+      : null,
+    // Decisión de contabilidad: reclamar (envío y respuesta del proveedor) o no reclamar (cerrado).
+    Decision: d.DecisionConta
+      ? {
+          decision: d.DecisionConta,
+          at: aIso(d.DecisionContaAt),
+          por: d.DecisionContaPor ?? null,
+          porNombre: d.DecisionContaPor ? nombres.get(d.DecisionContaPor) || d.DecisionContaPor : null,
+          comentario: d.DecisionContaComentario ?? null,
+        }
+      : null,
+    // Respuesta del proveedor: aprobado (nota de crédito) o no aprobado (registro SAP + documento).
+    Respuesta: d.RespuestaAt
+      ? {
+          estado: d.Estado,
+          at: aIso(d.RespuestaAt),
+          por: d.RespuestaPor ?? null,
+          porNombre: d.RespuestaPor ? nombres.get(d.RespuestaPor) || d.RespuestaPor : null,
+          registroSap: d.RegistroSap ?? null,
+          archivoNombre: d.RespuestaArchivoNombre ?? null,
+          tieneArchivo: Boolean(d.RespuestaArchivo),
+        }
+      : null,
   };
 }

@@ -5,7 +5,7 @@
 // más versión en texto. Solo colores del portal: las decisiones y la
 // validación se distinguen por la palabra, no por verde o rojo.
 import { env } from '../../config/env.js';
-import { COMENTARIO_AUTO_APROBADO } from '../reclamos/tipos.js';
+import { COMENTARIO_AUTO_APROBADO, USUARIO_SISTEMA } from '../reclamos/tipos.js';
 import { documento, parrafo, tituloSeccion, bloque, boton, tablaDatosHtml, esc, conDato, COLOR, FUENTE } from './diseno.js';
 
 const TEXTO = COLOR.texto;
@@ -54,6 +54,9 @@ export const TIPO_LABEL = {
   devolucion: 'Devolución al proveedor',
 };
 const STATUS_LABEL = { resuelto: 'Confirmado por compradora', rechazado: 'Rechazado', pendiente: 'Pendiente', notificado: 'Notificado' };
+/** Cerrado por el sistema (todo se aprobó por su tipo): no lo confirmó la compradora. */
+const resultadoTexto = (r) =>
+  r.Status === 'resuelto' && r.DecisionBy === USUARIO_SISTEMA ? 'Cerrado automáticamente' : STATUS_LABEL[r.Status] || r.Status;
 const DEC_LABEL = { aprobado: 'Aprobado', rechazado: 'Rechazado', pendiente: 'Sin decidir' };
 const DEC_COLOR = { aprobado: TEXTO, rechazado: TEXTO, pendiente: SUAVE };
 
@@ -93,7 +96,7 @@ export function plantillaReclamoContabilidad(r, lineas, { remitente, archivos = 
   const aprobados = lineas.filter((l) => l.DecStatus === 'aprobado').length;
   const rechazados = lineas.filter((l) => l.DecStatus === 'rechazado').length;
   const decision = conDato([
-    ['Resultado', STATUS_LABEL[r.Status] || r.Status],
+    ['Resultado', resultadoTexto(r)],
     ['Decidido por', r.DecisionBy ? `${r.DecisionByNombre || r.DecisionBy} · ${fecha(r.DecisionAt)}` : null],
     ['Productos', `${lineas.length} en total · ${aprobados} aprobado(s) · ${rechazados} rechazado(s)`],
     ['Comentario', r.Comentario],
@@ -151,14 +154,14 @@ export function plantillaReclamoContabilidad(r, lineas, { remitente, archivos = 
     asunto,
     modulo: 'RECLAMOS · CONTABILIDAD',
     titulo: `Reclamo ${r.Numero} para contabilidad`,
-    subtitulo: [r.Proveedor, STATUS_LABEL[r.Status] || r.Status].filter(Boolean).join(' · '),
+    subtitulo: [r.Proveedor, resultadoTexto(r)].filter(Boolean).join(' · '),
     vistaPrevia: `${de} te envía el reclamo ${r.Numero} ya revisado, con sus productos y archivos.`,
     bloques: [
       parrafo(`${esc(de)} te envía este reclamo ya revisado, con sus productos y los archivos del reclamo adjuntos.`, { arriba: 22 }),
       boton({ texto: `Abrir ${r.Numero} en el portal`, enlace }),
       tituloSeccion('Datos del reclamo'),
       bloque(tablaDatosHtml(datos), { arriba: 10 }),
-      tituloSeccion('Decisión de la compradora'),
+      tituloSeccion(r.DecisionBy === USUARIO_SISTEMA ? 'Decisión (aprobación automática)' : 'Decisión de la compradora'),
       bloque(tablaDatosHtml(decision), { arriba: 10 }),
       tituloSeccion(`Productos (${lineas.length})`),
       bloque(
@@ -176,7 +179,7 @@ export function plantillaReclamoContabilidad(r, lineas, { remitente, archivos = 
   });
 
   const texto = [
-    `Reclamo ${r.Numero} para contabilidad · ${STATUS_LABEL[r.Status] || r.Status}`,
+    `Reclamo ${r.Numero} para contabilidad · ${resultadoTexto(r)}`,
     '',
     `${de} te envía este reclamo ya revisado, con sus productos y los archivos del reclamo adjuntos.`,
     ...(enlace ? ['', `Abrir el reclamo en el portal: ${enlace}`] : []),
@@ -184,7 +187,7 @@ export function plantillaReclamoContabilidad(r, lineas, { remitente, archivos = 
     'DATOS DEL RECLAMO',
     ...datos.map(([k, v]) => `${k}: ${v}`),
     '',
-    'DECISIÓN DE LA COMPRADORA',
+    r.DecisionBy === USUARIO_SISTEMA ? 'DECISIÓN (APROBACIÓN AUTOMÁTICA)' : 'DECISIÓN DE LA COMPRADORA',
     ...decision.map(([k, v]) => `${k}: ${v}`),
     '',
     `PRODUCTOS (${lineas.length})`,

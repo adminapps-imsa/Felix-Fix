@@ -83,6 +83,8 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!res.ok) {
     sesionVencida(res.status);
     const p = payload as { message?: string; detalles?: DetallesValidacion } | undefined;
+    // 413 lo responde Nginx (sin JSON) cuando lo que se sube pesa más de lo que deja pasar.
+    if (res.status === 413 && !p?.message) throw new ApiError(413, 'Los archivos pesan demasiado para subirlos juntos. Quita alguno o achícalo y vuelve a intentar.', payload);
     throw new ApiError(res.status, mensajeConDetalles(p?.message || res.statusText, p?.detalles), payload);
   }
   return payload as T;

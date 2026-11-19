@@ -32,6 +32,8 @@ export function permisos(usuario) {
     puedeCorregirCualquiera: tienePermiso(usuario, 'configuracion.administrar'),
     // Por rol, no por quién lo creó (2026-11-13).
     puedeCorregir: tienePermiso(usuario, 'configuracion.administrar') || tienePermiso(usuario, 'reclamos.corregir'),
+    // Torre de Control: abrir para editar sus reclamos de CEDI (y corregir los que abrió así).
+    puedeEditarCedi: tienePermiso(usuario, 'reclamos.editar_cedi'),
     puedeCambiarRetiro: tienePermiso(usuario, 'configuracion.administrar') || tienePermiso(usuario, 'reclamos.cambiar_retiro'),
     puedeAdjuntarAbiertos: tienePermiso(usuario, 'reclamos.adjuntar_abiertos'),
     // Supervisor GOF: devolver al creador en cualquier estado antes de contabilidad.
