@@ -5,7 +5,9 @@ import { motivoNoResponder, motivoNoQuitarRespuesta } from '../../src/domain/con
 const pendiente = { Estado: 'pendiente' };
 const reclamar = { Estado: 'pendiente', DecisionConta: 'reclamar' };
 
-test('respuesta del proveedor: aprobado o no, pide el registro SAP; el documento es opcional', () => {
+test('respuesta del proveedor: aprobado pide n.º de nota de crédito, no aprobado n.º de registro SAP; el documento es opcional', () => {
+  assert.match(motivoNoResponder(reclamar, { respuesta: 'aprobado', registroSap: '' }).mensaje, /nota de crédito/);
+  assert.match(motivoNoResponder(reclamar, { respuesta: 'no_aprobado', registroSap: '' }).mensaje, /registro SAP/);
   for (const respuesta of ['aprobado', 'no_aprobado']) {
     assert.equal(motivoNoResponder(reclamar, { respuesta, registroSap: '5100012345' }), null);
     assert.equal(motivoNoResponder(reclamar, { respuesta, registroSap: '' }).code, 'FALTA_REGISTRO_SAP');

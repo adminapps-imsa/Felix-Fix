@@ -6,7 +6,7 @@
 //   la decisión se quita si fue un error (no después de enviarlo al proveedor ni con respuesta).
 //
 // Respuesta del proveedor a la nota de débito (2026-11-18):
-//   pendiente --(aprobado: registro SAP + documento SAP opcional)----> aprobado
+//   pendiente --(aprobado: n.º de nota de crédito + documento opcional)-> aprobado
 //   pendiente --(no aprobado: registro SAP + documento SAP opcional)-> no_aprobado
 //   aprobado / no_aprobado --(quitar, si fue un error)----------> pendiente
 
@@ -16,7 +16,13 @@ export const DECISIONES = ['reclamar', 'no_reclamar'];
 export const MOTIVO_SIN_RECLAMAR = { mensaje: 'Primero marca «Reclamar» para este documento.', code: 'SIN_RECLAMAR' };
 export const ETIQUETA_RESPUESTA = { aprobado: 'Aprobado por el proveedor', no_aprobado: 'No aprobado por el proveedor' };
 
-/** Número de registro SAP: solo dígitos y letras, de 4 a 20. */
+/**
+ * Número que pide cada respuesta (se guarda en RegistroSap): aprobado, el de la
+ * nota de crédito; no aprobado, el de registro SAP (2026-11-19).
+ */
+export const NOMBRE_NUMERO = { aprobado: 'número de nota de crédito', no_aprobado: 'número de registro SAP' };
+
+/** Número de registro SAP o de nota de crédito: solo dígitos y letras, de 4 a 20. */
 const REGISTRO_SAP_RE = /^[A-Z0-9-]{4,20}$/i;
 
 /**
@@ -27,10 +33,11 @@ export function motivoNoResponder(documento, { respuesta, registroSap }) {
   if (documento.DecisionConta !== 'reclamar') return MOTIVO_SIN_RECLAMAR;
   if (documento.Estado !== 'pendiente') return { mensaje: 'Este documento ya tiene la respuesta del proveedor; quítala primero si fue un error.', code: 'YA_RESPONDIDO' };
   if (!RESPUESTAS.includes(respuesta)) return { mensaje: 'Elige si el proveedor aprobó o no.', code: 'RESPUESTA_INVALIDA' };
-  // Aprobado o no: el número de registro SAP es obligatorio; el documento SAP (archivo) es opcional (2026-11-19).
+  // El número es obligatorio (nota de crédito si aprobó, registro SAP si no); el documento es opcional (2026-11-19).
+  const nombre = NOMBRE_NUMERO[respuesta];
   const n = String(registroSap ?? '').trim();
-  if (!n) return { mensaje: 'Escribe el número de registro SAP.', code: 'FALTA_REGISTRO_SAP' };
-  if (!REGISTRO_SAP_RE.test(n)) return { mensaje: `El número de registro SAP no es válido («${n}»): solo números y letras, de 4 a 20.`, code: 'REGISTRO_SAP_INVALIDO' };
+  if (!n) return { mensaje: `Escribe el ${nombre}.`, code: 'FALTA_REGISTRO_SAP' };
+  if (!REGISTRO_SAP_RE.test(n)) return { mensaje: `El ${nombre} no es válido («${n}»): solo números y letras, de 4 a 20.`, code: 'REGISTRO_SAP_INVALIDO' };
   return null;
 }
 
