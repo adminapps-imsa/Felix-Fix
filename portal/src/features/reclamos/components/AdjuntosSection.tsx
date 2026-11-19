@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type React from 'react';
 import { AlertTriangle, Download, Eye, FileSpreadsheet, FileText, Image as ImageIcon, Loader2, Paperclip, RefreshCw, Trash2, Upload, X } from 'lucide-react';
 import { GlassCard } from '../../../components/ui/GlassCard';
+import { comprimirImagen } from '../../../lib/comprimirImagen';
 import { Button } from '../../../components/ui/Button';
 import { EstadoVacio } from '../../../components/ui/EstadoVacio';
 import { useAvisos } from '../../../components/ui/Avisos';
@@ -87,10 +88,14 @@ export function AdjuntosSection({
     guardarBlob(await apiReclamos.descargarAdjunto(token, idx, adj.filename), adj.originalname);
 
   const handleSubir = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
+    const elegidos = Array.from(e.target.files || []);
     e.target.value = '';
     setError(null);
     setRechazos([]);
+    // Las fotos se achican antes de subir (una de celular pesa 3-8 MB y queda en <1 MB);
+    // así caben y el correo a contabilidad no se llena de fotos pesadas (2026-11-19).
+    if (elegidos.some((f) => f.type.startsWith('image/'))) setSubiendo('Preparando fotos…');
+    const files = await Promise.all(elegidos.map((f) => comprimirImagen(f)));
     const fallidos: { nombre: string; titulo: string; detalle: string | null }[] = [];
     const grandes = files.filter((f) => f.size > ADJUNTO_MAX_MB * 1024 * 1024);
     for (const f of grandes) fallidos.push({ nombre: f.name, titulo: `Pesa ${(f.size / 1024 / 1024).toFixed(1)} MB (máximo ${ADJUNTO_MAX_MB} MB).`, detalle: null });
