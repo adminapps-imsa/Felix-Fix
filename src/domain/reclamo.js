@@ -203,9 +203,18 @@ export function motivoNotaNoCuadra(lineas, numeroDocumento) {
     };
   }
   if (noEnReclamo.length) {
+    // Cada fila que no está, con su material, y el producto del reclamo que más se le parece
+    // (mismo modelo): casi siempre es la talla o el color mal escritos en el Excel.
+    const detalle = (l) => {
+      const fila = `«${l.descripcion || '—'}»${l.material ? ` (material ${l.material})` : ''}`;
+      if (!l.parecido) return fila;
+      const p = l.parecido;
+      return `${fila}: parece el producto #${p.posicion} del reclamo${p.codigoBarra ? ` (código de barras ${p.codigoBarra})` : ''}, que en el Excel dice «${p.descripcion || '—'}»; revisa la talla o el color en el Excel`;
+    };
     return {
-      mensaje: `${base} Trae ${noEnReclamo.length} producto(s) que no están en este reclamo: ${listaCorta(noEnReclamo, (l) => l.descripcion || l.material)}.`,
+      mensaje: `${base} Trae ${noEnReclamo.length} producto(s) que no están en este reclamo: ${listaCorta(noEnReclamo, detalle)}.`,
       code: 'PDF_PRODUCTO_NO_EN_RECLAMO',
+      noEnReclamo: noEnReclamo.map((l) => ({ material: l.material ?? null, descripcion: l.descripcion ?? null, parecido: l.parecido ?? null })),
     };
   }
   return null;

@@ -19,6 +19,11 @@
 //   WANDA "DRESS OPEN, BLACK PU, 9.5
 // Solo letras exige la comilla justo después, para no tomar como código la
 // primera palabra de una descripción suelta ("TROUSERS BOY, RED, 7").
+//
+// Desde el 2026-11-19 manda el código de barras: si se tienen los materiales SAP
+// de los códigos de barras del reclamo, cada fila se cruza primero por material
+// y la descripción queda de respaldo (el Excel puede traer la talla o el color
+// mal escritos, p. ej. «KKL» por «XXL» en REC-000021).
 
 const DECISIONES = new Set(['aprobado', 'rechazado']);
 
@@ -48,9 +53,13 @@ const aNumeroONull = (v) => (v === null || v === undefined || v === '' || !Numbe
 /**
  * @param filas          [{ material, descripcion, cantidad, valor, pagina }] del PDF
  * @param lineasReclamo  [{ LineaId, Posicion, CodigoBarra, Cantidad, Tipo, DescripcionExcel, DecStatus }]
+ * @param materiales     (opcional) Map<código de barras, material SAP> de los productos del
+ *                       reclamo: la fila del PDF que no cuadra por descripción se busca por
+ *                       material (la descripción del Excel puede venir mal escrita, p. ej.
+ *                       talla «KKL» por «XXL» en REC-000021, 2026-11-19).
  * @returns {{ lineas: Array<object>, validacion: object }}
  */
-export function cruzar(filas, lineasReclamo) {
+export function cruzar(filas, lineasReclamo, materiales = new Map()) {
   const porClave = new Map();
   for (const l of lineasReclamo || []) {
     const k = claveProducto(l.DescripcionExcel);
@@ -62,12 +71,42 @@ export function cruzar(filas, lineasReclamo) {
   // Si una clave tiene varias líneas: primero la de la misma cantidad, si no
   // la primera libre (en orden de posición). Nunca se usa dos veces la misma.
   const usadas = new Set();
-  const lineas = (Array.isArray(filas) ? filas : []).map((f) => {
-    const cantidadPdf = aNumeroONull(f.cantidad);
-    const libres = (porClave.get(claveProducto(f.descripcion)) || []).filter((l) => !usadas.has(l.LineaId));
+  const elegir = (candidatas, cantidadPdf) => {
+    const libres = candidatas.filter((l) => !usadas.has(l.LineaId));
     const linea = libres.find((l) => mismoNumero(l.Cantidad, cantidadPdf)) || libres[0] || null;
     if (linea) usadas.add(linea.LineaId);
+    return linea;
+  };
+  const lista = Array.isArray(filas) ? filas : [];
+  // 1.º por material SAP del código de barras (manda); 2.º, las que no cuadraron, por descripción.
+  const elegidas = lista.map(() => null);
+  if (materiales.size) {
+    lista.forEach((f, i) => {
+      if (!f.material) return;
+      const m = normMaterial(f.material);
+      const candidatas = (lineasReclamo || []).filter((l) => {
+        const mat = l.CodigoBarra ? materiales.get(String(l.CodigoBarra).trim()) : null;
+        return mat && normMaterial(mat) === m;
+      });
+      elegidas[i] = elegir(candidatas, aNumeroONull(f.cantidad));
+    });
+  }
+  lista.forEach((f, i) => {
+    if (!elegidas[i]) elegidas[i] = elegir(porClave.get(claveProducto(f.descripcion)) || [], aNumeroONull(f.cantidad));
+  });
+  // Para el mensaje de error: el producto del reclamo sin cruzar con el mismo modelo
+  // (código) que la fila que no está, o sea, probablemente la misma prenda mal escrita.
+  const modelo = (d) => claveProducto(d)?.split('|')[0] ?? null;
+  const parecidoDe = (f) => {
+    const m = modelo(f.descripcion);
+    if (!m) return null;
+    const l = (lineasReclamo || []).find((x) => !usadas.has(x.LineaId) && modelo(x.DescripcionExcel) === m);
+    return l ? { posicion: Number(l.Posicion), codigoBarra: l.CodigoBarra ?? null, descripcion: l.DescripcionExcel ?? null } : null;
+  };
 
+  const lineas = lista.map((f, i) => {
+    const cantidadPdf = aNumeroONull(f.cantidad);
+    const linea = elegidas[i];
     const cantidadReclamo = linea ? aNumeroONull(linea.Cantidad) : null;
     return {
       material: f.material ?? null,
@@ -81,6 +120,7 @@ export function cruzar(filas, lineasReclamo) {
       decision: linea && DECISIONES.has(linea.DecStatus) ? linea.DecStatus : null,
       cantidadReclamo,
       resultado: !linea ? 'no_en_reclamo' : mismoNumero(cantidadReclamo, cantidadPdf) ? 'ok' : 'cantidad_distinta',
+      ...(!linea && { parecido: parecidoDe(f) }),
     };
   });
 
@@ -149,8 +189,9 @@ export function faltantesContra911(faltantes, filas, materiales = new Map()) {
     const m = l.codigoBarra ? materiales.get(String(l.codigoBarra).trim()) : null;
     let id = null;
     let en911 = 0;
-    if (k && porClave.has(k)) [id, en911] = [`K:${k}`, porClave.get(k)];
-    else if (m && porMaterial.has(normMaterial(m))) [id, en911] = [`M:${normMaterial(m)}`, porMaterial.get(normMaterial(m))];
+    // Manda el código de barras (material SAP); la descripción del Excel es el respaldo.
+    if (m && porMaterial.has(normMaterial(m))) [id, en911] = [`M:${normMaterial(m)}`, porMaterial.get(normMaterial(m))];
+    else if (k && porClave.has(k)) [id, en911] = [`K:${k}`, porClave.get(k)];
     if (!id) {
       (k || m ? noEstan : sinVerificar).push(l);
       continue;

@@ -213,3 +213,38 @@ test('REC-000011: código de modelo solo letras (WANDA) cruza con color y talla'
   assert.equal(validacion.coinciden, 4);
   assert.deepEqual(r.map((l) => l.posicion), [1, 2, 3, 4]);
 });
+
+test('cruce: si la descripción del Excel está mal escrita, cuadra por material SAP (REC-000021, talla KKL por XXL)', async () => {
+  const { cruzar } = await import('../../src/services/contabilidad/validarDocumento.js');
+  const filas = [
+    { material: '345-300109645005', descripcion: 'OPKB0300 "POLO P/H M/C, TRUE BLACK, XXL', cantidad: 1, valor: 26.78 },
+    { material: '345-300124330003', descripcion: 'OPKB0015 "POLO P/H M/C 62, TRUE BLACK, L', cantidad: 1, valor: 30.34 },
+  ];
+  const lineas = [
+    { LineaId: 12, Posicion: 12, CodigoBarra: '9246644733', Cantidad: 1, Tipo: 'sobrante_real', DescripcionExcel: 'OPKB0015 "POLO P/H M/C 62, TRUE BLACK, L', DecStatus: 'aprobado' },
+    { LineaId: 13, Posicion: 13, CodigoBarra: '799016397524', Cantidad: 1, Tipo: 'sobrante_real', DescripcionExcel: 'OPKB0300 "POLO P/H M/C, TRUE BLACK, KKL', DecStatus: 'aprobado' },
+  ];
+  // Solo por descripción: la de talla mal escrita no está en el reclamo.
+  assert.equal(cruzar(filas, lineas).lineas[0].resultado, 'no_en_reclamo');
+  // Con el material SAP del código de barras, cuadra con el producto 13.
+  const conSap = cruzar(filas, lineas, new Map([['799016397524', '000000300109645005'], ['9246644733', '000000300124330003']]));
+  assert.deepEqual(conSap.lineas.map((l) => [l.posicion, l.resultado]), [[13, 'ok'], [12, 'ok']]);
+  assert.equal(conSap.validacion.estado, 'ok');
+});
+
+test('912 que no cuadra: el error dice la fila del PDF, su material y el producto del reclamo que se le parece', async () => {
+  const { cruzar } = await import('../../src/services/contabilidad/validarDocumento.js');
+  const { motivoNotaNoCuadra } = await import('../../src/domain/reclamo.js');
+  const filas = [{ material: '345-300109645005', descripcion: 'OPKB0300 "POLO P/H M/C, TRUE BLACK, XXL', cantidad: 1, valor: 26.78 }];
+  const lineas = [
+    { LineaId: 13, Posicion: 13, CodigoBarra: '799016397524', Cantidad: 1, Tipo: 'sobrante_real', DescripcionExcel: 'OPKB0300 "POLO P/H M/C, TRUE BLACK, KKL', DecStatus: 'aprobado' },
+  ];
+  // Sin SAP (sin materiales): no cuadra y el mensaje señala el producto #13 y qué revisar.
+  const m = motivoNotaNoCuadra(cruzar(filas, lineas).lineas, '4904534418');
+  assert.equal(m.code, 'PDF_PRODUCTO_NO_EN_RECLAMO');
+  assert.match(m.mensaje, /material 345-300109645005/);
+  assert.match(m.mensaje, /producto #13 del reclamo \(código de barras 799016397524\)/);
+  assert.match(m.mensaje, /KKL.*revisa la talla o el color/);
+  // Con el material del código de barras manda SAP: cuadra.
+  assert.equal(motivoNotaNoCuadra(cruzar(filas, lineas, new Map([['799016397524', '300109645005']])).lineas, '4904534418'), null);
+});

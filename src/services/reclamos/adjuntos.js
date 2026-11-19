@@ -8,7 +8,7 @@ import { extraerImagenesExcel, borrarArchivos } from './excelImages.js';
 import { tienePermiso } from '../acceso/permisos.js';
 import * as dominio from '../../domain/reclamo.js';
 import { leerNotaPdf } from '../contabilidad/leerNotaPdf.js';
-import { cruzar } from '../contabilidad/validarDocumento.js';
+import { cruzarConSap } from '../contabilidad/cruce.js';
 import { badRequest, conflict, forbidden, notFound } from '../../utils/httpError.js';
 import { logger } from '../../utils/logger.js';
 import { reclamoArchivoPath } from '../../config/almacenamiento.js';
@@ -61,7 +61,7 @@ export async function verificarPuedeAdjuntar(token, usuario) {
  */
 async function validarPdfContraDecisiones(token, nota) {
   if (!nota.legible) return { notaAprobada: false };
-  const { lineas } = cruzar(nota.filas, await repo.listarLineas(token));
+  const { lineas } = await cruzarConSap(nota.filas, await repo.listarLineas(token));
   const motivo = dominio.motivoNotaNoCuadra(lineas, nota.numeroDocumento);
   if (motivo) {
     const { mensaje, ...extra } = motivo;
