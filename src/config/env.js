@@ -88,8 +88,8 @@ export const env = {
   reclamos: {
     // Quién puede ver, crear, decidir o eliminar: Configuración → Roles y permisos.
     localDir: process.env.RECLAMOS_LOCAL_DIR || `./uploads/${dbSchema}/reclamos`,
-    // Por archivo de un reclamo (Excel, PDF, foto). 30 MB desde el 2026-11-19 (antes 15).
-    maxSizeMb: Number(process.env.RECLAMOS_MAX_SIZE_MB) || 30,
+    // Por archivo de un reclamo (Excel, PDF, foto). 50 MB desde el 2026-11-19 (antes 15; un archivo de 45 MB de Giovanni Labrador).
+    maxSizeMb: Number(process.env.RECLAMOS_MAX_SIZE_MB) || 50,
     // Permite crear sin documento SAP SOLO fuera de producción (QA/pruebas).
     sapDocOpcional: bool(process.env.RECLAMOS_SAP_DOC_OPCIONAL, false),
     // Catálogo compradora -> proveedor que mantiene el portal FelixApproval.
