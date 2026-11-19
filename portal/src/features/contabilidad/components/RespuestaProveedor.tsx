@@ -15,15 +15,19 @@ const ACEPTA = 'application/pdf,image/jpeg,image/png,image/webp';
 const TIPOS = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
 const REGISTRO_SAP_RE = /^[A-Z0-9-]{4,20}$/i;
 
+/** Número que pide cada respuesta: nota de crédito si aprobó, registro SAP si no (igual que el backend). */
+const NOMBRE_NUMERO: Record<Respuesta, string> = { aprobado: 'número de nota de crédito', no_aprobado: 'número de registro SAP' };
+const ETIQUETA_NUMERO: Record<Respuesta, string> = { aprobado: 'Nota de crédito', no_aprobado: 'Registro SAP' };
+
 const OPCIONES: Array<{ id: Respuesta; titulo: string; detalle: string }> = [
-  { id: 'aprobado', titulo: 'Aprobado', detalle: 'El proveedor aceptó: número de registro SAP y, si lo tienes, el documento.' },
+  { id: 'aprobado', titulo: 'Aprobado', detalle: 'El proveedor aceptó: número de nota de crédito y, si lo tienes, el documento.' },
   { id: 'no_aprobado', titulo: 'No aprobado', detalle: 'El proveedor no aceptó: número de registro SAP y, si lo tienes, el documento.' },
 ];
 
 /**
  * Respuesta del proveedor a la nota de débito (2026-11-18). Contabilidad elige:
- * Aprobado o No aprobado, con el número de registro SAP (obligatorio) y el
- * documento SAP (opcional, 2026-11-19).
+ * Aprobado (número de nota de crédito) o No aprobado (número de registro SAP),
+ * el número obligatorio y el documento opcional (2026-11-19).
  * Con la respuesta el documento deja de estar pendiente. Se puede quitar si fue un error.
  */
 export function RespuestaProveedor({ doc, onActualizado }: { doc: DocumentoContabilidadDetalle; onActualizado: (d: DocumentoContabilidadDetalle) => void }) {
@@ -55,7 +59,7 @@ export function RespuestaProveedor({ doc, onActualizado }: { doc: DocumentoConta
           </span>
           {r.registroSap && (
             <span>
-              Registro SAP: <strong className="font-mono">{r.registroSap}</strong>
+              {ETIQUETA_NUMERO[r.estado]}: <strong className="font-mono">{r.registroSap}</strong>
             </span>
           )}
           <span className="text-xs opacity-75">
@@ -66,7 +70,7 @@ export function RespuestaProveedor({ doc, onActualizado }: { doc: DocumentoConta
         <div className="flex flex-wrap gap-2">
           {r.tieneArchivo && (
             <Button variant="secondary" onClick={descargar}>
-              <Download size={15} /> Documento SAP
+              <Download size={15} /> {aprobado ? 'Nota de crédito' : 'Documento SAP'}
               {r.archivoNombre && <span className="max-w-[14rem] truncate font-normal opacity-70">· {r.archivoNombre}</span>}
             </Button>
           )}
@@ -105,8 +109,9 @@ export function RespuestaProveedor({ doc, onActualizado }: { doc: DocumentoConta
     e.preventDefault();
     if (!respuesta) return setError('Elige si el proveedor aprobó o no.');
     const registro = registroSap.trim().toUpperCase();
-    if (!registro) return setError('Escribe el número de registro SAP.');
-    if (!REGISTRO_SAP_RE.test(registro)) return setError('El número de registro SAP solo lleva números y letras, de 4 a 20.');
+    const nombre = NOMBRE_NUMERO[respuesta];
+    if (!registro) return setError(`Escribe el ${nombre}.`);
+    if (!REGISTRO_SAP_RE.test(registro)) return setError(`El ${nombre} solo lleva números y letras, de 4 a 20.`);
     setGuardando(true);
     setError(null);
     try {
@@ -161,13 +166,13 @@ export function RespuestaProveedor({ doc, onActualizado }: { doc: DocumentoConta
         </div>
 
         {respuesta && (
-          <Field label="Número de registro SAP">
+          <Field label={respuesta === 'aprobado' ? 'Número de nota de crédito' : 'Número de registro SAP'}>
             <Input value={registroSap} onChange={(e) => setRegistroSap(e.target.value)} maxLength={20} placeholder="Ej. 5100012345" className="font-mono" />
           </Field>
         )}
 
         {respuesta && (
-          <Field label="Documento SAP" opcional>
+          <Field label={respuesta === 'aprobado' ? 'Documento de la nota de crédito' : 'Documento SAP'} opcional>
             <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-black/15 px-4 py-3 text-sm hover:bg-black/[0.03] dark:border-white/15 dark:hover:bg-white/[0.05]">
               <FileUp size={18} className="shrink-0 opacity-70" />
               <span className="min-w-0">
