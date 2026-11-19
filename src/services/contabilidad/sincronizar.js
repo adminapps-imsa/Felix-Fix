@@ -11,7 +11,7 @@ import * as repo from '../../repositories/contabilidadRepository.js';
 import { reclamoArchivoPath } from '../../config/almacenamiento.js';
 import { logger } from '../../utils/logger.js';
 import { leerNotaPdf } from './leerNotaPdf.js';
-import { cruzar } from './validarDocumento.js';
+import { cruzarConSap } from './cruce.js';
 
 /**
  * @param reclamo  fila del reclamo (con AdjuntosExtra)
@@ -33,7 +33,7 @@ export async function calcularDocumentos(reclamo, lineas) {
     if (nota.legible && nota.totalCuadra === false) {
       logger.warn({ adjunto: adj.filename, documento: nota.numeroDocumento, total: nota.total }, 'El total impreso de la nota de débito no es la suma de las filas leídas');
     }
-    const { lineas: lineasDoc, validacion } = cruzar(nota.legible ? nota.filas : [], lineas);
+    const { lineas: lineasDoc, validacion } = await cruzarConSap(nota.legible ? nota.filas : [], lineas);
     documentos.push({
       adjuntoFilename: adj.filename,
       adjuntoNombre: adj.originalname || adj.filename,
@@ -84,7 +84,7 @@ export async function revalidarPendientes() {
   for (const d of docs) {
     const guardadas = parseJsonArray(d.Lineas);
     const filas = guardadas.map((l) => ({ material: l.material, descripcion: l.descripcion, cantidad: l.cantidadPdf, valor: l.valor }));
-    const { lineas, validacion } = cruzar(filas, await reclamosRepo.listarLineas(d.ReclamoToken));
+    const { lineas, validacion } = await cruzarConSap(filas, await reclamosRepo.listarLineas(d.ReclamoToken));
     if (JSON.stringify(validacion) === d.Validacion) continue;
     if (await repo.actualizarValidacion(d.DocumentoId, { lineas, validacion })) cambiados.push({ documentoId: d.DocumentoId, reclamoId: d.ReclamoId, estado: validacion.estado });
   }

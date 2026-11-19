@@ -247,16 +247,14 @@ async function validarPdfsSap(docs, pdfs, usuario) {
 /**
  * Los faltantes deben estar en los 911 subidos (mismo producto y cantidad).
  * Si algún PDF no se pudo leer, no se valida (no se frena el reclamo por eso).
- * El material SAP solo se busca para los que no aparecen por descripción.
+ * Manda el código de barras: se cruza por su material SAP y la descripción del
+ * Excel queda de respaldo (si SAP no responde, solo por descripción).
  */
 export async function exigirFaltantesEn911(lineas, pdfsSap) {
   const faltantes = lineas.filter((l) => l.tipo === 'faltante_real');
   if (!faltantes.length || !pdfsSap.filas.length || !pdfsSap.legibles) return;
-  let res = faltantesContra911(faltantes, pdfsSap.filas);
-  if (res.noEstan.length || res.sinVerificar.length || res.cantidadDistinta.length) {
-    const sap = await materialesDeCodigos(faltantes.map((l) => l.codigoBarra));
-    res = faltantesContra911(faltantes, pdfsSap.filas, sap.materiales);
-  }
+  const sap = await materialesDeCodigos(faltantes.map((l) => l.codigoBarra));
+  const res = faltantesContra911(faltantes, pdfsSap.filas, sap.disponible ? sap.materiales : new Map());
   const motivo = motivoFaltantesNoEn911(res);
   if (motivo) {
     const { mensaje, ...extra } = motivo;
