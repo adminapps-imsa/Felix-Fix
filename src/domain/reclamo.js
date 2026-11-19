@@ -684,3 +684,25 @@ export function estadoTrasAjuste(reclamo, lineas, tiposSoloNotificacion) {
   const status = estadoAlCrear({ soloNotificacion: esSoloNotificacion({ tipo: Tipo, lineas, conDocumentoSap: tieneDocumentoSap(reclamo) }, tiposSoloNotificacion), lineas });
   return { status, decisionSistema: status === 'resuelto' ? true : false };
 }
+
+const PRIORIDAD_ADJUNTO = { pdf: 0, excel: 1, imagen: 2 };
+
+/**
+ * Qué archivos van adjuntos en el correo a contabilidad sin pasar de `maxBytes`
+ * (2026-11-19): primero los PDF (notas de débito de SAP), luego el Excel y al
+ * final las fotos. Los que no caben no frenan el envío: se citan en el correo
+ * como «disponible en el portal». -> { adjuntos, enPortal }
+ */
+export function repartirAdjuntos(archivos, maxBytes) {
+  const ordenados = [...archivos].sort((a, b) => (PRIORIDAD_ADJUNTO[a.tipo] ?? 1) - (PRIORIDAD_ADJUNTO[b.tipo] ?? 1));
+  const adjuntos = [];
+  const enPortal = [];
+  let usado = 0;
+  for (const a of ordenados) {
+    if (usado + a.size <= maxBytes) {
+      adjuntos.push(a);
+      usado += a.size;
+    } else enPortal.push(a);
+  }
+  return { adjuntos, enPortal };
+}

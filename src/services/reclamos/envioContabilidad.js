@@ -47,6 +47,7 @@ async function archivosParaContabilidad(r) {
       guardado: a.filename,
       nombre: nombreDeReclamo(numero, a.originalname || a.filename),
       descripcion: a.tipo === 'pdf' ? 'PDF del reclamo' : a.tipo === 'imagen' ? 'Foto del reclamo' : 'Excel adjunto del reclamo',
+      tipo: a.tipo,
     });
   }
   const archivos = [];
@@ -60,10 +61,11 @@ async function archivosParaContabilidad(r) {
       continue;
     }
     total += st.size;
-    archivos.push({ filename: c.nombre, path: ruta, descripcion: c.descripcion });
+    archivos.push({ filename: c.nombre, path: ruta, descripcion: c.descripcion, size: st.size, tipo: c.tipo ?? 'excel' });
   }
   return { archivos, faltantes, total };
 }
+
 
 /**
  * Las notas de débito marcadas como validadas (`notaAprobada`) se vuelven a
@@ -114,15 +116,20 @@ async function enviar(token, usuario) {
       'No hay a quién enviarlo: ningún usuario con correo tiene un rol con el permiso "Recibir reclamos en contabilidad". Asígnalo en Configuración.'
     );
   }
-  const { archivos, faltantes, total } = await archivosParaContabilidad(r);
+  const { archivos: todos, faltantes, total } = await archivosParaContabilidad(r);
   if (faltantes.length) {
     throw conflict(`Faltan archivos del reclamo en el servidor y no se puede enviar completo: ${faltantes.join(', ')}.`);
   }
-  if (total > env.correo.maxAdjuntosMb * 1024 * 1024) {
-    throw badRequest(
-      `Los archivos del reclamo suman ${(total / 1048576).toFixed(1)} MB y el máximo para un correo es ${env.correo.maxAdjuntosMb} MB.`
-    );
+  // Si todo junto pasa del máximo del correo, no se bloquea: van los PDF de SAP
+  // primero y lo que no cabe queda citado como «disponible en el portal».
+  const { adjuntos, enPortal } = dominio.repartirAdjuntos(todos, env.correo.maxAdjuntosMb * 1024 * 1024);
+  if (enPortal.length) {
+    logger.info({ reclamo: numeroReclamo(r.ReclamoId), totalMb: (total / 1048576).toFixed(1), enPortal: enPortal.map((a) => a.filename) }, 'Archivos muy pesados para el correo a contabilidad: quedan en el portal');
   }
+  const archivos = [
+    ...adjuntos,
+    ...enPortal.map((a) => ({ ...a, descripcion: `${a.descripcion} — muy pesado para el correo: descárgalo en el portal`, enPortal: true })),
+  ];
 
   const [dto] = await conNombres([aDto(r)]);
   const lineas = await repo.listarLineas(token);
@@ -149,7 +156,7 @@ async function enviar(token, usuario) {
     asunto,
     html,
     texto,
-    adjuntos: archivos.map(({ filename, path: ruta }) => ({ filename, path: ruta })),
+    adjuntos: adjuntos.map(({ filename, path: ruta }) => ({ filename, path: ruta })),
   });
 
   // El correo ya salió: si falla el registro no se responde error (el usuario
