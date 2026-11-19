@@ -803,7 +803,7 @@ async function cambiarConComentario(token, { hacia, tipo, texto, usuario, verifi
         SELECT r.ReclamoId, r.Status, r.CreatedBy, r.SapDoc1, r.SapDoc2, r.SapDoc3, r.SapDocsExtra, r.AdjuntosExtra,
                r.EnviadoContabilidadAt, r.StatusAntesDevolucion, r.DevueltoPor, r.Tipo, r.Origen, r.DecisionBy,
                (SELECT COUNT(*) FROM ${S}.ReclamoLineas l WHERE l.ReclamoToken = r.Token AND l.DecStatus = 'pendiente') AS LineasPendientes,
-               (SELECT l.Tipo, l.DecStatus FROM ${S}.ReclamoLineas l WHERE l.ReclamoToken = r.Token FOR JSON PATH) AS LineasJson
+               (SELECT l.Tipo, l.DecStatus, l.DecBy FROM ${S}.ReclamoLineas l WHERE l.ReclamoToken = r.Token FOR JSON PATH) AS LineasJson
         FROM ${S}.Reclamos r WITH (UPDLOCK, HOLDLOCK) WHERE r.Token = @token`);
     const fila = recordset[0];
     if (!fila) {
@@ -829,9 +829,9 @@ async function cambiarConComentario(token, { hacia, tipo, texto, usuario, verifi
       .input('usuario', sql.VarChar(150), usuario).query(`
         DECLARE @n INT;
         UPDATE ${S}.Reclamos SET Status = @hacia, StatusAntesDevolucion = @antes, DevueltoPor = @devueltoPor,
-          -- Notificado que al reenviarlo queda con todo aprobado solo: cierre automático, como al crearlo.
-          DecisionBy = CASE WHEN @desde = 'devuelto' AND @hacia = 'resuelto' AND Status <> 'resuelto' AND StatusAntesDevolucion = 'notificado' THEN 'sistema' ELSE DecisionBy END,
-          DecisionAt = CASE WHEN @desde = 'devuelto' AND @hacia = 'resuelto' AND Status <> 'resuelto' AND StatusAntesDevolucion = 'notificado' THEN SYSUTCDATETIME() ELSE DecisionAt END
+          -- Notificado o pendiente que al reenviarlo queda con todo aprobado solo: cierre automático, como al crearlo.
+          DecisionBy = CASE WHEN @desde = 'devuelto' AND @hacia = 'resuelto' AND Status <> 'resuelto' AND StatusAntesDevolucion IN ('notificado', 'pendiente') THEN 'sistema' ELSE DecisionBy END,
+          DecisionAt = CASE WHEN @desde = 'devuelto' AND @hacia = 'resuelto' AND Status <> 'resuelto' AND StatusAntesDevolucion IN ('notificado', 'pendiente') THEN SYSUTCDATETIME() ELSE DecisionAt END
         WHERE Token = @token AND Status = @desde AND EnviadoContabilidadAt IS NULL;
         SET @n = @@ROWCOUNT;
         IF @n = 1
