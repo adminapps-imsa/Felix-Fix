@@ -306,6 +306,15 @@ test('al reenviar vuelve al estado de antes; cerrado con productos por decidir v
   assert.equal(estadoAlReenviar({ StatusAntesDevolucion: 'devuelto', LineasPendientes: 0 }), 'pendiente');
 });
 
+test('REC-000003: pendiente con todo aprobado por el sistema se cierra solo al reenviar', async () => {
+  const { estadoAlReenviar } = await import('../../src/domain/reclamo.js');
+  const auto = { Tipo: 'diferencias', DecStatus: 'aprobado', DecBy: 'sistema' };
+  assert.equal(estadoAlReenviar({ StatusAntesDevolucion: 'pendiente', LineasPendientes: 0, Lineas: [auto, auto] }), 'resuelto');
+  // Si la compradora decidió alguno, sigue esperando que confirme ella.
+  assert.equal(estadoAlReenviar({ StatusAntesDevolucion: 'pendiente', LineasPendientes: 0, Lineas: [auto, { ...auto, Tipo: 'sobrante_real', DecBy: 'kmock' }] }), 'pendiente');
+  assert.equal(estadoAlReenviar({ StatusAntesDevolucion: 'pendiente', LineasPendientes: 1, Lineas: [auto, { Tipo: 'sobrante_real', DecStatus: 'pendiente', DecBy: null }] }), 'pendiente');
+});
+
 test('corregir productos: conserva los iguales, redecide los cambiados, agrega y quita', async () => {
   const { planCorreccionLineas } = await import('../../src/domain/reclamo.js');
   const esAuto = (t) => t === 'faltante_real';

@@ -464,7 +464,21 @@ export function estadoAlReenviar(fila, tiposSoloNotificacion = null) {
     const lineas = Lineas.map((l) => ({ tipo: l.tipo ?? l.Tipo, decStatus: l.decStatus ?? l.DecStatus }));
     return estadoAlCrear({ soloNotificacion: esSoloNotificacion({ tipo: Tipo, lineas, conDocumentoSap: tieneDocumentoSap(fila) }, tiposSoloNotificacion), lineas });
   }
+  // Estaba «pendiente» y ya no queda nada para la compradora: todos los productos
+  // los aprobó el sistema (p. ej. diferencias, que desde el 12-nov se aprueban
+  // solas). Se cierra solo, como al crearlo (REC-000003, 2026-11-19: quedó
+  // pendiente «esperando a la compradora» sin nada que decidir).
+  if (antes === 'pendiente' && todoAprobadoPorSistema(Lineas)) return 'resuelto';
   return antes;
+}
+
+/** Todos los productos aprobados por el sistema (ninguno lo decidió una persona). */
+export function todoAprobadoPorSistema(lineas) {
+  return (
+    Array.isArray(lineas) &&
+    lineas.length > 0 &&
+    lineas.every((l) => (l.decStatus ?? l.DecStatus) === 'aprobado' && (l.decBy ?? l.DecBy) === 'sistema')
+  );
 }
 
 /** Corregir datos o archivos de un reclamo devuelto: solo quien lo creó (o el super administrador). */

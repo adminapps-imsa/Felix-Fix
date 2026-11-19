@@ -226,5 +226,7 @@ export async function reenviar(token, { comentario }, usuario) {
   if (devolucion && !edicion) avisarReclamo(porSupervisor ? 'reenviado_supervisor' : 'reenviado', dto, { para: devolucion.Usuario, comentario: texto, de });
   // Estaba cerrado y quedó pendiente por productos cambiados: la compradora tiene que volver a decidir.
   if ((porSupervisor || edicion) && dominio.estaCerrado(res.antes) && res.hacia === 'pendiente') avisarReclamo('reabierto', dto, { comentario: texto, de });
+  // Estaba pendiente y se cerró solo (todo aprobado por el sistema): el mismo aviso que al crearlo cerrado.
+  if (res.antes === 'pendiente' && res.hacia === 'resuelto') avisarReclamo('cerrado', dto);
   return dto;
 }
