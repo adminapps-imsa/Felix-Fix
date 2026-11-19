@@ -486,8 +486,8 @@ export async function modificarArchivos(token, modificar) {
       imagenes: parseJsonArray(recordset[0].ImagenesExcel),
       adjuntos: parseJsonArray(recordset[0].AdjuntosExtra),
     };
-    const { Status, EnviadoContabilidadAt, CreatedBy } = recordset[0];
-    const nuevo = modificar(actual, { Status, EnviadoContabilidadAt, CreatedBy });
+    const { Status, EnviadoContabilidadAt, CreatedBy, DevueltoPor } = recordset[0];
+    const nuevo = modificar(actual, { Status, EnviadoContabilidadAt, CreatedBy, DevueltoPor });
     if (nuevo) {
       await new sql.Request(transaction)
         .input('token', sql.UniqueIdentifier, token)

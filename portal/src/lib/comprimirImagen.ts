@@ -19,13 +19,19 @@ export async function comprimirImagen(file: File): Promise<File> {
     canvas.width = Math.round(bitmap.width * escala);
     canvas.height = Math.round(bitmap.height * escala);
     const ctx = canvas.getContext('2d');
-    if (!ctx) return file;
+    if (!ctx) {
+      bitmap.close();
+      return file;
+    }
     // Fondo blanco: un PNG con transparencia no queda negro al pasar a JPEG.
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
     bitmap.close();
     const blob = await new Promise<Blob | null>((ok) => canvas.toBlob(ok, 'image/jpeg', CALIDAD));
+    // Libera la memoria del canvas enseguida (Safari en iPhone tiene un tope bajo).
+    canvas.width = 0;
+    canvas.height = 0;
     if (!blob || blob.size >= file.size) return file;
     const nombre = file.name.replace(/\.[^.]+$/, '') + '.jpg';
     return new File([blob], nombre, { type: 'image/jpeg', lastModified: Date.now() });

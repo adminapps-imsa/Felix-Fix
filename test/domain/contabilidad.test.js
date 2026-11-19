@@ -20,6 +20,7 @@ test('respuesta del proveedor: una sola vez; se quita solo si existe', () => {
   assert.equal(motivoNoResponder(reclamar, { respuesta: 'quizas', registroSap: '5100012345' }).code, 'RESPUESTA_INVALIDA');
   assert.equal(motivoNoQuitarRespuesta(pendiente).code, 'SIN_RESPUESTA');
   assert.equal(motivoNoQuitarRespuesta({ Estado: 'no_aprobado' }), null);
+  assert.equal(motivoNoQuitarRespuesta({ Estado: 'no_reclamado' }).code, 'SIN_RESPUESTA');
 });
 
 test('reclamar o no: primero se decide; sin «reclamar» no hay envío ni respuesta', async () => {

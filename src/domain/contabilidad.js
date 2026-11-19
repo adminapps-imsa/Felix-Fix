@@ -42,7 +42,8 @@ export function motivoNoResponder(documento, { respuesta, registroSap }) {
 }
 
 export function motivoNoQuitarRespuesta(documento) {
-  return documento.Estado === 'pendiente' ? { mensaje: 'Este documento todavía no tiene respuesta del proveedor.', code: 'SIN_RESPUESTA' } : null;
+  // Solo hay respuesta que quitar si quedó aprobado / no aprobado; «no reclamado» se deshace con «Cambiar decisión».
+  return ['aprobado', 'no_aprobado'].includes(documento.Estado) ? null : { mensaje: 'Este documento todavía no tiene respuesta del proveedor.', code: 'SIN_RESPUESTA' };
 }
 
 /** Reclamar o no al proveedor: solo una vez, con el documento pendiente; «no reclamar» lleva motivo. */

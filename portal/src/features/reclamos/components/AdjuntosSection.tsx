@@ -95,7 +95,9 @@ export function AdjuntosSection({
     // Las fotos se achican antes de subir (una de celular pesa 3-8 MB y queda en <1 MB);
     // así caben y el correo a contabilidad no se llena de fotos pesadas (2026-11-19).
     if (elegidos.some((f) => f.type.startsWith('image/'))) setSubiendo('Preparando fotos…');
-    const files = await Promise.all(elegidos.map((f) => comprimirImagen(f)));
+    // Una a una: varias fotos de 12 MP a la vez agotan la memoria del celular.
+    const files: File[] = [];
+    for (const f of elegidos) files.push(await comprimirImagen(f));
     const fallidos: { nombre: string; titulo: string; detalle: string | null }[] = [];
     const grandes = files.filter((f) => f.size > ADJUNTO_MAX_MB * 1024 * 1024);
     for (const f of grandes) fallidos.push({ nombre: f.name, titulo: `Pesa ${(f.size / 1024 / 1024).toFixed(1)} MB (máximo ${ADJUNTO_MAX_MB} MB).`, detalle: null });

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CheckCircle2, Download, FileUp, MessageSquareReply, Trash2, XCircle } from 'lucide-react';
+import { CheckCircle2, Download, FileUp, MessageSquareReply, Trash2, X, XCircle } from 'lucide-react';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { Button } from '../../../components/ui/Button';
 import { Field, Input } from '../../../components/ui/Input';
@@ -116,6 +116,10 @@ export function RespuestaProveedor({ doc, onActualizado }: { doc: DocumentoConta
     setError(null);
     try {
       onActualizado(await apiContabilidad.registrarRespuesta(doc.DocumentoId, { respuesta, registroSap: registro, archivo }));
+      // Si luego se quita la respuesta, el formulario vuelve vacío y no con lo de antes.
+      setRespuesta(null);
+      setRegistroSap('');
+      setArchivo(null);
       avisos.ok(respuesta === 'aprobado' ? 'Respuesta registrada: aprobado.' : 'Respuesta registrada: no aprobado.');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo guardar la respuesta.');
@@ -179,8 +183,21 @@ export function RespuestaProveedor({ doc, onActualizado }: { doc: DocumentoConta
                 <span className="block truncate font-medium">{archivo ? archivo.name : 'Elegir archivo'}</span>
                 <span className="block text-xs opacity-60">PDF o foto (JPG, PNG o WebP)</span>
               </span>
-              <input type="file" accept={ACEPTA} className="sr-only" onChange={(e) => elegirArchivo(e.target.files?.[0] ?? null)} />
+              <input
+                type="file"
+                accept={ACEPTA}
+                className="sr-only"
+                onChange={(e) => {
+                  elegirArchivo(e.target.files?.[0] ?? null);
+                  e.target.value = ''; // permite volver a elegir el mismo archivo después de quitarlo
+                }}
+              />
             </label>
+            {archivo && (
+              <button type="button" onClick={() => setArchivo(null)} className="mt-1 flex w-fit items-center gap-1 text-xs font-semibold opacity-70 hover:opacity-100">
+                <X size={13} /> Quitar archivo
+              </button>
+            )}
           </Field>
         )}
 
