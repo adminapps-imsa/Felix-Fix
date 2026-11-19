@@ -29,6 +29,6 @@ export { reemplazarExcel, quitarExcel } from './reclamos/excelPrincipal.js';
 export { historial } from './reclamos/historial.js';
 export { enviarAContabilidad } from './reclamos/envioContabilidad.js';
 export { eliminar } from './reclamos/eliminar.js';
-export { devolver, devolverSupervisor, corregirDatos, corregirLineas, reenviar } from './reclamos/devolucion.js';
+export { devolver, devolverSupervisor, abrirEdicion, corregirDatos, corregirLineas, reenviar } from './reclamos/devolucion.js';
 export { registrarRetiro, cambiarRetiro, quitarRetiro, fotoRetiro } from './reclamos/retiro.js';
 export { cargarCodigo as cargarCodigoData } from './reclamos/articulosData.js';

@@ -432,7 +432,8 @@ export async function crear(body, multerFile, usuario, pdfs = []) {
 
     const token = crypto.randomUUID();
     // Solo notificación si TODOS los productos lo son (un reclamo con faltantes va a contabilidad).
-    const status = estadoAlCrear({ soloNotificacion: esSoloNotificacion({ tipo: data.tipo, lineas }, TIPOS_SOLO_NOTIFICACION), lineas });
+    // …y si no trae documento SAP: con nota de débito va a contabilidad (REC-000058).
+    const status = estadoAlCrear({ soloNotificacion: esSoloNotificacion({ tipo: data.tipo, lineas, conDocumentoSap: docsSap.length > 0 }, TIPOS_SOLO_NOTIFICACION), lineas });
     const alta = await repo.crear(
       {
         ...data,

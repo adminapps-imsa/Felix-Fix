@@ -49,6 +49,8 @@ export async function decidir(token, { status, comentario }, usuario) {
   return dto;
 }
 
+const ESPERA_SAP_DETALLE_MS = 4000;
+
 function aLineaDto(l, sap) {
   const prod = sap.productos.get(l.CodigoBarra);
   return {
@@ -67,7 +69,8 @@ function aLineaDto(l, sap) {
 export async function lineas(token) {
   await obtenerOFallar(token);
   const filas = await repo.listarLineas(token);
-  const sap = await consultarProductos([...new Set(filas.map((l) => l.CodigoBarra))]);
+  // Solo para mostrar: si SAP tarda, se ve sin validar en vez de dejar el detalle esperando.
+  const sap = await consultarProductos([...new Set(filas.map((l) => l.CodigoBarra))], { esperaMaxMs: ESPERA_SAP_DETALLE_MS });
   return lineasConNombres(filas.map((l) => aLineaDto(l, sap)));
 }
 
@@ -87,7 +90,7 @@ async function lineaDecidible(token, posicion) {
 
 async function lineaActualizada(token, pos) {
   const linea = await repo.obtenerLinea(token, pos);
-  const [dto] = await lineasConNombres([aLineaDto(linea, await consultarProductos([linea.CodigoBarra]))]);
+  const [dto] = await lineasConNombres([aLineaDto(linea, await consultarProductos([linea.CodigoBarra], { esperaMaxMs: ESPERA_SAP_DETALLE_MS }))]);
   return dto;
 }
 

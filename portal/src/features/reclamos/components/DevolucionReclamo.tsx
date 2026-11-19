@@ -24,6 +24,8 @@ import { useTiendas } from '../../productos-danados/hooks/useTiendas';
 // Las reglas las revisa el backend (src/domain/reclamo.js); aquí solo se guía.
 
 const MIN_COMENTARIO = 5;
+/** Comentario que deja el backend al abrir para editar sin motivo (devolucion.js abrirEdicion). */
+const TEXTO_EDICION = 'Abierto para editar.';
 
 const hoyIso = () => {
   const d = new Date();
@@ -32,9 +34,12 @@ const hoyIso = () => {
 
 const mensajeError = (err: unknown, porDefecto: string) => (err instanceof ApiError ? err.message : porDefecto);
 
-const porSupervisor = (r: Reclamo) => r.DevueltoPor === 'supervisor_gof';
+/** Abierto para editar por Torre de Control (2026-11-19): vuelve a su estado al guardar, sin avisos. */
+const enEdicion = (r: Reclamo) => r.DevueltoPor === 'edicion';
+// La edición vuelve al estado que tenía, igual que la devolución del supervisor GOF.
+const porSupervisor = (r: Reclamo) => r.DevueltoPor === 'supervisor_gof' || enEdicion(r);
 /** A quién vuelve al reenviar: la compradora o «su curso» (el estado que tenía). */
-const destinoReenvio = (r: Reclamo) => (porSupervisor(r) ? 'Reenviar' : 'Reenviar a la compradora');
+const destinoReenvio = (r: Reclamo) => (enEdicion(r) ? 'Guardar cambios' : porSupervisor(r) ? 'Reenviar' : 'Reenviar a la compradora');
 
 /**
  * Tarjeta de la devolución: el comentario de la compradora a la vista, qué
@@ -61,7 +66,11 @@ export function DevolucionReclamo({
     <GlassCard className={cn('flex flex-col gap-4', devuelto && 'ring-2 ring-brand-500/40')}>
       <h2 className="flex items-center gap-2 text-base font-bold">
         <Undo2 size={17} className={devuelto ? 'text-brand-600 dark:text-brand-400' : undefined} />
-        {devuelto ? `En espera de arreglo · devuelto por ${porSupervisor(reclamo) ? 'el supervisor GOF' : 'la compradora'}` : 'Correcciones'}
+        {devuelto
+          ? enEdicion(reclamo)
+            ? `En edición · abierto por ${ultima?.UsuarioNombre || 'Torre de Control'}`
+            : `En espera de arreglo · devuelto por ${porSupervisor(reclamo) ? 'el supervisor GOF' : 'la compradora'}`
+          : 'Correcciones'}
       </h2>
 
       {devuelto && ultima && (
@@ -103,7 +112,16 @@ export function DevolucionReclamo({
           </>
         ) : (
           <p className="text-sm opacity-70">
-            Esperando que <strong className="font-semibold">{creador}</strong> lo corrija y lo reenvíe. Mientras tanto no se pueden decidir los productos.
+            {enEdicion(reclamo) ? (
+              <>
+                <strong className="font-semibold">{ultima?.UsuarioNombre || 'Torre de Control'}</strong> lo está editando. Mientras tanto no se pueden decidir los
+                productos.
+              </>
+            ) : (
+              <>
+                Esperando que <strong className="font-semibold">{creador}</strong> lo corrija y lo reenvíe. Mientras tanto no se pueden decidir los productos.
+              </>
+            )}
           </p>
         ))}
 
@@ -129,7 +147,7 @@ function Historial({ comentarios }: { comentarios: ComentarioReclamo[] }) {
               className={cn('absolute -left-[1.3rem] top-1 size-2.5 rounded-full', c.Tipo === 'devuelto' ? 'bg-brand-500' : 'bg-success')}
             />
             <p className="text-xs opacity-60">
-              <strong className="font-semibold">{c.Tipo === 'devuelto' ? 'Devuelto por' : 'Corregido y reenviado por'} {c.UsuarioNombre}</strong> ·{' '}
+              <strong className="font-semibold">{c.Tipo === 'devuelto' ? (c.Texto === TEXTO_EDICION ? 'Abierto para editar por' : 'Devuelto por') : 'Corregido y reenviado por'} {c.UsuarioNombre}</strong> ·{' '}
               {formatFecha(c.Fecha)}
             </p>
             {c.Texto ? <p className="mt-0.5 whitespace-pre-line">{c.Texto}</p> : <p className="mt-0.5 opacity-50">Sin comentario.</p>}
@@ -233,7 +251,9 @@ function ReenviarModal({ reclamo, onClose, onReenviado }: { reclamo: Reclamo; on
     setError(null);
     try {
       onReenviado(await apiReclamos.reenviarReclamo(reclamo.Token, comentario.trim()));
-      avisos.ok(porSupervisor(reclamo) ? `Reclamo ${reclamo.Numero} reenviado.` : `Reclamo ${reclamo.Numero} reenviado a la compradora.`);
+      avisos.ok(
+        enEdicion(reclamo) ? `Cambios de ${reclamo.Numero} guardados.` : porSupervisor(reclamo) ? `Reclamo ${reclamo.Numero} reenviado.` : `Reclamo ${reclamo.Numero} reenviado a la compradora.`
+      );
     } catch (err) {
       setError(mensajeError(err, 'No se pudo reenviar el reclamo.'));
       setBusy(false);
@@ -241,9 +261,14 @@ function ReenviarModal({ reclamo, onClose, onReenviado }: { reclamo: Reclamo; on
   };
 
   return (
-    <Modal title={`Reenviar ${reclamo.Numero}`} onClose={onClose} dismissible={!comentario.trim()}>
+    <Modal title={enEdicion(reclamo) ? `Guardar cambios de ${reclamo.Numero}` : `Reenviar ${reclamo.Numero}`} onClose={onClose} dismissible={!comentario.trim()}>
       <form onSubmit={enviar} className="flex flex-col gap-4 text-sm">
-        {porSupervisor(reclamo) ? (
+        {enEdicion(reclamo) ? (
+          <p>
+            Vuelve a «{STATUS_LABEL[(reclamo.StatusAntesDevolucion || 'pendiente') as StatusReclamo]}», como estaba. Si cambiaste productos de un reclamo ya
+            cerrado, vuelve a la compradora para que los decida y le llega un aviso.
+          </p>
+        ) : porSupervisor(reclamo) ? (
           <p>
             Vuelve a «{STATUS_LABEL[(reclamo.StatusAntesDevolucion || 'pendiente') as StatusReclamo]}», como estaba, y al supervisor GOF le llega un
             correo avisando que ya está corregido. Si cambiaste productos de un reclamo ya cerrado, vuelve a la compradora para que los decida.
@@ -251,7 +276,7 @@ function ReenviarModal({ reclamo, onClose, onReenviado }: { reclamo: Reclamo; on
         ) : (
           <p>Vuelve a la compradora como pendiente, y le llega un correo avisando que ya está corregido.</p>
         )}
-        <Field label={porSupervisor(reclamo) ? 'Respuesta' : 'Respuesta para la compradora'} opcional>
+        <Field label={enEdicion(reclamo) ? 'Qué se cambió' : porSupervisor(reclamo) ? 'Respuesta' : 'Respuesta para la compradora'} opcional>
           <Textarea
             autoFocus
             rows={3}

@@ -132,6 +132,10 @@ export const devolver = asyncHandler(async (req, res) => {
   res.json(await service.devolver(req.params.token, req.body, req.user));
 });
 
+export const abrirEdicion = asyncHandler(async (req, res) => {
+  res.json(await service.abrirEdicion(req.params.token, req.body ?? {}, req.user));
+});
+
 export const devolverSupervisor = asyncHandler(async (req, res) => {
   res.json(await service.devolverSupervisor(req.params.token, req.body, req.user));
 });

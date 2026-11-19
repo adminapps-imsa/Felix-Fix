@@ -5,6 +5,7 @@ import { EVENTOS as EVENTOS_PD, plantillaAviso } from './avisosProductosDanados.
 import { plantillaAvisoReclamo } from './avisosReclamos.js';
 import { plantillaReporteProveedor } from './plantillaReporteProveedor.js';
 import { plantillaReclamoContabilidad } from './plantillaReclamoContabilidad.js';
+import { plantillaReclamoProveedor } from './plantillaReclamoProveedor.js';
 import { plantillaBienvenida } from './plantillaBienvenida.js';
 import { plantillaDataArticulos } from './avisoDataArticulos.js';
 
@@ -193,6 +194,33 @@ const CORREOS_RECLAMOS = [
           remitente: { nombre: 'Gof de ejemplo', correo: 'gof@ejemplo.com' },
           archivos: [{ filename: 'Reclamo REC-000024 - Excel.xlsx' }, { filename: 'Reclamo REC-000024 - 4900099001.pdf', descripcion: 'documento SAP' }],
           documentos: [{ adjuntoNombre: '4900099001.pdf', numeroDocumento: '4900099001', movimiento: '912 Anul DEV', total: 5516.22, lineas: [1, 2], legible: true, validacion: { estado: 'ok' } }],
+        }
+      ),
+  },
+  {
+    id: 'rec-proveedor',
+    nombre: 'Nota de débito al proveedor',
+    cuando: 'Contabilidad pulsa «Enviar al proveedor» en el detalle de un documento.',
+    quien: 'El proveedor (correos que escribe contabilidad), con copia a quien lo envía y el PDF adjunto',
+    generar: () =>
+      plantillaReclamoProveedor(
+        {
+          ReclamoNumero: 'REC-000024',
+          Proveedor: 'PROVEEDOR DE EJEMPLO S.A.',
+          NumeroEmbarqueFactura: 'FAC-1029',
+          NumeroDocumento: '4900099001',
+          TipoDocumento: 'Nota de débito',
+          FechaDocumento: '2026-11-17',
+          Total: 70.81,
+          Lineas: [
+            { descripcion: 'Camisa manga larga azul M', material: '100200300', codigoBarra: '7701234567890', cantidadPdf: 2, valor: 45.5 },
+            { descripcion: 'Pantalón negro 32', material: '100200301', codigoBarra: '7701234567891', cantidadPdf: 1, valor: 25.31 },
+          ],
+        },
+        {
+          comentario: 'Adjuntamos la nota de débito por la mercancía dañada. Favor aplicarla en el próximo estado de cuenta.',
+          remitente: { nombre: 'Contabilidad de ejemplo', correo: 'contabilidad@ejemplo.com' },
+          adjunto: '4900099001.pdf',
         }
       ),
   },

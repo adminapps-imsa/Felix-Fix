@@ -21,13 +21,13 @@ import { badRequest, notFound } from '../../utils/httpError.js';
 import { logger } from '../../utils/logger.js';
 import { tiendaDe } from '../acceso/alcanceTienda.js';
 import { motivoTiendaReclamo } from '../../domain/tienda.js';
-import { obtenerOFallar, validarToken, exigir, nombreUsuario, detalle, conDocumentos, sucursalOficial } from './comun.js';
+import { obtenerOFallar, validarToken, exigir, nombreUsuario, detalle, conDocumentos, sucursalOficial, corrector } from './comun.js';
 
 const SAP_DOC_OPCIONAL = env.reclamos.sapDocOpcional && env.nodeEnv !== 'production';
 
 /** Quien corrige: su username y si es el super administrador (puede corregir cualquiera). */
 // Corregir depende del rol («Corregir reclamos devueltos»), no de quién lo creó.
-const quien = (usuario) => ({ puede: tienePermiso(usuario, PERMISO_CONFIGURACION) || tienePermiso(usuario, 'reclamos.corregir') });
+const quien = corrector;
 
 const docsDe = (r) => [r.SapDoc1, r.SapDoc2, r.SapDoc3, ...parseJsonArray(r.SapDocsExtra)].filter((d) => d && String(d).trim());
 
@@ -73,6 +73,27 @@ export async function devolverSupervisor(token, { comentario }, usuario) {
   const dto = await detalle(token);
   logger.info({ reclamo: dto.Numero, usuario: nombreUsuario(usuario), para: dto.CreatedBy, estadoAnterior: res.desde }, 'Reclamo devuelto a quien lo creó por el supervisor GOF');
   avisarReclamo('devuelto_supervisor', dto, { para: dto.CreatedBy, comentario: texto, de: usuario.name || nombreUsuario(usuario) });
+  return dto;
+}
+
+/**
+ * Torre de Control abre para editar un reclamo de CEDI ya creado (subió o
+ * escribió algo mal). Queda «en edición» (devuelto, sin avisar a nadie) con el
+ * estado que tenía guardado; corrige con la misma pantalla y al guardar
+ * («reenviar») vuelve a su estado.
+ */
+export async function abrirEdicion(token, { motivo } = {}, usuario) {
+  validarToken(token);
+  const texto = String(motivo ?? '').trim().slice(0, 1000) || 'Abierto para editar.';
+  const res = await repo.devolver(token, {
+    comentario: texto,
+    usuario: nombreUsuario(usuario),
+    verificar: (fila) => dominio.motivoNoAbrirEdicion(fila),
+    devueltoPor: dominio.DEVUELTO_POR_EDICION,
+  });
+  exigirResultado(res);
+  const dto = await detalle(token);
+  logger.info({ reclamo: dto.Numero, usuario: nombreUsuario(usuario), estadoAnterior: res.desde }, 'Reclamo de CEDI abierto para editar');
   return dto;
 }
 
@@ -194,14 +215,16 @@ export async function reenviar(token, { comentario }, usuario) {
   // Se avisa a quien lo devolvió (la última devolución): la compradora o el supervisor GOF.
   const devolucion = [...(dto.Comentarios || [])].reverse().find((c) => c.Tipo === 'devuelto');
   const porSupervisor = res.devueltoPor === dominio.DEVUELTO_POR_SUPERVISOR;
+  // Abierto para editar por Torre de Control: nadie se lo devolvió, no hay a quién avisar del reenvío.
+  const edicion = res.devueltoPor === dominio.DEVUELTO_POR_EDICION;
   logger.info(
     { reclamo: dto.Numero, usuario: nombreUsuario(usuario), para: devolucion?.Usuario || null, estado: res.hacia, porSupervisor },
     'Reclamo corregido y reenviado'
   );
   const { nombre } = await datosDeUsuario(nombreUsuario(usuario));
   const de = nombre || nombreUsuario(usuario);
-  if (devolucion) avisarReclamo(porSupervisor ? 'reenviado_supervisor' : 'reenviado', dto, { para: devolucion.Usuario, comentario: texto, de });
+  if (devolucion && !edicion) avisarReclamo(porSupervisor ? 'reenviado_supervisor' : 'reenviado', dto, { para: devolucion.Usuario, comentario: texto, de });
   // Estaba cerrado y quedó pendiente por productos cambiados: la compradora tiene que volver a decidir.
-  if (porSupervisor && dominio.estaCerrado(res.antes) && res.hacia === 'pendiente') avisarReclamo('reabierto', dto, { comentario: texto, de });
+  if ((porSupervisor || edicion) && dominio.estaCerrado(res.antes) && res.hacia === 'pendiente') avisarReclamo('reabierto', dto, { comentario: texto, de });
   return dto;
 }

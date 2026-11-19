@@ -29,7 +29,7 @@ import {
 } from './excelParser.js';
 import { extraerImagenesExcel, borrarArchivos } from './excelImages.js';
 import { resolverTipoLinea, esAutoAprobado, COMENTARIO_AUTO_APROBADO, USUARIO_SISTEMA, TIPOS_SOLO_NOTIFICACION } from './tipos.js';
-import { obtenerOFallar, tipoRealDeArchivo, exigir, nombreUsuario, detalle } from './comun.js';
+import { obtenerOFallar, tipoRealDeArchivo, exigir, nombreUsuario, detalle, corrector } from './comun.js';
 import { exigirFaltantesEn911 } from './crear.js';
 import { leerNotaPdf } from '../contabilidad/leerNotaPdf.js';
 import { reclamoArchivoPath } from '../../config/almacenamiento.js';
@@ -50,8 +50,8 @@ function exigirAdmin(usuario) {
  */
 function exigirPuedeReemplazar(usuario, r) {
   if (tienePermiso(usuario, PERMISO_CONFIGURACION)) return;
-  if (!tienePermiso(usuario, 'reclamos.corregir')) throw forbidden('Tu rol no puede cambiar el Excel del reclamo.');
   if (r.Status !== dominio.STATUS_DEVUELTO) throw forbidden('El Excel se cambia cuando el reclamo está en espera de arreglo.');
+  if (dominio.motivoNoCorregir(r, corrector(usuario))) throw forbidden('Tu rol no puede cambiar el Excel del reclamo.');
 }
 
 /** Lee y valida el Excel nuevo contra el reclamo. Devuelve el resultado del parser o lanza 400 con lo que no cuadra. */

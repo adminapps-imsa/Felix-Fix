@@ -25,6 +25,7 @@ import {
   nombreUsuario,
   detalle,
   conDocumentos,
+  corrector,
 } from './comun.js';
 import { permisos } from './consultas.js';
 
@@ -201,7 +202,7 @@ export async function eliminarAdjunto(token, idx, usuario, f) {
   validarIndice(idx);
   // Quien tiene «Eliminar», o quien creó el reclamo mientras la compradora se lo devolvió para corregir.
   const puedeEliminar = tienePermiso(usuario, 'reclamos.eliminar');
-  const corrige = { puede: tienePermiso(usuario, 'configuracion.administrar') || tienePermiso(usuario, 'reclamos.corregir') };
+  const corrige = corrector(usuario);
   let borrado = null;
   let aBorrar = [];
   const res = await repo.modificarArchivos(token, (a, estado) => {

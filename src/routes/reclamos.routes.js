@@ -51,7 +51,7 @@ router.get('/:token/historial', requirePermiso('configuracion.administrar', 'rec
 // Reemplazar el Excel: el administrador, o quien corrige mientras está en espera de arreglo
 // (el servicio lo revisa). Quitarlo: solo el administrador. El permiso va ANTES de multer,
 // para no guardar el archivo de quien no puede.
-router.put('/:token/excel', requirePermiso('configuracion.administrar', 'reclamos.corregir'), excelLimiter, uploadExcelPrincipal, controller.reemplazarExcel);
+router.put('/:token/excel', requirePermiso('configuracion.administrar', 'reclamos.corregir', 'reclamos.editar_cedi'), excelLimiter, uploadExcelPrincipal, controller.reemplazarExcel);
 router.delete('/:token/excel', requirePermiso('configuracion.administrar'), controller.quitarExcel);
 router.patch('/:token/decision', decidir, validateBody(decisionReclamoSchema), controller.decidir);
 router.delete('/:token', eliminar, controller.eliminar);
@@ -63,6 +63,8 @@ const avisoLimiter = rateLimit({ windowMs: 60_000, max: 10, message: { error: 'H
 router.post('/:token/devolver', decidir, avisoLimiter, validateBody(devolverSchema), controller.devolver);
 router.patch('/:token/datos', crear, controller.corregirDatos);
 // Supervisor GOF: devuelve en cualquier estado antes de contabilidad (las reglas, en el servicio).
+// Torre de Control: abrir para editar un reclamo de CEDI ya creado (vuelve a su estado al guardar).
+router.post('/:token/editar', requirePermiso('reclamos.editar_cedi'), avisoLimiter, controller.abrirEdicion);
 router.post('/:token/devolver-supervisor', requirePermiso('reclamos.devolver_supervisor'), avisoLimiter, validateBody(devolverSchema), controller.devolverSupervisor);
 // Quien lo creó corrige los productos del reclamo devuelto.
 router.put('/:token/lineas', crear, validateBody(corregirLineasSchema), controller.corregirLineas);

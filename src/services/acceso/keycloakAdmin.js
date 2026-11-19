@@ -343,9 +343,23 @@ export async function datosDeUsuario(username) {
 }
 
 /** Map<username, nombre> para los usernames dados (los que no existen quedan con su username). */
+// Los nombres son solo para mostrar: si Keycloak tarda (reintenta hasta 10 s
+// por intento), la pantalla no lo espera más de esto y muestra el username;
+// la consulta sigue y el nombre queda en caché para la próxima vez.
+const ESPERA_NOMBRES_MS = 2000;
+const pidiendoNombre = new Map(); // username -> promesa en curso (no se pide dos veces)
+
 export async function nombresDeUsuarios(usernames) {
   const unicos = [...new Set(usernames.filter(Boolean))];
   const faltan = unicos.filter((u) => !(nombresCache.get(u)?.exp > Date.now()));
-  await Promise.all(faltan.map(nombreDe));
+  if (faltan.length) {
+    const pedidos = faltan.map((u) => {
+      if (!pidiendoNombre.has(u)) pidiendoNombre.set(u, nombreDe(u).finally(() => pidiendoNombre.delete(u)));
+      return pidiendoNombre.get(u);
+    });
+    let timer;
+    await Promise.race([Promise.all(pedidos), new Promise((resolve) => (timer = setTimeout(resolve, ESPERA_NOMBRES_MS)))]);
+    clearTimeout(timer);
+  }
   return new Map(unicos.map((u) => [u, nombresCache.get(u)?.nombre || u]));
 }

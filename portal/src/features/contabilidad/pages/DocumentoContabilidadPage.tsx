@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { AlertTriangle, ArrowLeft, FileX2, Building2, Check, ClipboardList, Download, Eye, FileText, Landmark, ListChecks, PackageSearch } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, FileX2, Building2, Check, ClipboardList, Download, Eye, FileText, ListChecks, PackageSearch } from 'lucide-react';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { BandaPagina } from '../../../components/ui/TituloPagina';
 import { Dato, SeccionDatos } from '../../../components/ui/DatosDetalle';
@@ -19,8 +19,12 @@ import type { StatusReclamo, TipoReclamo } from '../../../types/reclamo';
 import type { DocumentoContabilidadDetalle, LineaDocumento } from '../../../types/contabilidad';
 import { StatusReclamoBadge } from '../../reclamos/components/Badges';
 import { PdfPreviewModal } from '../../reclamos/components/VisoresLazy';
-import { STATUS_LABEL, TIPO_LABEL_CORTO, formatFechaCorta, formatPrecio } from '../../reclamos/lib/tipos';
+import { STATUS_LABEL, TIPO_LABEL_CORTO, etiquetaStatus, formatFechaCorta, formatPrecio } from '../../reclamos/lib/tipos';
 import { DecisionBadge, MezclaBadge, ValidacionBadges } from '../components/BadgesContabilidad';
+import { EnviarProveedorContabilidad } from '../components/EnviarProveedorContabilidad';
+import { RespuestaProveedor } from '../components/RespuestaProveedor';
+import { DecisionReclamo } from '../components/DecisionReclamo';
+import { EstadoDocumentoBadge } from '../components/BadgesContabilidad';
 
 const tipoLabel = (t: string | null) => (t ? TIPO_LABEL_CORTO[t as TipoReclamo] ?? t : '—');
 
@@ -81,6 +85,8 @@ export function DocumentoContabilidadPage() {
   };
   const v = doc.Validacion;
   const statusConocido = Object.hasOwn(STATUS_LABEL, doc.ReclamoStatus);
+  // Se cerró solo: todos los productos se aprobaron por su tipo, la compradora no decidió.
+  const automatico = doc.ReclamoDecisionBy === 'sistema';
 
   return (
     <div className="flex flex-col gap-6">
@@ -93,7 +99,10 @@ export function DocumentoContabilidadPage() {
         <h1 className="numero-caso max-w-full break-words text-4xl sm:text-5xl">
           {doc.NumeroDocumento || <span className="font-sans text-xl">{doc.AdjuntoNombre}</span>}
         </h1>
-        <ValidacionBadges validacion={v} className="mt-1 justify-center" />
+        <span className="mt-1 flex flex-wrap justify-center gap-1">
+          <EstadoDocumentoBadge estado={doc.Estado} />
+          <ValidacionBadges validacion={v} className="justify-center" />
+        </span>
         <p className="mt-1 text-xs opacity-60">
           Enviado a contabilidad {formatFecha(doc.EnviadoAt)}
           {(doc.EnviadoPorNombre || doc.EnviadoPor) && (
@@ -152,14 +161,14 @@ export function DocumentoContabilidadPage() {
             />
             <Dato
               label="Estado"
-              title={STATUS_LABEL[doc.ReclamoStatus as StatusReclamo] ?? doc.ReclamoStatus}
-              value={statusConocido ? <StatusReclamoBadge status={doc.ReclamoStatus as StatusReclamo} /> : doc.ReclamoStatus}
+              title={statusConocido ? etiquetaStatus(doc.ReclamoStatus as StatusReclamo, null, doc.ReclamoDecisionBy) : doc.ReclamoStatus}
+              value={statusConocido ? <StatusReclamoBadge status={doc.ReclamoStatus as StatusReclamo} decisionBy={doc.ReclamoDecisionBy} /> : doc.ReclamoStatus}
             />
           </SeccionDatos>
         </div>
         {doc.DecisionComentario && (
           <div className="rounded-xl bg-black/[0.03] px-4 py-3 text-sm dark:bg-white/[0.05]">
-            <span className="etiqueta">Comentario de la decisión</span>
+            <span className="etiqueta">{automatico ? 'Comentario' : 'Comentario de la decisión'}</span>
             <p className="mt-0.5 whitespace-pre-line">{doc.DecisionComentario}</p>
           </div>
         )}
@@ -176,7 +185,7 @@ export function DocumentoContabilidadPage() {
             <Contador valor={v.coinciden} label="Coinciden" clase="text-success" />
             <Contador valor={v.noEnReclamo} label="No están en el reclamo" clase={v.noEnReclamo ? 'text-danger' : ''} />
             <Contador valor={v.cantidadDistinta} label="Cantidad distinta" clase={v.cantidadDistinta ? 'text-danger' : ''} />
-            <Contador valor={v.aprobados} label="Aprobados" clase="text-success" />
+            <Contador valor={v.aprobados} label={automatico ? 'Aprobados automáticamente' : 'Aprobados'} clase="text-success" />
             <Contador valor={v.rechazados} label="Rechazados" clase={v.rechazados ? 'text-danger' : ''} />
           </div>
         )}
@@ -184,7 +193,7 @@ export function DocumentoContabilidadPage() {
         {v.mezclaDecisiones && (
           <div className="flex flex-wrap items-center gap-2 rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-sm">
             <MezclaBadge />
-            <span>Este documento incluye productos aprobados y rechazados por la compradora: revisa qué líneas aplican.</span>
+            <span>Este documento incluye productos aprobados y rechazados: revisa qué líneas aplican.</span>
           </div>
         )}
       </GlassCard>
@@ -219,7 +228,7 @@ export function DocumentoContabilidadPage() {
                     <td className="px-3 py-2 text-right tabular-nums">{formatCantidad(l.cantidad)}</td>
                     <td className="px-3 py-2 whitespace-nowrap">{tipoLabel(l.tipo)}</td>
                     <td className="px-3 py-2">
-                      <DecisionBadge decision={l.decision} />
+                      <DecisionBadge decision={l.decision} automatica={l.automatica} />
                     </td>
                   </tr>
                 ))}
@@ -229,12 +238,14 @@ export function DocumentoContabilidadPage() {
         </GlassCard>
       )}
 
-      <GlassCard className="flex flex-col gap-2">
-        <h2 className="flex items-center gap-2 text-base font-bold">
-          <Landmark size={17} /> Acciones de contabilidad
-        </h2>
-        <p className="text-sm opacity-70">Próximamente: las acciones de contabilidad se habilitarán cuando se definan.</p>
-      </GlassCard>
+      {/* Primero se decide si se reclama; solo entonces hay envío y respuesta del proveedor. */}
+      <DecisionReclamo doc={doc} onActualizado={setDoc} />
+      {doc.Decision?.decision === 'reclamar' && (
+        <>
+          <EnviarProveedorContabilidad doc={doc} onEnviado={setDoc} />
+          <RespuestaProveedor doc={doc} onActualizado={setDoc} />
+        </>
+      )}
 
       {verPdf && idx !== null && (
         <PdfPreviewModal titulo={doc.AdjuntoNombre} cargar={cargarPdf} onDescargar={descargar} onClose={() => setVerPdf(false)} />
@@ -287,7 +298,7 @@ function ProductosDocumento({ lineas }: { lineas: LineaDocumento[] }) {
                     <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">{l.material}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{formatCantidad(l.cantidadPdf)}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{l.cantidadReclamo !== null ? formatCantidad(l.cantidadReclamo) : <span className="opacity-40">—</span>}</td>
-                    <td className="px-3 py-2">{l.lineaId !== null ? <DecisionBadge decision={l.decision} /> : <span className="opacity-40">—</span>}</td>
+                    <td className="px-3 py-2">{l.lineaId !== null ? <DecisionBadge decision={l.decision} automatica={l.automatica} /> : <span className="opacity-40">—</span>}</td>
                     <td className="px-3 py-2 whitespace-nowrap">{tipoLabel(l.tipo)}</td>
                     <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{formatPrecio(l.valor)}</td>
                     <td className="px-3 py-2">

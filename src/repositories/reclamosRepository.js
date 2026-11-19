@@ -22,7 +22,8 @@ const SELECT_BASE = `
     (SELECT COUNT(*) FROM ${S}.ReclamoLineas l WHERE l.ReclamoToken = r.Token AND l.DecStatus = 'aprobado') AS LineasAprobadas,
     (SELECT COUNT(*) FROM ${S}.ReclamoLineas l WHERE l.ReclamoToken = r.Token AND l.DecStatus = 'aprobado' AND l.Tipo IN ('sobrante_real', 'sobrante_no_esperado')) AS LineasSobranteAprobadas,
     (SELECT COUNT(*) FROM ${S}.ReclamoLineas l WHERE l.ReclamoToken = r.Token AND l.EsperaData = 1 AND l.DecStatus = 'aprobado') AS LineasEsperaData,
-    (SELECT COUNT(*) FROM ${S}.ReclamoLineas l WHERE l.ReclamoToken = r.Token AND l.Tipo = 'devolucion') AS LineasDevolucion
+    (SELECT COUNT(*) FROM ${S}.ReclamoLineas l WHERE l.ReclamoToken = r.Token AND l.Tipo = 'devolucion') AS LineasDevolucion,
+    (SELECT COUNT(*) FROM ${S}.ReclamoLineas l WHERE l.ReclamoToken = r.Token AND l.Tipo <> 'faltante_real') AS LineasNoFaltante
   FROM ${S}.Reclamos r
 `;
 
@@ -475,7 +476,7 @@ export async function modificarArchivos(token, modificar) {
     const { recordset } = await new sql.Request(transaction)
       .input('token', sql.UniqueIdentifier, token)
       .query(
-        `SELECT ImagenesExcel, AdjuntosExtra, Status, EnviadoContabilidadAt, CreatedBy FROM ${S}.Reclamos WITH (UPDLOCK, HOLDLOCK) WHERE Token = @token`
+        `SELECT ImagenesExcel, AdjuntosExtra, Status, EnviadoContabilidadAt, CreatedBy, DevueltoPor FROM ${S}.Reclamos WITH (UPDLOCK, HOLDLOCK) WHERE Token = @token`
       );
     if (!recordset[0]) {
       await transaction.rollback();
@@ -562,7 +563,8 @@ export async function ajustarAlExcel(token, { archivo, nombre, imagenes }, { ver
     const { recordset } = await new sql.Request(transaction)
       .input('token', sql.UniqueIdentifier, token)
       .query(
-        `SELECT ReclamoId, Tipo, Status, DecisionBy, ArchivoExcel, ArchivoExcelNombre, ImagenesExcel, EnviadoContabilidadAt
+        `SELECT ReclamoId, Tipo, Status, DecisionBy, ArchivoExcel, ArchivoExcelNombre, ImagenesExcel, EnviadoContabilidadAt,
+                SapDoc1, SapDoc2, SapDoc3, SapDocsExtra
          FROM ${S}.Reclamos WITH (UPDLOCK, HOLDLOCK) WHERE Token = @token`
       );
     const fila = recordset[0];
@@ -798,7 +800,7 @@ async function cambiarConComentario(token, { hacia, tipo, texto, usuario, verifi
       .input('token', sql.UniqueIdentifier, token)
       .query(`
         SELECT r.ReclamoId, r.Status, r.CreatedBy, r.SapDoc1, r.SapDoc2, r.SapDoc3, r.SapDocsExtra, r.AdjuntosExtra,
-               r.EnviadoContabilidadAt, r.StatusAntesDevolucion, r.DevueltoPor, r.Tipo,
+               r.EnviadoContabilidadAt, r.StatusAntesDevolucion, r.DevueltoPor, r.Tipo, r.Origen, r.DecisionBy,
                (SELECT COUNT(*) FROM ${S}.ReclamoLineas l WHERE l.ReclamoToken = r.Token AND l.DecStatus = 'pendiente') AS LineasPendientes,
                (SELECT l.Tipo, l.DecStatus FROM ${S}.ReclamoLineas l WHERE l.ReclamoToken = r.Token FOR JSON PATH) AS LineasJson
         FROM ${S}.Reclamos r WITH (UPDLOCK, HOLDLOCK) WHERE r.Token = @token`);
@@ -868,7 +870,7 @@ export async function corregirLineas(token, { verificar, plan }) {
   try {
     const { recordset } = await new sql.Request(transaction)
       .input('token', sql.UniqueIdentifier, token)
-      .query(`SELECT ReclamoId, Status, CreatedBy FROM ${S}.Reclamos WITH (UPDLOCK, HOLDLOCK) WHERE Token = @token`);
+      .query(`SELECT ReclamoId, Status, CreatedBy, DevueltoPor FROM ${S}.Reclamos WITH (UPDLOCK, HOLDLOCK) WHERE Token = @token`);
     const fila = recordset[0];
     if (!fila) {
       await transaction.rollback();
@@ -961,7 +963,7 @@ export async function actualizarDatos(token, datos, { docsSap, verificar, motivo
       `);
     const { recordset } = await new sql.Request(transaction)
       .input('token', sql.UniqueIdentifier, token)
-      .query(`SELECT ReclamoId, Status, CreatedBy FROM ${S}.Reclamos WITH (UPDLOCK, HOLDLOCK) WHERE Token = @token`);
+      .query(`SELECT ReclamoId, Status, CreatedBy, DevueltoPor FROM ${S}.Reclamos WITH (UPDLOCK, HOLDLOCK) WHERE Token = @token`);
     const fila = recordset[0];
     if (!fila) {
       await transaction.rollback();
@@ -1019,7 +1021,8 @@ export async function registrarRetiro(token, { fecha, foto, usuario }, verificar
   try {
     const { recordset } = await new sql.Request(transaction).input('token', sql.UniqueIdentifier, token).query(`
       SELECT r.Tipo, r.RetiroProveedor, r.RetiroProveedorFoto,
-        (SELECT COUNT(*) FROM ${S}.ReclamoLineas l WHERE l.ReclamoToken = r.Token AND l.Tipo = 'devolucion') AS LineasDevolucion
+        (SELECT COUNT(*) FROM ${S}.ReclamoLineas l WHERE l.ReclamoToken = r.Token AND l.Tipo = 'devolucion') AS LineasDevolucion,
+    (SELECT COUNT(*) FROM ${S}.ReclamoLineas l WHERE l.ReclamoToken = r.Token AND l.Tipo <> 'faltante_real') AS LineasNoFaltante
       FROM ${S}.Reclamos r WITH (UPDLOCK, HOLDLOCK) WHERE r.Token = @token`);
     const fila = recordset[0];
     if (!fila) {
@@ -1070,7 +1073,8 @@ export async function cambiarRetiroProveedor(token, requerido, verificar) {
   try {
     const { recordset } = await new sql.Request(transaction).input('token', sql.UniqueIdentifier, token).query(`
       SELECT r.Tipo, r.CreatedBy, r.RetiroProveedor, r.RetiroProveedorFecha,
-        (SELECT COUNT(*) FROM ${S}.ReclamoLineas l WHERE l.ReclamoToken = r.Token AND l.Tipo = 'devolucion') AS LineasDevolucion
+        (SELECT COUNT(*) FROM ${S}.ReclamoLineas l WHERE l.ReclamoToken = r.Token AND l.Tipo = 'devolucion') AS LineasDevolucion,
+    (SELECT COUNT(*) FROM ${S}.ReclamoLineas l WHERE l.ReclamoToken = r.Token AND l.Tipo <> 'faltante_real') AS LineasNoFaltante
       FROM ${S}.Reclamos r WITH (UPDLOCK, HOLDLOCK) WHERE r.Token = @token`);
     const fila = recordset[0];
     if (!fila) {

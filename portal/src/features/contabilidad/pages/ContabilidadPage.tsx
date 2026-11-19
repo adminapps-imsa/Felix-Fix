@@ -14,13 +14,16 @@ import * as apiContabilidad from '../../../api/contabilidad';
 import type { PaginationMeta } from '../../../types/productoDanado';
 import type { DocumentoContabilidad, FiltroEstadoContabilidad } from '../../../types/contabilidad';
 import { formatFechaCorta, formatPrecio } from '../../reclamos/lib/tipos';
-import { ValidacionBadges } from '../components/BadgesContabilidad';
+import { EstadoDocumentoBadge, ValidacionBadges } from '../components/BadgesContabilidad';
 import { PagosProductosDanados } from '../components/PagosProductosDanados';
 import { useAuth } from '../../../auth/useAuth';
 import { P } from '../../../auth/permisos';
 
 const PESTANAS: Array<{ id: FiltroEstadoContabilidad; label: string }> = [
   { id: 'pendiente', label: 'Pendientes' },
+  { id: 'aprobado', label: 'Aprobados' },
+  { id: 'no_aprobado', label: 'No aprobados' },
+  { id: 'no_reclamado', label: 'No reclamados' },
   { id: 'todos', label: 'Todos' },
 ];
 
@@ -143,7 +146,18 @@ function DocumentosReclamos() {
               </div>
             </div>
           ) : (
-            <EstadoVacio icono={Inbox} titulo="Todavía no se ha enviado ningún documento a contabilidad" />
+            <EstadoVacio
+              icono={Inbox}
+              titulo={
+                estado === 'aprobado'
+                  ? 'Todavía no hay documentos aprobados por el proveedor'
+                  : estado === 'no_aprobado'
+                    ? 'Todavía no hay documentos no aprobados por el proveedor'
+                    : estado === 'no_reclamado'
+                      ? 'Todavía no hay documentos que se decidiera no reclamar'
+                    : 'Todavía no se ha enviado ningún documento a contabilidad'
+              }
+            />
           )}
         </div>
       ) : (
@@ -173,7 +187,10 @@ function DocumentosReclamos() {
               <span className="break-words text-xs opacity-70">
                 {d.Movimiento || '—'} · {formatFechaCorta(d.FechaDocumento)}
               </span>
-              <ValidacionBadges validacion={d.Validacion} />
+              <span className="flex flex-wrap gap-1">
+                {d.Estado !== 'pendiente' && <EstadoDocumentoBadge estado={d.Estado} compacto />}
+                <ValidacionBadges validacion={d.Validacion} />
+              </span>
             </button>
           </li>
         ))}
@@ -243,7 +260,10 @@ function DocumentosReclamos() {
                     <td className="hidden xl:table-cell px-3 py-3.5 text-right font-semibold tabular-nums">{d.Productos}</td>
                     <td className="px-3 py-3.5 text-right font-semibold tabular-nums">{formatPrecio(d.Total)}</td>
                     <td className="px-3 py-3.5">
-                      <ValidacionBadges validacion={d.Validacion} compacto className="flex-nowrap" />
+                      <span className="flex flex-col gap-1">
+                        {d.Estado !== 'pendiente' && <EstadoDocumentoBadge estado={d.Estado} compacto />}
+                        <ValidacionBadges validacion={d.Validacion} compacto className="flex-nowrap" />
+                      </span>
                     </td>
                     <td className="max-w-[14rem] px-3 py-3.5">
                       <span className="block">{formatFecha(d.EnviadoAt)}</span>

@@ -11,7 +11,7 @@ import { comprimirImagen } from '../../../lib/comprimirImagen';
 import { formatFecha } from '../../../lib/formatters';
 import { cn } from '../../../lib/cn';
 import type { Reclamo } from '../../../types/reclamo';
-import { esDevolucion, formatFechaCorta, llevaRetiro } from '../lib/tipos';
+import { esDevolucion, esSoloFaltante, formatFechaCorta, llevaRetiro } from '../lib/tipos';
 import { AuthImage } from './AuthImage';
 import { ConfirmModal } from './ConfirmModal';
 
@@ -44,7 +44,7 @@ export function RetiroProveedor({
   const registrado = Boolean(reclamo.RetiroProveedorFecha);
   const lleva = llevaRetiro(reclamo);
   // En devoluciones siempre lo retira el proveedor; con la entrega registrada ya no se cambia.
-  const cambiable = puedeCambiar && !esDevolucion(reclamo) && !registrado;
+  const cambiable = puedeCambiar && !esDevolucion(reclamo) && !esSoloFaltante(reclamo) && !registrado;
   const [cambiando, setCambiando] = useState(false);
   const [confirmado, setConfirmado] = useState(false);
   const [fecha, setFecha] = useState(hoyIso());
