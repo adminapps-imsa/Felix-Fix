@@ -1,5 +1,5 @@
 import { TiendaDestacada } from '../../../components/ui/TiendaDestacada';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { AlertTriangle, ArrowLeft, Building2, CheckCircle2, ClipboardList, FileText, Landmark, Send, ShieldAlert, Trash2, Undo2, XCircle } from 'lucide-react';
 import { GlassCard } from '../../../components/ui/GlassCard';
@@ -41,6 +41,8 @@ export function ReclamoDetallePage() {
 
   const [reclamo, setReclamo] = useState<Reclamo | null>(null);
   const [lineas, setLineas] = useState<ReclamoLinea[]>([]);
+  // Cambia con cada cambio del reclamo o sus productos: el historial se vuelve a pedir.
+  const versionHistorial = useMemo(() => ({ reclamo, lineas }), [reclamo, lineas]);
   const [error, setError] = useState<string | null>(null);
   const [confirmarEliminar, setConfirmarEliminar] = useState(false);
   const avisos = useAvisos();
@@ -259,7 +261,7 @@ export function ReclamoDetallePage() {
       />
 
       {/* Al final: historial del reclamo, solo administrador y supervisor GOF. Se vuelve a pedir cuando cambia el estado. */}
-      {permisos?.puedeVerHistorial && <HistorialReclamo key={`${reclamo.Token}-${reclamo.Status}`} token={reclamo.Token} />}
+      {permisos?.puedeVerHistorial && <HistorialReclamo key={reclamo.Token} token={reclamo.Token} version={versionHistorial} />}
 
       {confirmarEliminar && (
         <ConfirmModal

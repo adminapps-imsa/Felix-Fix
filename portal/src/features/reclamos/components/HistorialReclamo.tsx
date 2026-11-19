@@ -60,7 +60,7 @@ export function duracion(ms: number | null | undefined) {
  * cuándo y cuánto tardó cada paso. Cerrado de inicio; cada paso se abre
  * para ver el detalle (motivo, mensaje del error).
  */
-export function HistorialReclamo({ token }: { token: string }) {
+export function HistorialReclamo({ token, version }: { token: string; version?: unknown }) {
   const [abierto, setAbierto] = useState(false);
   const [datos, setDatos] = useState<Historial | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -78,7 +78,8 @@ export function HistorialReclamo({ token }: { token: string }) {
     return () => {
       vivo = false;
     };
-  }, [abierto, token, intento]);
+    // `version`: cambia con cada cambio del reclamo (adjuntos, productos, estado) y el historial se vuelve a pedir.
+  }, [abierto, token, intento, version]);
 
   const r = datos?.resumen;
   return (

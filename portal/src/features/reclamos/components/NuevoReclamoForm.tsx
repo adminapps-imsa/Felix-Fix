@@ -21,6 +21,7 @@ import { ExcelPreviewModal, PdfPreviewModal } from './VisoresLazy';
 import { ImagenPreviewModal } from './ImagenPreviewModal';
 import { SelectSucursal } from './SelectSucursal';
 import { CAMPOS_CADENA, completarEnCadena, type CampoCadena } from '../lib/cadena';
+import { comprimirImagen } from '../../../lib/comprimirImagen';
 
 interface Campos {
   origen: OrigenReclamo | '';
@@ -533,7 +534,8 @@ export function NuevoReclamoForm({
       for (const [i, adj] of adjuntos.entries()) {
         setProgreso(`Subiendo ${esImagen(adj) ? 'foto' : 'adjunto'} ${i + 1} de ${adjuntos.length}…`);
         try {
-          await apiReclamos.subirAdjunto(reclamo.Token, adj);
+          // Las fotos se achican antes de subir, igual que en el detalle (2026-11-19).
+          await apiReclamos.subirAdjunto(reclamo.Token, await comprimirImagen(adj));
         } catch {
           fallidos.push(adj.name);
         }

@@ -80,6 +80,28 @@ export function EnviarProveedorContabilidad({ doc, onEnviado }: { doc: Documento
     setVerCorreo(true);
   };
 
+  // Con la respuesta del proveedor ya registrada no se puede enviar (el backend responde 409):
+  // solo se muestra cuándo se envió. Para reenviar, primero «Quitar respuesta».
+  if (doc.Estado !== 'pendiente') {
+    return (
+      <GlassCard className="flex flex-col gap-3">
+        <h2 className="flex items-center gap-2 text-base font-bold">
+          <Send size={17} /> Enviar al proveedor
+        </h2>
+        {envio ? (
+          <div className="rounded-xl border border-success/30 bg-success/10 px-3 py-2 text-sm">
+            Enviado {envio.veces > 1 ? `${envio.veces} veces; la última ` : ''}el {envio.at ? formatFecha(envio.at) : '—'}
+            {envio.porNombre && <> por <strong className="font-semibold">{envio.porNombre}</strong></>}
+            {envio.para && <span className="block break-words text-xs opacity-75">A: {envio.para}</span>}
+          </div>
+        ) : (
+          <p className="text-sm opacity-70">No se envió desde el portal.</p>
+        )}
+        <p className="text-xs opacity-60">El proveedor ya respondió. Para volver a enviarlo, primero quita la respuesta.</p>
+      </GlassCard>
+    );
+  }
+
   return (
     <GlassCard className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
